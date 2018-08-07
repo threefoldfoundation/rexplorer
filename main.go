@@ -6,11 +6,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
+	"github.com/threefoldfoundation/tfchain/pkg/types"
 )
 
 func main() {
 	cmd := new(Commands)
 	cmd.RPCaddr = ":23112"
+	cmd.RedisAddr, cmd.RedisDB = ":6379", 0
 	cmd.BlockchainInfo = config.GetBlockchainInfo()
 
 	// define commands
@@ -20,10 +22,23 @@ func main() {
 		Args:  cobra.ExactArgs(0),
 		PreRunE: func(*cobra.Command, []string) error {
 			switch cmd.BlockchainInfo.NetworkName {
-			case "standard":
+			case config.NetworkNameStandard:
+				// Register the transaction controllers for all transaction versions
+				// supported on the standard network
+				types.RegisterTransactionTypesForStandardNetwork()
+				// Forbid the usage of MultiSignatureCondition (and thus the multisig feature),
+				// until the blockchain reached a height of 42000 blocks.
+				types.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
+				// get chain constants and bootstrap peers
 				cmd.ChainConstants = config.GetStandardnetGenesis()
 				cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
-			case "testnet":
+			case config.NetworkNameTest:
+				// Register the transaction controllers for all transaction versions
+				// supported on the test network
+				types.RegisterTransactionTypesForTestNetwork()
+				// Use our custom MultiSignatureCondition, just for testing purposes
+				types.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+				// get chain constants and bootstrap peers
 				cmd.ChainConstants = config.GetTestnetGenesis()
 				cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
 			default:
@@ -60,6 +75,18 @@ func main() {
 		"rpc-addr",
 		cmd.RPCaddr,
 		"which port the gateway listens on",
+	)
+	cmdRoot.Flags().StringVar(
+		&cmd.RedisAddr,
+		"redis-addr",
+		cmd.RedisAddr,
+		"which (tcp) address the redis server listens on",
+	)
+	cmdRoot.Flags().IntVar(
+		&cmd.RedisDB,
+		"redis-db",
+		cmd.RedisDB,
+		"which redis database slot to use",
 	)
 	cmdRoot.Flags().StringVarP(
 		&cmd.BlockchainInfo.NetworkName,

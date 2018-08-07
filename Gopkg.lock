@@ -40,10 +40,31 @@
   revision = "1db44fa75fb1036c6d7be59a5793be4b1fb8a5ab"
 
 [[projects]]
+  name = "github.com/bgentry/speakeasy"
+  packages = ["."]
+  revision = "4aabc24848ce5fd31929f7d1e4ea74d3709c14cd"
+  version = "v0.1.0"
+
+[[projects]]
+  name = "github.com/gomodule/redigo"
+  packages = [
+    "internal",
+    "redis"
+  ]
+  revision = "9c11da706d9b7902c6da69c592f75637793fe121"
+  version = "v2.0.0"
+
+[[projects]]
   name = "github.com/inconshreveable/mousetrap"
   packages = ["."]
   revision = "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
   version = "v1.0"
+
+[[projects]]
+  name = "github.com/julienschmidt/httprouter"
+  packages = ["."]
+  revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
+  version = "v1.1"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -61,6 +82,7 @@
   branch = "master"
   name = "github.com/rivine/rivine"
   packages = [
+    "api",
     "build",
     "crypto",
     "encoding",
@@ -68,6 +90,8 @@
     "modules/consensus",
     "modules/gateway",
     "persist",
+    "pkg/cli",
+    "pkg/client",
     "sync",
     "types"
   ]
@@ -92,10 +116,13 @@
   version = "v1.0.1"
 
 [[projects]]
+  branch = "master"
   name = "github.com/threefoldfoundation/tfchain"
-  packages = ["pkg/config"]
-  revision = "9718d1f5d601299eb8f8aeab41142e4d604c08a4"
-  version = "v1.0.7"
+  packages = [
+    "pkg/config",
+    "pkg/types"
+  ]
+  revision = "5512839c48e1efa706ffd28958cbd705b849363d"
 
 [[projects]]
   branch = "master"
@@ -164,6 +191,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "712c10a262bd28b2b06ddf7060cbcbb2f9e7134aa0f5cd7e09229f08b4bcf110"
+  inputs-digest = "99cf5f03dd6ecc885c59d4bcf2afb819b8dd08621939ed85858f9540b3e2aa9f"
   solver-name = "gps-cdcl"
   solver-version = 1

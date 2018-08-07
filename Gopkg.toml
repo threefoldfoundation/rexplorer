@@ -34,8 +34,8 @@
   version = "0.0.3"
 
 [[constraint]]
+  branch = "master"
   name = "github.com/threefoldfoundation/tfchain"
-  version = "1.0.7"
 
 [prune]
   go-tests = true
