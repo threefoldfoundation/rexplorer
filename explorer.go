@@ -110,8 +110,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.ValueTransactionCount--
 			}
 			// revert coin inputs
-			for range tx.CoinInputs {
+			for _, ci := range tx.CoinInputs {
 				explorer.stats.CointInputCount--
+				err := explorer.db.RevertCoinInput(ci.ParentID)
+				if err != nil {
+					panic(fmt.Sprintf("failed to revert coin input %s: %v", ci.ParentID.String(), err))
+				}
 			}
 			// revert coin outputs
 			for i, co := range tx.CoinOutputs {

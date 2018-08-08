@@ -24,6 +24,7 @@ type Database interface {
 	AddCoinOutput(id types.CoinOutputID, co types.CoinOutput) error
 	AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue uint64) error
 	SpendCoinOutput(id types.CoinOutputID) error
+	RevertCoinInput(id types.CoinOutputID) error
 	RevertCoinOutput(id types.CoinOutputID) (oldState CoinOutputState, err error)
 	// UpdateLockedCoinOutputs returns the amount of outputs have been unlocked and what is its total value.
 	UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
@@ -287,7 +288,7 @@ local length = tonumber(redis.call('LLEN', key))
 for i = 1 , length do
 	local str = redis.call('LPOP', key)
 	local lockStr = string.sub(str, 145)
-	if tonumber(lockStr) >= lockValue then
+	if tonumber(lockStr) < lockValue then
 		values[#values+1] = str
 	else
 		redis.call('RPUSH', key, str)
@@ -537,6 +538,43 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return fmt.Errorf("redis: failed to spend coinoutput %s: %v", id.String(), err)
+	}
+	return nil
+}
+
+// RevertCoinInput implements Database.RevertCoinInput
+// more or less a reverse process of SpendCoinOutput
+func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
+	// drop+get coinOutput using coinOutputID
+	var sco SpentCoinOutput
+	err := RedisCSV(&sco)(rdb.hashDropScript.Do(rdb.conn, rdb.spentCoinOutputsKey, id.String()))
+	if err != nil {
+		return fmt.Errorf(
+			"redis: failed to revert coin input: cannot drop spend coin output %s in %s: %v",
+			id.String(), rdb.spentCoinOutputsKey, err)
+	}
+
+	// get balance, so it can be updated
+	balanceKey := rdb.getAddressKey(sco.UnlockHash, addressKeySuffixBalance)
+	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
+	if err != nil {
+		return fmt.Errorf(
+			"redis: failed to revert coin input %s: failed to get balance for %s at %s: %v",
+			id.String(), sco.UnlockHash.String(), balanceKey, err)
+	}
+
+	// update coin count, adding the coins back to the user
+	balance.Unlocked = balance.Unlocked.Add(sco.Value)
+
+	// update balance and mark coin output as spend
+	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
+	rdb.conn.Send("HSET", rdb.unspentCoinOutputsKey, id.String(), UnspentCoinOutput{
+		UnlockHash: sco.UnlockHash,
+		Value:      sco.Value,
+	}.MarshalCSV())
+	err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
+	if err != nil {
+		return fmt.Errorf("redis: failed to revert coin input %s: %v", id.String(), err)
 	}
 	return nil
 }
