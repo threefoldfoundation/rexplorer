@@ -229,10 +229,9 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 // linking them to the owner addresses as well as storing the owner addresses themself for the multisig wallet.
 func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput) (locked bool, err error) {
 	// check if it is a multisignature condition, if so, track it
-	ownerAddress := getMultisigOwnerAddresses(co.Condition)
-	if len(ownerAddress) > 0 {
+	if ownerAddresses := getMultisigOwnerAddresses(co.Condition); len(ownerAddresses) > 0 {
 		multiSigAddress := co.Condition.UnlockHash()
-		err := explorer.db.SetMultisigAddresses(multiSigAddress, ownerAddress)
+		err := explorer.db.SetMultisigAddresses(multiSigAddress, ownerAddresses)
 		if err != nil {
 			return false, fmt.Errorf(
 				"failed to set multisig addresses for multisig wallet %q: %v",
@@ -270,8 +269,22 @@ func getMultisigOwnerAddresses(condition types.UnlockConditionProxy) []types.Unl
 	}
 	switch c := condition.Condition.(type) {
 	case types.UnlockHashSliceGetter:
-		return c.UnlockHashSlice()
+		return dedupOwnerAddresses(c.UnlockHashSlice())
 	default:
 		return nil
 	}
+}
+func dedupOwnerAddresses(addresses []types.UnlockHash) (deduped []types.UnlockHash) {
+	n := len(addresses)
+	if n == 0 {
+		return
+	}
+	encountered := make(map[types.UnlockHash]struct{}, n)
+	for _, addr := range addresses {
+		encountered[addr] = struct{}{}
+	}
+	for addr := range encountered {
+		deduped = append(deduped, addr)
+	}
+	return
 }

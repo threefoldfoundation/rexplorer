@@ -686,8 +686,8 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	// track the owners within the multisig address namespace as well
 	if m := int64(len(owners)); n != m {
 		log.Printf(
-			"[ERROR] either all owners should have the multisig address linked or none, have %d/%d",
-			n, m)
+			"[ERROR] either all owners should have the multisig address %q linked or none, have %d/%d",
+			address.String(), n, m)
 	}
 	// we'll assume that multisig address doesn't have the wallet created yet, if this happens
 	for _, owner := range owners {
