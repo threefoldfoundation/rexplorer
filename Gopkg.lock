@@ -95,7 +95,7 @@
     "sync",
     "types"
   ]
-  revision = "13787f1df7455debec13d87887b51057231a50d1"
+  revision = "1312d1b527c40ebc9729ecffd4db799caf5e2357"
 
 [[projects]]
   name = "github.com/rivine/smux"
@@ -116,13 +116,13 @@
   version = "v1.0.1"
 
 [[projects]]
-  branch = "master"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
     "pkg/types"
   ]
-  revision = "5512839c48e1efa706ffd28958cbd705b849363d"
+  revision = "f97edc1e0937feadb460f5b9513f16d1dbb046a8"
+  version = "v1.0.8"
 
 [[projects]]
   branch = "master"
@@ -143,7 +143,7 @@
     "pbkdf2",
     "twofish"
   ]
-  revision = "56440b844dfe139a8ac053f4ecac0b20b79058f4"
+  revision = "f027049dab0ad238e394a753dba2d14753473a04"
 
 [[projects]]
   branch = "master"
@@ -153,7 +153,7 @@
     "html/atom",
     "html/charset"
   ]
-  revision = "f4c29de78a2a91c00474a2e689954305c350adf9"
+  revision = "f9ce57c11b242f0f1599cf25c89d8cb02c45295a"
 
 [[projects]]
   branch = "master"
@@ -162,7 +162,7 @@
     "cpu",
     "unix"
   ]
-  revision = "0ffbfd41fbef8ffcf9b62b0b0aa3a5873ed7a4fe"
+  revision = "904bdc257025c7b3f43c19360ad3ab85783fad78"
 
 [[projects]]
   name = "golang.org/x/text"
