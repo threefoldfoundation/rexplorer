@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math/big"
 
 	"github.com/rivine/rivine/pkg/client"
 	"github.com/rivine/rivine/types"
@@ -46,6 +47,7 @@ func main() {
 		MinerPayoutCount      uint64            `json:"minerPayoutCount"`
 		MinerPayouts          types.Currency    `json:"minerPayouts"`
 		Coins                 types.Currency    `json:"coins"`
+		LockedCoins           types.Currency    `json:"lockedCoins"`
 	}
 	err = json.Unmarshal(b, &stats)
 	if err != nil {
@@ -61,11 +63,17 @@ func main() {
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
 
 	fmt.Printf("tfchain/%s has:\n", networkName)
-	fmt.Printf("  * a total of %s, of which %s are payed out as fees and miner rewards\n",
-		cc.ToCoinStringWithUnit(stats.Coins), cc.ToCoinStringWithUnit(stats.MinerPayouts))
+	fmt.Printf("  * a total of %s, of which %s is locked and %s is paid out as fees and miner rewards\n",
+		cc.ToCoinStringWithUnit(stats.Coins), cc.ToCoinStringWithUnit(stats.LockedCoins), cc.ToCoinStringWithUnit(stats.MinerPayouts))
+	if !stats.LockedCoins.IsZero() {
+		lcpb := big.NewFloat(0).Quo(big.NewFloat(0).SetInt(stats.LockedCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
+		lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
+		lcp, _ := lcpb.Float64()
+		fmt.Printf("  * %f%% locked coins of a total of %s coins\n", lcp, cc.ToCoinStringWithUnit(stats.Coins))
+	}
 	fmt.Printf("  * a block height of %d, with the time of the highest block being %s (%d)\n",
 		stats.BlockHeight, stats.Timestamp.String(), stats.Timestamp)
-	fmt.Printf("  * a total of %d blocks, %d value transactions, %d coin outputs, %d miner payouts and %d coin inputs\n",
+	fmt.Printf("  * a total of %d blocks, %d value transactions, %d coin outputs, %d miner/fee payouts and %d coin inputs\n",
 		stats.BlockHeight+1, stats.ValueTransactionCount,
 		stats.CointOutputCount, stats.MinerPayoutCount, stats.CointInputCount)
 	fmt.Printf("  * a total of %d unique wallet addresses that have been used\n", uniqueAddressCount)

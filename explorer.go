@@ -23,6 +23,7 @@ type (
 		MinerPayoutCount      uint64            `json:"minerPayoutCount"`
 		MinerPayouts          types.Currency    `json:"minerPayouts"`
 		Coins                 types.Currency    `json:"coins"`
+		LockedCoins           types.Currency    `json:"lockedCoins"`
 	}
 )
 
@@ -90,10 +91,13 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.MinerPayoutCount--
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(mp.Value)
 			explorer.stats.Coins = explorer.stats.Coins.Sub(mp.Value)
-			err = explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
+			locked, err := explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
 			if err != nil {
 				panic(fmt.Sprintf("failed to revert miner payout of %s to %s: %v",
 					mp.UnlockHash.String(), mp.Value.String(), err))
+			}
+			if locked {
+				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(mp.Value)
 			}
 		}
 		// revert txs
@@ -107,12 +111,16 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.CointInputCount--
 			}
 			// revert coin outputs
-			for i := range tx.CoinOutputs {
+			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount--
 				id := tx.CoinOutputID(uint64(i))
-				err = explorer.db.RevertCoinOutput(id)
+				explorer.stats.Coins = explorer.stats.Coins.Sub(co.Value)
+				locked, err := explorer.db.RevertCoinOutput(id)
 				if err != nil {
 					panic(fmt.Sprintf("failed to revert coin output %s: %v", id.String(), err))
+				}
+				if locked {
+					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(co.Value)
 				}
 			}
 		}
@@ -129,18 +137,20 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.BlockHeight++
 		}
 		explorer.stats.Timestamp = block.Timestamp
-		err = explorer.db.UpdateLockedCoinOutputs(explorer.stats.BlockHeight, explorer.stats.Timestamp)
+		// returns the total amount of coins that have been unlocked
+		coins, err := explorer.db.UpdateLockedCoinOutputs(explorer.stats.BlockHeight, explorer.stats.Timestamp)
 		if err != nil {
 			panic(fmt.Sprintf("failed to update locked coin outputs at height=%d and time=%d: %v",
 				explorer.stats.BlockHeight, explorer.stats.Timestamp, err))
 		}
+		explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(coins)
 
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.MinerPayoutCount++
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
 			explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
-			err = explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
+			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
 				Value: mp.Value,
 				Condition: types.NewCondition(
 					types.NewTimeLockCondition(
@@ -150,6 +160,9 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			if err != nil {
 				panic(fmt.Sprintf("failed to add miner payout of %s to %s: %v",
 					mp.UnlockHash.String(), mp.Value.String(), err))
+			}
+			if locked {
+				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Add(mp.Value)
 			}
 		}
 		// apply txs
@@ -169,16 +182,20 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			// apply coin outputs
 			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount++
-				if explorer.stats.BlockHeight == 0 {
-					// only count coins of outputs for genesis block,
-					// as it is currently the only place coins can be created
-					explorer.stats.Coins = explorer.stats.Coins.Add(co.Value)
-				}
 				id := tx.CoinOutputID(uint64(i))
-				err = explorer.addCoinOutput(id, co)
+				locked, err := explorer.addCoinOutput(id, co)
 				if err != nil {
 					panic(fmt.Sprintf("failed to add coin output %s from %s: %v",
 						id, co.Condition.UnlockHash().String(), err))
+				}
+				// only count coins of outputs for genesis block,
+				// as it is currently the only place coins can be created
+				if explorer.stats.BlockHeight == 0 {
+					explorer.stats.Coins = explorer.stats.Coins.Add(co.Value)
+				}
+				// if it is locked, we'll always add it to the locked output
+				if locked {
+					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Add(co.Value)
 				}
 			}
 		}
@@ -202,14 +219,14 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 // ensuring we differentiate locked and unlocked coin outputs.
 // On top of that it checks for multisig outputs, as to be able to track multisig addresses,
 // linking them to the owner addresses as well as storing the owner addresses themself for the multisig wallet.
-func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput) error {
+func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput) (locked bool, err error) {
 	// check if it is a multisignature condition, if so, track it
 	ownerAddress := getMultisigOwnerAddresses(co.Condition)
 	if len(ownerAddress) > 0 {
 		multiSigAddress := co.Condition.UnlockHash()
 		err := explorer.db.SetMultisigAddresses(multiSigAddress, ownerAddress)
 		if err != nil {
-			return fmt.Errorf(
+			return false, fmt.Errorf(
 				"failed to set multisig addresses for multisig wallet %q: %v",
 				multiSigAddress.String(), err)
 		}
@@ -221,7 +238,7 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutp
 		BlockTime:   explorer.stats.Timestamp,
 	})
 	if isFulfillable {
-		return explorer.db.AddCoinOutput(id, co)
+		return false, explorer.db.AddCoinOutput(id, co)
 	}
 	// only a TimeLockedCondition can be locked for now
 	tlc := co.Condition.Condition.(*types.TimeLockCondition)
@@ -229,7 +246,7 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutp
 	if tlc.LockTime < types.LockTimeMinTimestampValue {
 		lt = LockTypeHeight
 	}
-	return explorer.db.AddLockedCoinOutput(id, co, lt, tlc.LockTime)
+	return true, explorer.db.AddLockedCoinOutput(id, co, lt, tlc.LockTime)
 }
 
 // getMultisigOwnerAddresses gets the owner addresses (= internal addresses of a multisig condition)

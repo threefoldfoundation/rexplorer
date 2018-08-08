@@ -210,21 +210,22 @@ and you can run it yourself as follows:
 
 ```
 $ go run ./examples/getstats/main.go
-tfchain/testnet has:
-  * a total of 100559305.60000007 TFT, of which 559305.60000007 TFT are payed out as fees and miner rewards
-  * a block height of 55929, with the time of the highest block being 2018-06-26 16:30:19 +0200 CEST (1530023419)
-  * a total of 55930 blocks, 163 value transactions, 311 coin outputs, 56062 miner payouts and 1465 coin inputs
-  * a total of 275 unique wallet addresses that have been used
-  * an average of 1.907975 coin outputs per value transaction
-  * an average of 0.002914 value transactions per block
-  * 0.290604% value transactions of a total of 56090 transactions
+tfchain/standard has:
+  * a total of 695176208.500000001 TFT, of which 4899281.85 TFT is locked and 77208.500000001 TFT is paid out as fees and miner rewards
+  * 0.704754% locked coins of a total of 695176208.500000001 TFT coins
+  * a block height of 77177, with the time of the highest block being 2018-08-08 09:26:54 +0200 CEST (1533713214)
+  * a total of 77178 blocks, 317 value transactions, 1213 coin outputs, 77416 miner/fee payouts and 356 coin inputs
+  * a total of 637 unique wallet addresses that have been used
+  * an average of 3.826498 coin outputs per value transaction
+  * an average of 0.004107 value transactions per block
+  * 0.409069% value transactions of a total of 77493 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli get tfchain:testnet:stats
-"{\"timestamp\":1530023419,\"blockHeight\":55929,\"txCount\":56090,\"valueTxCount\":163,\"coinOutputCount\":311,\"coinInputCount\":1465,\"minerPayoutCount\":56062,\"minerPayouts\":\"559305600000070\",\"coins\":\"100559305600000070\"}"
+$ redis-cli get tfchain:standard:stats
+"{\"timestamp\":1533713268,\"blockHeight\":77178,\"txCount\":77494,\"valueTxCount\":317,\"coinOutputCount\":1213,\"coinInputCount\":356,\"minerPayoutCount\":77417,\"minerPayouts\":\"77209500000001\",\"coins\":\"695176209500000001\",\"lockedCoins\":\"4899281850000000\"}"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object.

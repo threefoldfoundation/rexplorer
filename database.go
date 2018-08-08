@@ -24,8 +24,8 @@ type Database interface {
 	AddCoinOutput(id types.CoinOutputID, co types.CoinOutput) error
 	AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue uint64) error
 	SpendCoinOutput(id types.CoinOutputID) error
-	RevertCoinOutput(id types.CoinOutputID) error
-	UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) error
+	RevertCoinOutput(id types.CoinOutputID) (locked bool, err error)
+	UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (coins types.Currency, err error)
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash) error
 }
@@ -488,12 +488,12 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 }
 
 // RevertCoinOutput implements Database.RevertCoinOutput
-func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) error {
+func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (bool, error) {
 	// drop+get coinOutput using coinOutputID
 	var co UnspentCoinOutput
 	err := RedisCSV(&co)(rdb.hashDropScript.Do(rdb.conn, rdb.unspentCoinOutputsKey, id.String()))
 	if err != nil {
-		return fmt.Errorf(
+		return false, fmt.Errorf(
 			"redis: failed to revert coin output: cannot drop coin output %s in %s: %v",
 			id.String(), rdb.unspentCoinOutputsKey, err)
 	}
@@ -502,13 +502,14 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) error {
 	balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
-		return fmt.Errorf(
+		return false, fmt.Errorf(
 			"redis: failed to get balance for %s at %s: %v", co.UnlockHash.String(), balanceKey, err)
 	}
 
 	// update all data for this coin output
 	sendCount := 1
-	if co.Lock == LockTypeNone {
+	locked := co.Lock != LockTypeNone
+	if !locked {
 		// update unlocked balance of address wallet
 		balance.Unlocked = balance.Unlocked.Sub(co.Value)
 	} else {
@@ -535,27 +536,27 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) error {
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, sendCount))
 	if err != nil {
-		return fmt.Errorf("redis: failed to revert coinoutput %s: %v", id.String(), err)
+		return false, fmt.Errorf("redis: failed to revert coinoutput %s: %v", id.String(), err)
 	}
-	return nil
+	return locked, nil
 }
 
 // UpdateLockedCoinOutputs implements Database.UpdateLockedCoinOutputs
-func (rdb *RedisDatabase) UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) error {
+func (rdb *RedisDatabase) UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (coins types.Currency, err error) {
 	// pop all unlocked outputs which were previously locked
 	rdb.popAllScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(uint64(height)))
 	rdb.popIfNotLessThenScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(uint64(time)), uint64(time))
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
-		return fmt.Errorf("failed to pop locked outputs: %v", err)
+		return types.Currency{}, fmt.Errorf("failed to pop locked outputs: %v", err)
 	}
 	lockedByHeightCoinOutputs, err := RedisLockedCoinOutputValues(values[0], nil)
 	if err != nil && err != redis.ErrNil {
-		return fmt.Errorf("failed to pop+parse locked-by-height outputs: %v", err)
+		return types.Currency{}, fmt.Errorf("failed to pop+parse locked-by-height outputs: %v", err)
 	}
 	lockedByTimeCoinOutputs, err := RedisLockedCoinOutputValues(values[1], nil)
 	if err != nil && err != redis.ErrNil {
-		return fmt.Errorf("failed to pop+parse locked-by-time outputs: %v", err)
+		return types.Currency{}, fmt.Errorf("failed to pop+parse locked-by-time outputs: %v", err)
 	}
 	lockedCoinOuts := append(lockedByHeightCoinOutputs, lockedByTimeCoinOutputs...)
 	for _, lco := range lockedCoinOuts {
@@ -564,29 +565,30 @@ func (rdb *RedisDatabase) UpdateLockedCoinOutputs(height types.BlockHeight, time
 		err = RedisCSV(&uco)(rdb.updateLockTypeUCOScript.Do(rdb.conn,
 			rdb.unspentCoinOutputsKey, lco.CoinOutputID.String(), "0"))
 		if err != nil {
-			return fmt.Errorf("failed to parse returned CSV UnspentCoinOutput value for ID %s: %v", lco.CoinOutputID.String(), err)
+			return types.Currency{}, fmt.Errorf("failed to parse returned CSV UnspentCoinOutput value for ID %s: %v", lco.CoinOutputID.String(), err)
 		}
 		// get balance of user and update it
 		balanceKey := rdb.getAddressKey(lco.UnlockHash, addressKeySuffixBalance)
 		// get initial values
 		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 		if err != nil {
-			return fmt.Errorf(
+			return types.Currency{}, fmt.Errorf(
 				"redis: failed to get balance for %s at %s: %v", lco.UnlockHash.String(), balanceKey, err)
 		}
 		balance.Locked = balance.Locked.Sub(uco.Value) // locked -> unlocked
+		coins = coins.Add(uco.Value)
 		balance.Unlocked = balance.Unlocked.Add(uco.Value)
 		// update balance and pop unlocked output from address (assume we can pop in order)
 		rdb.conn.Send("HDEL", rdb.getAddressKey(lco.UnlockHash, addressKeySuffixLockedOutputs), lco.CoinOutputID.String())
 		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 		err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 		if err != nil {
-			return fmt.Errorf(
+			return types.Currency{}, fmt.Errorf(
 				"failed to update balance of %q and pop the unlocked locked coin output: %v",
 				lco.UnlockHash.String(), err)
 		}
 	}
-	return nil
+	return coins, nil
 }
 
 // SetMultisigAddresses implements Database.SetMultisigAddresses
