@@ -14,16 +14,17 @@ type (
 	}
 	// NetworkStats collects the global statistics for the blockchain.
 	NetworkStats struct {
-		Timestamp             types.Timestamp   `json:"timestamp"`
-		BlockHeight           types.BlockHeight `json:"blockHeight"`
-		TransactionCount      uint64            `json:"txCount"`
-		ValueTransactionCount uint64            `json:"valueTxCount"`
-		CointOutputCount      uint64            `json:"coinOutputCount"`
-		CointInputCount       uint64            `json:"coinInputCount"`
-		MinerPayoutCount      uint64            `json:"minerPayoutCount"`
-		MinerPayouts          types.Currency    `json:"minerPayouts"`
-		Coins                 types.Currency    `json:"coins"`
-		LockedCoins           types.Currency    `json:"lockedCoins"`
+		Timestamp              types.Timestamp   `json:"timestamp"`
+		BlockHeight            types.BlockHeight `json:"blockHeight"`
+		TransactionCount       uint64            `json:"txCount"`
+		ValueTransactionCount  uint64            `json:"valueTxCount"`
+		CointOutputCount       uint64            `json:"coinOutputCount"`
+		LockedCointOutputCount uint64            `json:"lockedCoinOutputCount"`
+		CointInputCount        uint64            `json:"coinInputCount"`
+		MinerPayoutCount       uint64            `json:"minerPayoutCount"`
+		MinerPayouts           types.Currency    `json:"minerPayouts"`
+		Coins                  types.Currency    `json:"coins"`
+		LockedCoins            types.Currency    `json:"lockedCoins"`
 	}
 )
 
@@ -89,6 +90,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		// revert miner payouts
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.MinerPayoutCount--
+			explorer.stats.CointOutputCount--
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(mp.Value)
 			explorer.stats.Coins = explorer.stats.Coins.Sub(mp.Value)
 			locked, err := explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
@@ -97,6 +99,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					mp.UnlockHash.String(), mp.Value.String(), err))
 			}
 			if locked {
+				explorer.stats.LockedCointOutputCount--
 				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(mp.Value)
 			}
 		}
@@ -120,6 +123,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to revert coin output %s: %v", id.String(), err))
 				}
 				if locked {
+					explorer.stats.LockedCointOutputCount--
 					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(co.Value)
 				}
 			}
@@ -138,16 +142,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		}
 		explorer.stats.Timestamp = block.Timestamp
 		// returns the total amount of coins that have been unlocked
-		coins, err := explorer.db.UpdateLockedCoinOutputs(explorer.stats.BlockHeight, explorer.stats.Timestamp)
+		n, coins, err := explorer.db.UpdateLockedCoinOutputs(explorer.stats.BlockHeight, explorer.stats.Timestamp)
 		if err != nil {
 			panic(fmt.Sprintf("failed to update locked coin outputs at height=%d and time=%d: %v",
 				explorer.stats.BlockHeight, explorer.stats.Timestamp, err))
 		}
+		explorer.stats.LockedCointOutputCount -= n
 		explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(coins)
 
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.MinerPayoutCount++
+			explorer.stats.CointOutputCount++
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
 			explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
 			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
@@ -162,6 +168,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					mp.UnlockHash.String(), mp.Value.String(), err))
 			}
 			if locked {
+				explorer.stats.LockedCointOutputCount++
 				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Add(mp.Value)
 			}
 		}
@@ -195,6 +202,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				}
 				// if it is locked, we'll always add it to the locked output
 				if locked {
+					explorer.stats.LockedCointOutputCount++
 					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Add(co.Value)
 				}
 			}
