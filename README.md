@@ -158,19 +158,22 @@ There is a Go example that you can checkout at [/examples/getcoins/main.go](/exa
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getcoins/main.go -network=testnet 0178f4ea48f511d1a59f90bd44f237c7b2e7016557ce74eb688419f53764a91543b4466b2ff481
-unlocked: 42.3 TFT
-locked: 0 TFT
+$ go run ./examples/getcoins/main.go 0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8
+unlocked: 100 TFT
+locked:   24691.36 TFT
+--------------------
+total: 24791.36 TFT
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli get tfchain:testnet:address:0178f4ea48f511d1a59f90bd44f237c7b2e7016557ce74eb688419f53764a91543b4466b2ff481:balance
-"{\"locked\":\"0\",\"unlocked\":\"42300000000\"}"
+$ redis-cli get tfchain:standard:address:0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8:balance
+"{\"locked\":\"24691360000000\",\"unlocked\":\"100000000000\"}"
 ```
 
-As you can see for yourself, the balance of an address is stored as a JSON object.
+As you can see for yourself, the balance of an address is stored as a JSON object,
+and the total balance is something which you have to compute yourself.
 
 ### Get All Unique Addresses Used
 
@@ -275,6 +278,58 @@ $ redis-cli smembers tfchain:testnet:address:0359aaaa311a10efd7762953418b828bfe2
 ```
 
 A `nil` balance JSON object should be accepted as a balance object with all currency properties equal to `0`.
+
+### Get Balance of all Wallets in a network
+
+Combining our knowledge gained from the previous examples, we can combine some commands
+in order to get to know the balance of all non-nil wallets with value in the network.
+
+```
+$ redis-cli smembers tfchain:standard:addresses | \
+    xargs -I % sh -c 'echo "%:"; redis-cli get tfchain:standard:address:%:balance; echo'
+...
+01f0b3971659d945d9412262ab8b3ce105540a36b12b3c5ba75ae881115638b4283fd645ef9b06:
+"{\"locked\":\"0\",\"unlocked\":\"142670600000000\"}"
+
+01160e0dedbd07c43c40ab6bf06bca0ee935601074b27d320388a3581298894dcc65663390be6d:
+"{\"locked\":\"0\",\"unlocked\":\"7576000000000\"}"
+
+01003e759f679ad11ef6b40bba72a97cf45fd14e6ffec3adbb4df0a6ca8fc95741ad424598813d:
+"{\"locked\":\"0\",\"unlocked\":\"12578000000000\"}"
+
+01d7d64b8077bcc0244786b76511078ba72d2cbc717706ffb07daa6be2f4ca5ba4fa2cf81d1459:
+"{\"locked\":\"0\",\"unlocked\":\"329511000000000\"}"
+
+011fe33d06d3315102fc4b692664fa2d96c31b37d60d479894d59047b49d6acf8321abfdfe3169:
+"{\"locked\":\"0\",\"unlocked\":\"1000000000\"}"
+...
+```
+
+Or we can use a previous Go exmaple to make our output a bit nicer:
+
+```
+$ redis-cli smembers tfchain:standard:addresses | \
+    xargs -I % sh -c 'echo "%:"; go run ./examples/getcoins/main.go %; echo'
+...
+01bb7338ff7732935e0a1bd277f49f3addd98104fef6d319bea301299397032236b38a19e0230b:
+unlocked: 0 TFT
+locked:   0 TFT
+--------------------
+total: 0 TFT
+
+01a22af05052cabb77e52428994d4037d669eb7c9ad9301b21ad464398471824b689be8b9c7c06:
+unlocked: 1847 TFT
+locked:   0 TFT
+--------------------
+total: 1847 TFT
+
+01a8bd9538f34db393a77309107ee713cb46f7805dc7bc27b8bc7d62e7cb3caf57d9f4bb68bfcb:
+unlocked: 108080 TFT
+locked:   0 TFT
+--------------------
+total: 108080 TFT
+...
+```
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
 [rivine]: https://github.com/rivine/rivine

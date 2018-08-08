@@ -59,7 +59,9 @@ func main() {
 	cfg := config.GetBlockchainInfo()
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
 	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(balance.Unlocked))
-	fmt.Println("locked: " + cc.ToCoinStringWithUnit(balance.Locked))
+	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(balance.Locked))
+	fmt.Println("--------------------")
+	fmt.Println("total: " + cc.ToCoinStringWithUnit(balance.Locked.Add(balance.Unlocked)))
 
 }
 
