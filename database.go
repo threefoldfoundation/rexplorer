@@ -24,7 +24,7 @@ type Database interface {
 	AddCoinOutput(id types.CoinOutputID, co types.CoinOutput) error
 	AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue uint64) error
 	SpendCoinOutput(id types.CoinOutputID) error
-	RevertCoinOutput(id types.CoinOutputID) (locked bool, err error)
+	RevertCoinOutput(id types.CoinOutputID) (oldState CoinOutputState, err error)
 	// UpdateLockedCoinOutputs returns the amount of outputs have been unlocked and what is its total value.
 	UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
 
@@ -39,6 +39,17 @@ const (
 	LockTypeNone LockType = iota
 	LockTypeHeight
 	LockTypeTime
+)
+
+// CoinOutputState represents the state of a coin output.
+type CoinOutputState uint8
+
+// The different states a coin output can be in.
+const (
+	CoinOutputStateNil CoinOutputState = iota
+	CoinOutputStateLiquid
+	CoinOutputStateLocked
+	CoinOutputStateSpent
 )
 
 type (
@@ -57,6 +68,7 @@ type (
 	//	  internal keys:
 	//	  <chainName>:<networkName>:state												(JSON) used for internal state of this explorer, in JSON format
 	//	  <chainName>:<networkName>:ucos												(custom) all unspent coin outputs
+	//	  <chainName>:<networkName>:scos												(custom) all spent coin outputs
 	//	  <chainName>:<networkName>:lcos.height:<height>								(custom) all locked coin outputs on a given height
 	//	  <chainName>:<networkName>:lcos.time:<timestamp[:-5]>							(custom) all locked coin outputs for a given timestmap range
 	//
@@ -112,6 +124,7 @@ type (
 		stateKey, statsKey          string
 		addressKeyPrefix            string
 		addressesKey                string
+		spentCoinOutputsKey         string
 		unspentCoinOutputsKey       string
 		lockedByHeightOutputsKey    string
 		lockedByTimestampOutputsKey string
@@ -137,6 +150,11 @@ type (
 		Locked   types.Currency `json:"locked,omitempty"`
 		Unlocked types.Currency `json:"unlocked,omitempty"`
 	}
+	// SpentCoinOutput is used to store all spent coin outputs in the custom CSV format (used internally only)
+	SpentCoinOutput struct {
+		UnlockHash types.UnlockHash
+		Value      types.Currency
+	}
 	// UnspentCoinOutput is used to store all unspent coin outputs in the custom CSV format (used internally only)
 	UnspentCoinOutput struct {
 		UnlockHash types.UnlockHash
@@ -152,6 +170,35 @@ type (
 		LockValue    uint64
 	}
 )
+
+// MarshalCSV implements ColonSeperatedStringValue.MarshalCSV
+func (sco SpentCoinOutput) MarshalCSV() string {
+	return fmt.Sprintf("%s:%s", sco.UnlockHash.String(), sco.Value.String())
+}
+
+// UnmarshalCSV implements ColonSeperatedStringValue.UnmarshalCSV
+//
+// Would be easier if we could make use of fmt.Sscanf,
+// but in Go the string value (%s) is greedy, and cannot made ungreedy as can be done in C.
+func (sco *SpentCoinOutput) UnmarshalCSV(s string) error {
+	parts := strings.SplitN(s, ":", 2)
+	if n := len(parts); n != 2 {
+		return fmt.Errorf(
+			"failed to parse CSV value %q from specified format: insufficient parts (%d, require 2)",
+			s, n)
+	}
+	err := sco.UnlockHash.LoadString(parts[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse raw unlock hash %q: %v", parts[0], err)
+	}
+	i := big.NewInt(0)
+	err = i.UnmarshalText([]byte(parts[1]))
+	if err != nil {
+		return fmt.Errorf("failed to parse raw (coin) value %q: %v", parts[1], err)
+	}
+	sco.Value = types.NewCurrency(i)
+	return nil
+}
 
 // MarshalCSV implements ColonSeperatedStringValue.MarshalCSV
 func (uco UnspentCoinOutput) MarshalCSV() string {
@@ -329,6 +376,7 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 		addressKeyPrefix:            prefix + "address:",
 		addressesKey:                prefix + "addresses",
 		unspentCoinOutputsKey:       prefix + "ucos",
+		spentCoinOutputsKey:         prefix + "scos",
 		lockedByHeightOutputsKey:    prefix + "lcos.height",
 		lockedByTimestampOutputsKey: prefix + "lcos.time",
 	}, nil
@@ -480,8 +528,13 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	// update coin count
 	balance.Unlocked = balance.Unlocked.Sub(co.Value)
 
-	// update balance
-	_, err = rdb.conn.Do("SET", balanceKey, JSONMarshal(balance))
+	// update balance and mark coin output as spend
+	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
+	rdb.conn.Send("HSET", rdb.spentCoinOutputsKey, id.String(), SpentCoinOutput{
+		UnlockHash: co.UnlockHash,
+		Value:      co.Value,
+	}.MarshalCSV())
+	err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return fmt.Errorf("redis: failed to spend coinoutput %s: %v", id.String(), err)
 	}
@@ -489,57 +542,78 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 }
 
 // RevertCoinOutput implements Database.RevertCoinOutput
-func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (bool, error) {
-	// drop+get coinOutput using coinOutputID
-	var co UnspentCoinOutput
+func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputState, error) {
+	// drop+get spent/unspent coinOutput using coinOutputID
+	var (
+		state CoinOutputState
+		co    UnspentCoinOutput
+	)
 	err := RedisCSV(&co)(rdb.hashDropScript.Do(rdb.conn, rdb.unspentCoinOutputsKey, id.String()))
 	if err != nil {
-		return false, fmt.Errorf(
-			"redis: failed to revert coin output: cannot drop coin output %s in %s: %v",
-			id.String(), rdb.unspentCoinOutputsKey, err)
+		if err != redis.ErrNil {
+			return CoinOutputStateNil, fmt.Errorf(
+				"redis: failed to revert unspent(?) coin output: cannot drop coin output %s in %s: %v",
+				id.String(), rdb.unspentCoinOutputsKey, err)
+		}
+		var sco SpentCoinOutput
+		err = RedisCSV(&sco)(rdb.hashDropScript.Do(rdb.conn, rdb.spentCoinOutputsKey, id.String()))
+		if err != nil {
+			return CoinOutputStateNil, fmt.Errorf(
+				"redis: failed to revert spent(?) coin output: cannot drop coin output %s in %s: %v",
+				id.String(), rdb.spentCoinOutputsKey, err)
+		}
+		state = CoinOutputStateSpent
+		co.UnlockHash, co.Value = sco.UnlockHash, sco.Value
 	}
 
-	// get balance, so it can be updated
-	balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
-	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
-	if err != nil {
-		return false, fmt.Errorf(
-			"redis: failed to get balance for %s at %s: %v", co.UnlockHash.String(), balanceKey, err)
-	}
+	if state == CoinOutputStateNil {
+		// update all data for this unspent coin output
+		sendCount := 1
 
-	// update all data for this coin output
-	sendCount := 1
-	locked := co.Lock != LockTypeNone
-	if !locked {
-		// update unlocked balance of address wallet
-		balance.Unlocked = balance.Unlocked.Sub(co.Value)
-	} else {
-		sendCount += 2
-		// update locked balance of address wallet
-		balance.Locked = balance.Locked.Sub(co.Value)
-		// remove locked coin output from the locked coin output list linked to the address
-		rdb.conn.Send("HDEL", rdb.getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
-		// remove locked coin output value (marker)
-		lockMarkerValue := LockedCoinOutputValue{
-			UnlockHash:   co.UnlockHash,
-			CoinOutputID: id,
-			LockValue:    co.LockValue,
-		}.MarshalCSV()
-		switch co.Lock {
-		case LockTypeHeight:
-			rdb.conn.Send("LREM", rdb.getLockHeightBucketKey(co.LockValue), 1, lockMarkerValue)
-		case LockTypeTime:
-			rdb.conn.Send("LREM", rdb.getLockTimeBucketKey(co.LockValue), 1, lockMarkerValue)
+		// get balance, so it can be updated
+		balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
+		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
+		if err != nil {
+			return CoinOutputStateNil, fmt.Errorf(
+				"redis: failed to get balance for %s at %s: %v", co.UnlockHash.String(), balanceKey, err)
+		}
+
+		if co.Lock == LockTypeNone {
+			state = CoinOutputStateLiquid
+			// update unlocked balance of address wallet
+			balance.Unlocked = balance.Unlocked.Sub(co.Value)
+		} else {
+			state = CoinOutputStateLocked
+			sendCount += 2
+			// update locked balance of address wallet
+			balance.Locked = balance.Locked.Sub(co.Value)
+			// remove locked coin output from the locked coin output list linked to the address
+			rdb.conn.Send("HDEL", rdb.getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
+			// remove locked coin output value (marker)
+			lockMarkerValue := LockedCoinOutputValue{
+				UnlockHash:   co.UnlockHash,
+				CoinOutputID: id,
+				LockValue:    co.LockValue,
+			}.MarshalCSV()
+			switch co.Lock {
+			case LockTypeHeight:
+				rdb.conn.Send("LREM", rdb.getLockHeightBucketKey(co.LockValue), 1, lockMarkerValue)
+			case LockTypeTime:
+				rdb.conn.Send("LREM", rdb.getLockTimeBucketKey(co.LockValue), 1, lockMarkerValue)
+			}
+		}
+
+		// update balance
+		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
+		// submit all changes
+		err = RedisError(RedisFlushAndReceive(rdb.conn, sendCount))
+		if err != nil {
+			return CoinOutputStateNil, fmt.Errorf(
+				"redis: failed to update state based on reverted coin output %s: %v",
+				id.String(), err)
 		}
 	}
-	// update balance
-	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
-	// submit all changes
-	err = RedisError(RedisFlushAndReceive(rdb.conn, sendCount))
-	if err != nil {
-		return false, fmt.Errorf("redis: failed to revert coinoutput %s: %v", id.String(), err)
-	}
-	return locked, nil
+	return state, nil
 }
 
 // UpdateLockedCoinOutputs implements Database.UpdateLockedCoinOutputs

@@ -93,12 +93,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.CointOutputCount--
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(mp.Value)
 			explorer.stats.Coins = explorer.stats.Coins.Sub(mp.Value)
-			locked, err := explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
+			state, err := explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
 			if err != nil {
 				panic(fmt.Sprintf("failed to revert miner payout of %s to %s: %v",
 					mp.UnlockHash.String(), mp.Value.String(), err))
 			}
-			if locked {
+			if state == CoinOutputStateLocked {
 				explorer.stats.LockedCointOutputCount--
 				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(mp.Value)
 			}
@@ -118,11 +118,11 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.CointOutputCount--
 				id := tx.CoinOutputID(uint64(i))
 				explorer.stats.Coins = explorer.stats.Coins.Sub(co.Value)
-				locked, err := explorer.db.RevertCoinOutput(id)
+				state, err := explorer.db.RevertCoinOutput(id)
 				if err != nil {
 					panic(fmt.Sprintf("failed to revert coin output %s: %v", id.String(), err))
 				}
-				if locked {
+				if state == CoinOutputStateLocked {
 					explorer.stats.LockedCointOutputCount--
 					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(co.Value)
 				}

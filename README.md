@@ -79,6 +79,10 @@ Following _internal_ keys are reserved:
     * all unspent coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
     * format value: custom
     * example key: `tfchain:testnet:ucos`
+* `<chainName>:<networkName>:scos`:
+    * all spent coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
+    * format value: custom
+    * example key: `tfchain:testnet:scos`
 * `<chainName>:<networkName>:lcos.height:<height>`:
     * all locked coin outputs on a given height
     * format value: custom
