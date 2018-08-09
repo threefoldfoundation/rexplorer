@@ -83,10 +83,10 @@ Following _internal_ keys are reserved:
     * all locked coin outputs on a given height
     * format value: custom
     * example key: `tfchain:standard:lcos.height:42`
-* `<chainName>:<networkName>:lcos.time:<timestamp[:-5]>`:
+* `<chainName>:<networkName>:lcos.time:<timestamp-(timestamp%7200)>`:
     * all locked coin outputs for a given timestmap range
     * format value: custom
-    * example key: `tfchain:standard:lcos.time:15341`
+    * example key: `tfchain:standard:lcos.time:1526335200`
 
 Following _public_ keys are reserved:
 

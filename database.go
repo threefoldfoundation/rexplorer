@@ -162,7 +162,7 @@ type (
 	//	  <chainName>:<networkName>:state												(JSON) used for internal state of this explorer, in JSON format
 	//	  <chainName>:<networkName>:cos													(custom) all coin outputs
 	//	  <chainName>:<networkName>:lcos.height:<height>								(custom) all locked coin outputs on a given height
-	//	  <chainName>:<networkName>:lcos.time:<timestamp[:-5]>							(custom) all locked coin outputs for a given timestmap range
+	//	  <chainName>:<networkName>:lcos.time:<timestamp-(timestamp%7200)>				(custom) all locked coin outputs for a given timestmap range
 	//
 	//	  public keys:
 	//	  <chainName>:<networkName>:stats												(JSON) used for global network statistics
@@ -821,8 +821,7 @@ func (rdb *RedisDatabase) getAddressKey(uh types.UnlockHash, suffix string) stri
 // getLockTimeBucketKey is an internal util function,
 // used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
 func (rdb *RedisDatabase) getLockTimeBucketKey(lockValue LockValue) string {
-	str := lockValue.String()
-	return rdb.lockedByTimestampOutputsKey + ":" + str[:len(str)-5]
+	return rdb.lockedByTimestampOutputsKey + ":" + (lockValue - lockValue%7200).String()
 }
 
 // getLockHeightBucketKey is an internal util function,
