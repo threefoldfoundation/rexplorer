@@ -62,9 +62,14 @@ func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo types.BlockchainIn
 	if err != nil {
 		return nil, fmt.Errorf("failed to get explorer state from db: %v", err)
 	}
+	stats, err := db.GetNetworkStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network stats from db: %v", err)
+	}
 	explorer := &Explorer{
 		db:       db,
 		state:    state,
+		stats:    stats,
 		cs:       cs,
 		bcInfo:   bcInfo,
 		chainCts: chainCts,
