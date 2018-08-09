@@ -75,14 +75,10 @@ Following _internal_ keys are reserved:
     * used for internal state of this explorer, in JSON format
     * format value: JSON
     * example key: `tfchain:standard:state`
-* `<chainName>:<networkName>:ucos`:
-    * all unspent coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
+* `<chainName>:<networkName>:cos`:
+    * all coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
     * format value: custom
-    * example key: `tfchain:testnet:ucos`
-* `<chainName>:<networkName>:scos`:
-    * all spent coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
-    * format value: custom
-    * example key: `tfchain:testnet:scos`
+    * example key: `tfchain:testnet:cos`
 * `<chainName>:<networkName>:lcos.height:<height>`:
     * all locked coin outputs on a given height
     * format value: custom
@@ -131,15 +127,17 @@ JSON formats of value types defined by this module:
 
 ```json
 {
-    "timestamp": 1533670089,
-    "blockHeight": 76824,
-    "txCount": 77139,
-    "valueTxCount": 316,
-    "coinOutputCount": 1211,
-    "coinInputCount": 355,
-    "minerPayoutCount": 77062,
-    "minerPayouts": "76855400000001",
-    "coins": "695175855400000001"
+	"timestamp": 1533714154,
+	"blockHeight": 77185,
+	"txCount": 77501,
+	"valueTxCount": 317,
+	"coinOutputCount": 78637,
+	"lockedCoinOutputCount": 743,
+	"coinInputCount": 356,
+	"minerPayoutCount": 77424,
+	"minerPayouts": "77216500000001",
+	"coins": "695176216500000001",
+	"lockedCoins": "4899281850000000"
 }
 ```
 * example of wallet balance (stored under `<chainName>:<networkName>:address:<unlockHashHex>:balance`):

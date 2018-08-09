@@ -137,6 +137,17 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.BlockHeight--
 		}
 		explorer.stats.Timestamp = block.Timestamp
+
+		// returns the total amount of coins that have been locked
+		n, coins, err := explorer.db.RevertCoinOutputLocks(explorer.stats.BlockHeight, explorer.stats.Timestamp)
+		if err != nil {
+			panic(fmt.Sprintf("failed to lock coin outputs at height=%d and time=%d: %v",
+				explorer.stats.BlockHeight, explorer.stats.Timestamp, err))
+		}
+		if n > 0 {
+			explorer.stats.LockedCointOutputCount += n
+			explorer.stats.LockedCoins = explorer.stats.LockedCoins.Add(coins)
+		}
 	}
 
 	// update applied blocks
@@ -146,13 +157,15 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		}
 		explorer.stats.Timestamp = block.Timestamp
 		// returns the total amount of coins that have been unlocked
-		n, coins, err := explorer.db.UpdateLockedCoinOutputs(explorer.stats.BlockHeight, explorer.stats.Timestamp)
+		n, coins, err := explorer.db.ApplyCoinOutputLocks(explorer.stats.BlockHeight, explorer.stats.Timestamp)
 		if err != nil {
-			panic(fmt.Sprintf("failed to update locked coin outputs at height=%d and time=%d: %v",
+			panic(fmt.Sprintf("failed to unlock coin outputs at height=%d and time=%d: %v",
 				explorer.stats.BlockHeight, explorer.stats.Timestamp, err))
 		}
-		explorer.stats.LockedCointOutputCount -= n
-		explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(coins)
+		if n > 0 {
+			explorer.stats.LockedCointOutputCount -= n
+			explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(coins)
+		}
 
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
@@ -257,7 +270,7 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutp
 	if tlc.LockTime < types.LockTimeMinTimestampValue {
 		lt = LockTypeHeight
 	}
-	return true, explorer.db.AddLockedCoinOutput(id, co, lt, tlc.LockTime)
+	return true, explorer.db.AddLockedCoinOutput(id, co, lt, LockValue(tlc.LockTime))
 }
 
 // getMultisigOwnerAddresses gets the owner addresses (= internal addresses of a multisig condition)

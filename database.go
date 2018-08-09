@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"strconv"
 	"strings"
 
@@ -22,14 +21,50 @@ type Database interface {
 	SetNetworkStats(stats NetworkStats) error
 
 	AddCoinOutput(id types.CoinOutputID, co types.CoinOutput) error
-	AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue uint64) error
+	AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue LockValue) error
 	SpendCoinOutput(id types.CoinOutputID) error
 	RevertCoinInput(id types.CoinOutputID) error
 	RevertCoinOutput(id types.CoinOutputID) (oldState CoinOutputState, err error)
-	// UpdateLockedCoinOutputs returns the amount of outputs have been unlocked and what is its total value.
-	UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
+
+	ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
+	RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash) error
+}
+
+// StringLoader loads a string and uses it as the (parsed) value.
+type StringLoader interface {
+	LoadString(string) error
+}
+
+// FormatStringers formats the given stringers into one string using the given seperator
+func FormatStringers(seperator string, stringers ...fmt.Stringer) string {
+	n := len(stringers)
+	if n == 0 {
+		return ""
+	}
+	ss := make([]string, n)
+	for i, stringer := range stringers {
+		ss[i] = stringer.String()
+	}
+	return strings.Join(ss, seperator)
+}
+
+// ParseStringLoaders splits the given string into the given seperator
+// and loads each part into a given string loader.
+func ParseStringLoaders(csv, seperator string, stringLoaders ...StringLoader) (err error) {
+	n := len(stringLoaders)
+	parts := strings.SplitN(csv, seperator, n)
+	if m := len(parts); n != m {
+		return fmt.Errorf("CSV record has incorrect amount of records, expected %d but received %d", n, m)
+	}
+	for i, sl := range stringLoaders {
+		err = sl.LoadString(parts[i])
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 // LockType represents the type of a lock, used to lock a (coin) output.
@@ -42,6 +77,44 @@ const (
 	LockTypeTime
 )
 
+// String implements Stringer.String
+func (lt LockType) String() string {
+	return strconv.FormatUint(uint64(lt), 10)
+}
+
+// LoadString implements StringLoader.LoadString
+func (lt *LockType) LoadString(str string) error {
+	v, err := strconv.ParseUint(str, 10, 8)
+	if err != nil {
+		return err
+	}
+	nlt := LockType(v)
+	if nlt > LockTypeTime {
+		return fmt.Errorf("invalid lock type %d", nlt)
+	}
+	*lt = nlt
+	return nil
+}
+
+// LockValue represents a LockValue,
+// representing either a timestamp or a block height
+type LockValue uint64
+
+// String implements Stringer.String
+func (lv LockValue) String() string {
+	return strconv.FormatUint(uint64(lv), 10)
+}
+
+// LoadString implements StringLoader.LoadString
+func (lv *LockValue) LoadString(str string) error {
+	v, err := strconv.ParseUint(str, 10, 64)
+	if err != nil {
+		return err
+	}
+	*lv = LockValue(v)
+	return nil
+}
+
 // CoinOutputState represents the state of a coin output.
 type CoinOutputState uint8
 
@@ -52,6 +125,25 @@ const (
 	CoinOutputStateLocked
 	CoinOutputStateSpent
 )
+
+// String implements Stringer.String
+func (cos CoinOutputState) String() string {
+	return strconv.FormatUint(uint64(cos), 10)
+}
+
+// LoadString implements StringLoader.LoadString
+func (cos *CoinOutputState) LoadString(str string) error {
+	v, err := strconv.ParseUint(str, 10, 8)
+	if err != nil {
+		return err
+	}
+	ncos := CoinOutputState(v)
+	if ncos == CoinOutputStateNil || ncos > CoinOutputStateSpent {
+		return fmt.Errorf("invalid coin output state %d", ncos)
+	}
+	*cos = ncos
+	return nil
+}
 
 type (
 	// RedisDatabase is a Database (client) implementation for Redis, using github.com/gomodule/redigo.
@@ -68,8 +160,7 @@ type (
 	//
 	//	  internal keys:
 	//	  <chainName>:<networkName>:state												(JSON) used for internal state of this explorer, in JSON format
-	//	  <chainName>:<networkName>:ucos												(custom) all unspent coin outputs
-	//	  <chainName>:<networkName>:scos												(custom) all spent coin outputs
+	//	  <chainName>:<networkName>:cos													(custom) all coin outputs
 	//	  <chainName>:<networkName>:lcos.height:<height>								(custom) all locked coin outputs on a given height
 	//	  <chainName>:<networkName>:lcos.time:<timestamp[:-5]>							(custom) all locked coin outputs for a given timestmap range
 	//
@@ -94,15 +185,17 @@ type (
 	//
 	//  example of global stats (stored under <chainName>:<networkName>:stats):
 	//    { // see: NetworkStats
-	//        "timestamp": 1533670089,
-	//        "blockHeight": 76824,
-	//        "txCount": 77139,
-	//        "valueTxCount": 316,
-	//        "coinOutputCount": 1211,
-	//        "coinInputCount": 355,
-	//        "minerPayoutCount": 77062,
-	//        "minerPayouts": "76855400000001",
-	//        "coins": "695175855400000001"
+	//    	"timestamp": 1533714154,
+	//    	"blockHeight": 77185,
+	//    	"txCount": 77501,
+	//    	"valueTxCount": 317,
+	//    	"coinOutputCount": 78637,
+	//    	"lockedCoinOutputCount": 743,
+	//    	"coinInputCount": 356,
+	//    	"minerPayoutCount": 77424,
+	//    	"minerPayouts": "77216500000001",
+	//    	"coins": "695176216500000001",
+	//    	"lockedCoins": "4899281850000000"
 	//    }
 	//
 	//  example of wallet balance (stored under <chainName>:<networkName>:address:<unlockHashHex>:balance)
@@ -116,17 +209,16 @@ type (
 
 		// All Lua scripts used by this redis client implementation, for advanced features.
 		// Loaded when creating the client, and using the script's SHA1 (EVALSHA) afterwards.
-		popAllScript            *redis.Script
-		popIfNotLessThenScript  *redis.Script
-		hashDropScript          *redis.Script
-		updateLockTypeUCOScript *redis.Script
+		coinOutputDropScript                           *redis.Script
+		lockByTimeScript, unlockByTimeScript           *redis.Script
+		lockByHeightScript, unlockByHeightScript       *redis.Script
+		spendCoinOutputScript, unspendCoinOutputScript *redis.Script
 
 		// Most of the keys used by this Redis database.
 		stateKey, statsKey          string
 		addressKeyPrefix            string
 		addressesKey                string
-		spentCoinOutputsKey         string
-		unspentCoinOutputsKey       string
+		coinOutputsKey              string
 		lockedByHeightOutputsKey    string
 		lockedByTimestampOutputsKey string
 	}
@@ -136,201 +228,73 @@ var (
 	_ Database = (*RedisDatabase)(nil)
 )
 
-// ColonSeperatedStringValue defines a small marshal/unmarshal interface,
-// for marshalling and unmarshalling values as a colon-seperated value list,
-// used as a custom format, specialized for making it easy
-// to manipulate/extracting properties from within lua (scripts).
-type ColonSeperatedStringValue interface {
-	MarshalCSV() string
-	UnmarshalCSV(string) error
-}
-
 type (
 	// AddressBalance is used to store the locked/unlocked balance of a wallet (linked to an address)
 	AddressBalance struct {
 		Locked   types.Currency `json:"locked,omitempty"`
 		Unlocked types.Currency `json:"unlocked,omitempty"`
 	}
-	// SpentCoinOutput is used to store all spent coin outputs in the custom CSV format (used internally only)
-	SpentCoinOutput struct {
+	// CoinOutput is used to store all spent/unspent coin outputs in the custom CSV format (used internally only)
+	CoinOutput struct {
 		UnlockHash types.UnlockHash
-		Value      types.Currency
+		CoinValue  types.Currency
+		State      CoinOutputState
+		LockType   LockType
+		LockValue  LockValue
 	}
-	// UnspentCoinOutput is used to store all unspent coin outputs in the custom CSV format (used internally only)
-	UnspentCoinOutput struct {
-		UnlockHash types.UnlockHash
-		Value      types.Currency
-		Lock       LockType
-		LockValue  uint64
-	}
-	// LockedCoinOutputValue is used to index all locked outputs in the custom CSV format (used internally only),
-	// making it easy to automatically unlock (previously locked) coin outputs.
-	LockedCoinOutputValue struct {
-		UnlockHash   types.UnlockHash
+	// CoinOutputLock is used to store the lock value and a reference to its parent CoinOutput,
+	// as to store the lock in a scoped bucket.
+	CoinOutputLock struct {
 		CoinOutputID types.CoinOutputID
-		LockValue    uint64
+		LockValue    LockValue
+	}
+	// CoinOutputResult is returned by a Lua scripts which updates/marks a CoinOutput.
+	CoinOutputResult struct {
+		CoinOutputID types.CoinOutputID
+		UnlockHash   types.UnlockHash
+		CoinValue    types.Currency
+		LockType     LockType
+		LockValue    LockValue
 	}
 )
 
-// MarshalCSV implements ColonSeperatedStringValue.MarshalCSV
-func (sco SpentCoinOutput) MarshalCSV() string {
-	return fmt.Sprintf("%s:%s", sco.UnlockHash.String(), sco.Value.String())
+const csvSeperator = ","
+
+// String implements Stringer.String
+func (co CoinOutput) String() string {
+	str := FormatStringers(csvSeperator, co.State, co.UnlockHash, co.CoinValue, co.LockType, co.LockValue)
+	return str
 }
 
-// UnmarshalCSV implements ColonSeperatedStringValue.UnmarshalCSV
-//
-// Would be easier if we could make use of fmt.Sscanf,
-// but in Go the string value (%s) is greedy, and cannot made ungreedy as can be done in C.
-func (sco *SpentCoinOutput) UnmarshalCSV(s string) error {
-	parts := strings.SplitN(s, ":", 2)
-	if n := len(parts); n != 2 {
-		return fmt.Errorf(
-			"failed to parse CSV value %q from specified format: insufficient parts (%d, require 2)",
-			s, n)
-	}
-	err := sco.UnlockHash.LoadString(parts[0])
-	if err != nil {
-		return fmt.Errorf("failed to parse raw unlock hash %q: %v", parts[0], err)
-	}
-	i := big.NewInt(0)
-	err = i.UnmarshalText([]byte(parts[1]))
-	if err != nil {
-		return fmt.Errorf("failed to parse raw (coin) value %q: %v", parts[1], err)
-	}
-	sco.Value = types.NewCurrency(i)
-	return nil
+// LoadString implements StringLoader.LoadString
+func (co *CoinOutput) LoadString(str string) error {
+	return ParseStringLoaders(str, csvSeperator, &co.State, &co.UnlockHash, &co.CoinValue, &co.LockType, &co.LockValue)
 }
 
-// MarshalCSV implements ColonSeperatedStringValue.MarshalCSV
-func (uco UnspentCoinOutput) MarshalCSV() string {
-	return fmt.Sprintf("%d:%s:%s:%d", uco.Lock, uco.UnlockHash.String(), uco.Value.String(), uco.LockValue)
+// String implements Stringer.String
+func (col CoinOutputLock) String() string {
+	return FormatStringers(csvSeperator, col.CoinOutputID, col.LockValue)
 }
 
-// UnmarshalCSV implements ColonSeperatedStringValue.UnmarshalCSV
-//
-// Would be easier if we could make use of fmt.Sscanf,
-// but in Go the string value (%s) is greedy, and cannot made ungreedy as can be done in C.
-func (uco *UnspentCoinOutput) UnmarshalCSV(s string) error {
-	parts := strings.SplitN(s, ":", 4)
-	if n := len(parts); n != 4 {
-		return fmt.Errorf(
-			"failed to parse CSV value %q from specified format: insufficient parts (%d, require 4)",
-			s, n)
-	}
-	lockTypeUint, err := strconv.ParseUint(parts[0], 10, 8)
-	if err != nil {
-		return fmt.Errorf("failed to parse raw lock type %q: %v", parts[0], err)
-	}
-	uco.Lock = LockType(lockTypeUint)
-	err = uco.UnlockHash.LoadString(parts[1])
-	if err != nil {
-		return fmt.Errorf("failed to parse raw unlock hash %q: %v", parts[1], err)
-	}
-	i := big.NewInt(0)
-	err = i.UnmarshalText([]byte(parts[2]))
-	if err != nil {
-		return fmt.Errorf("failed to parse raw (coin) value %q: %v", parts[2], err)
-	}
-	uco.Value = types.NewCurrency(i)
-	uco.LockValue, err = strconv.ParseUint(parts[3], 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse raw lock value %q: %v", parts[3], err)
-	}
-	return nil
+// LoadString implements StringLoader.LoadString
+func (col *CoinOutputLock) LoadString(str string) error {
+	return ParseStringLoaders(str, csvSeperator, &col.CoinOutputID, &col.LockValue)
 }
 
-// MarshalCSV implements ColonSeperatedStringValue.MarshalCSV
-func (locv LockedCoinOutputValue) MarshalCSV() string {
-	return fmt.Sprintf("%s:%s:%d",
-		locv.UnlockHash.String(), locv.CoinOutputID.String(), locv.LockValue)
+// String implements Stringer.String
+func (cor CoinOutputResult) String() string {
+	return FormatStringers(csvSeperator, cor.CoinOutputID, cor.UnlockHash, cor.CoinValue, cor.LockType, cor.LockValue)
 }
 
-// UnmarshalCSV implements ColonSeperatedStringValue.UnmarshalCSV
-//
-// Would be easier if we could make use of fmt.Sscanf,
-// but in Go the string value (%s) is greedy, and cannot made ungreedy as can be done in C.
-func (locv *LockedCoinOutputValue) UnmarshalCSV(s string) error {
-	parts := strings.SplitN(s, ":", 3)
-	if n := len(parts); n != 3 {
-		return fmt.Errorf(
-			"failed to parse CSV value %q from specified format: insufficient parts (%d, require 3)",
-			s, n)
-	}
-	err := locv.UnlockHash.LoadString(parts[0])
-	if err != nil {
-		return fmt.Errorf("failed to raw unlock hash %q: %v", parts[0], err)
-	}
-	err = locv.CoinOutputID.LoadString(parts[1])
-	if err != nil {
-		return fmt.Errorf("failed to raw CoinOutputID %q: %v", parts[1], err)
-	}
-	locv.LockValue, err = strconv.ParseUint(parts[2], 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse raw lock value %q: %v", parts[2], err)
-	}
-	return nil
+// LoadString implements StringLoader.LoadString
+func (cor *CoinOutputResult) LoadString(str string) error {
+	return ParseStringLoaders(str, csvSeperator, &cor.CoinOutputID, &cor.UnlockHash, &cor.CoinValue, &cor.LockType, &cor.LockValue)
 }
 
 const (
 	addressKeySuffixBalance           = "balance"
 	addressKeySuffixLockedOutputs     = "outputs.locked"
 	addressKeySuffixMultiSigAddresses = "multisig.addresses"
-)
-
-const (
-	// used to pop time-locked outputs
-	luaScriptPopByTime = `
-local key = ARGV[1]
-local lockValue = tonumber(ARGV[2])
-
-local values = {}
-local length = tonumber(redis.call('LLEN', key))
-for i = 1 , length do
-	local str = redis.call('LPOP', key)
-	local lockStr = string.sub(str, 145)
-	if tonumber(lockStr) < lockValue then
-		values[#values+1] = str
-	else
-		redis.call('RPUSH', key, str)
-	end
-end
-return values
-`
-
-	// used to pop height-locked outputs
-	luaScriptPopAll = `
-local key = ARGV[1]
-local values = {}
-local length = tonumber(redis.call('LLEN', key))
-for i = 1 , length do
-    local val = redis.call('LPOP', key)
-    if val then
-		values[#values+1] = val
-    end
-end
-return values
-`
-	// used to implement the hash drop command
-	luaScriptHashDrop = `
-local key = ARGV[1]
-local field = ARGV[2]
-local value = redis.call("HGET", key, field)
-redis.call("HDEL", key, field)
-return value
-`
-
-	// used to update lock type of an unspent coin output in place
-	luaScriptUpdateLockTypeUnspentCoinOutput = `
-local key = ARGV[1]
-local field = ARGV[2]
-local lockValue = ARGV[3]
--- get value, modify in-place, set it again
-local value = redis.call("HGET", key, field)
-value = lockValue .. value:sub(2)
-redis.call("HSET", key, field, value)
--- return the entire value, with modifications
-return value
-`
 )
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
@@ -342,46 +306,139 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 		return nil, fmt.Errorf(
 			"failed to dial a Redis connection to tcp://%s@%d: %v", address, db, err)
 	}
-	// load all scripts
-	popAllScript := redis.NewScript(0, luaScriptPopAll)
-	err = popAllScript.Load(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Lua-Script PopAll: %v", err)
-	}
-	popIfNotLessThenScript := redis.NewScript(0, luaScriptPopByTime)
-	err = popIfNotLessThenScript.Load(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Lua-Script PopIfNotLessThen: %v", err)
-	}
-	hashDropScript := redis.NewScript(0, luaScriptHashDrop)
-	err = hashDropScript.Load(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Lua-Script HashDrop: %v", err)
-	}
-	updateLockTypeUCOScript := redis.NewScript(0, luaScriptUpdateLockTypeUnspentCoinOutput)
-	err = updateLockTypeUCOScript.Load(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Lua-Script UpdateLockTypeUnspentCoinOutput: %v", err)
-	}
 	// compute all keys and return the RedisDatabase instance
-	prefix := fmt.Sprintf("%s:%s:",
-		strings.ToLower(bcInfo.Name), strings.ToLower(bcInfo.NetworkName))
-	return &RedisDatabase{
+	prefix := fmt.Sprintf("%s:%s:", strings.ToLower(bcInfo.Name), strings.ToLower(bcInfo.NetworkName))
+	rdb := RedisDatabase{
 		conn:                        conn,
-		popAllScript:                popAllScript,
-		popIfNotLessThenScript:      popIfNotLessThenScript,
-		hashDropScript:              hashDropScript,
-		updateLockTypeUCOScript:     updateLockTypeUCOScript,
 		stateKey:                    prefix + "state",
 		statsKey:                    prefix + "stats",
 		addressKeyPrefix:            prefix + "address:",
 		addressesKey:                prefix + "addresses",
-		unspentCoinOutputsKey:       prefix + "ucos",
-		spentCoinOutputsKey:         prefix + "scos",
+		coinOutputsKey:              prefix + "cos",
 		lockedByHeightOutputsKey:    prefix + "lcos.height",
 		lockedByTimestampOutputsKey: prefix + "lcos.time",
-	}, nil
+	}
+	// create and load scripts
+	err = rdb.createAndLoadScripts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create/load a lua script: %v", err)
+	}
+	return &rdb, nil
 }
+
+// internal logic to create and load scripts usd for advanced lua-script-driven logic
+func (rdb *RedisDatabase) createAndLoadScripts() (err error) {
+	rdb.coinOutputDropScript, err = rdb.createAndLoadScript(hashDropScriptSource, rdb.coinOutputsKey)
+	if err != nil {
+		return
+	}
+
+	rdb.unlockByTimeScript, err = rdb.createAndLoadScript(
+		updateTimeLocksScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String(), ">=")
+	if err != nil {
+		return
+	}
+	rdb.lockByTimeScript, err = rdb.createAndLoadScript(
+		updateTimeLocksScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String(), "<")
+	if err != nil {
+		return
+	}
+
+	rdb.unlockByHeightScript, err = rdb.createAndLoadScript(
+		updateHeightLocksScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String())
+	if err != nil {
+		return
+	}
+	rdb.lockByHeightScript, err = rdb.createAndLoadScript(
+		updateHeightLocksScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String())
+	if err != nil {
+		return
+	}
+
+	rdb.spendCoinOutputScript, err = rdb.createAndLoadScript(
+		updateCoinOutputScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateSpent.String())
+	if err != nil {
+		return
+	}
+	rdb.unspendCoinOutputScript, err = rdb.createAndLoadScript(
+		updateCoinOutputScriptSource,
+		rdb.coinOutputsKey, CoinOutputStateSpent.String(), CoinOutputStateLiquid.String())
+	if err != nil {
+		return
+	}
+
+	// all scripts loaded successfully
+	return nil
+}
+func (rdb *RedisDatabase) createAndLoadScript(src string, argv ...interface{}) (*redis.Script, error) {
+	src = fmt.Sprintf(src, argv...)
+	script := redis.NewScript(0, src)
+	err := script.Load(rdb.conn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Lua-Script: %v", err)
+	}
+	return script, nil
+}
+
+const (
+	hashDropScriptSource = `
+local coinOutputID = ARGV[1]
+local value = redis.call("HGET", "%[1]s", coinOutputID)
+redis.call("HDEL", "%[1]s", coinOutputID)
+return value
+`
+	updateCoinOutputsSnippetSource = `
+local results = {}
+for i = 1 , #outputsToUpdate do
+	local output = redis.call("HGET", "%[1]s", outputsToUpdate[i])
+	if output:sub(1,1) == "%[2]s" then
+		output = "%[3]s" .. output:sub(2)
+		redis.call("HSET", "%[1]s", outputsToUpdate[i], output)
+		results[#results+1] = outputsToUpdate[i] .. output:sub(2)
+	end
+end
+return results
+`
+	updateTimeLocksScriptSource = `
+local bucketKey = ARGV[1]
+local timenow = tonumber(ARGV[2])
+
+local outputsToUpdate = {}
+local bucketLength = tonumber(redis.call('LLEN', bucketKey))
+for i = 1 , bucketLength do
+	local str = redis.call('LINDEX', bucketKey, i-1)
+	local timelock = tonumber(str:sub(66))
+	if timenow %[4]s timelock then
+		outputsToUpdate[#outputsToUpdate+1] = str:sub(1,64)
+	end
+end
+` + updateCoinOutputsSnippetSource
+	updateHeightLocksScriptSource = `
+local bucketKey = ARGV[1]
+
+local outputsToUpdate = {}
+local bucketLength = tonumber(redis.call('LLEN', bucketKey))
+for i = 1 , bucketLength do
+	outputsToUpdate[#outputsToUpdate+1] = redis.call('LINDEX', bucketKey, i-1)
+end
+` + updateCoinOutputsSnippetSource
+	updateCoinOutputScriptSource = `
+local coinOutputID = ARGV[1]
+
+local output = redis.call("HGET", "%[1]s", coinOutputID)
+if output:sub(1,1) ~= "%[2]s" then
+	return nil
+end
+output = "%[3]s" .. output:sub(2)
+redis.call("HSET", "%[1]s", coinOutputID, output)
+return coinOutputID .. output:sub(2)
+`
+)
 
 // GetExplorerState implements Database.GetExplorerState
 func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
@@ -440,12 +497,13 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co types.CoinOutp
 	// store address, an address never gets deleted
 	rdb.conn.Send("SADD", rdb.addressesKey, uh.String())
 	// store output
-	rdb.conn.Send("HSET", rdb.unspentCoinOutputsKey, id.String(), UnspentCoinOutput{
+	rdb.conn.Send("HSET", rdb.coinOutputsKey, id.String(), CoinOutput{
 		UnlockHash: uh,
-		Value:      co.Value,
-		Lock:       LockTypeNone,
+		CoinValue:  co.Value,
+		State:      CoinOutputStateLiquid,
+		LockType:   LockTypeNone,
 		LockValue:  0,
-	}.MarshalCSV())
+	}.String())
 	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 3))
@@ -456,7 +514,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co types.CoinOutp
 }
 
 // AddLockedCoinOutput implements Database.AddLockedCoinOutput
-func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue uint64) error {
+func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue LockValue) error {
 	uh := co.Condition.UnlockHash()
 
 	balanceKey := rdb.getAddressKey(uh, addressKeySuffixBalance)
@@ -477,24 +535,23 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.Co
 	// store coinoutput in list of locked coins for wallet
 	rdb.conn.Send("HSET", rdb.getAddressKey(uh, addressKeySuffixLockedOutputs), id.String(), JSONMarshal(co))
 	// keep track of locked output
-	locv := LockedCoinOutputValue{
-		UnlockHash:   uh,
-		CoinOutputID: id,
-		LockValue:    lockValue,
-	}.MarshalCSV()
 	switch lt {
 	case LockTypeHeight:
-		rdb.conn.Send("RPUSH", rdb.getLockHeightBucketKey(lockValue), locv)
+		rdb.conn.Send("RPUSH", rdb.getLockHeightBucketKey(lockValue), id.String())
 	case LockTypeTime:
-		rdb.conn.Send("RPUSH", rdb.getLockTimeBucketKey(lockValue), locv)
+		rdb.conn.Send("RPUSH", rdb.getLockTimeBucketKey(lockValue), CoinOutputLock{
+			CoinOutputID: id,
+			LockValue:    lockValue,
+		}.String())
 	}
 	// store output
-	rdb.conn.Send("HSET", rdb.unspentCoinOutputsKey, id.String(), UnspentCoinOutput{
+	rdb.conn.Send("HSET", rdb.coinOutputsKey, id.String(), CoinOutput{
 		UnlockHash: uh,
-		Value:      co.Value,
-		Lock:       lt,
+		CoinValue:  co.Value,
+		State:      CoinOutputStateLocked,
+		LockType:   lt,
 		LockValue:  lockValue,
-	}.MarshalCSV())
+	}.String())
 	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 5))
@@ -506,38 +563,29 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.Co
 
 // SpendCoinOutput implements Database.SpendCoinOutput
 func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
-	// drop+get coinOutput using coinOutputID
-	var co UnspentCoinOutput
-	err := RedisCSV(&co)(rdb.hashDropScript.Do(rdb.conn, rdb.unspentCoinOutputsKey, id.String()))
+	var result CoinOutputResult
+	err := RedisStringLoader(&result)(rdb.spendCoinOutputScript.Do(rdb.conn, id.String()))
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to spend coin output: cannot drop coin output %s in %s: %v",
-			id.String(), rdb.unspentCoinOutputsKey, err)
-	}
-	if co.Lock != LockTypeNone {
-		return fmt.Errorf("trying to spend locked coin output %s: %s", id.String(), co.MarshalCSV())
+			"redis: failed to spend coin output: cannot update coin output %s in %s: %v",
+			id.String(), rdb.coinOutputsKey, err)
 	}
 
 	// get balance, so it can be updated
-	balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
+	balanceKey := rdb.getAddressKey(result.UnlockHash, addressKeySuffixBalance)
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to get balance for %s at %s: %v", co.UnlockHash.String(), balanceKey, err)
+			"redis: failed to spend coin output: failed to get balance for %s at %s: %v", result.UnlockHash.String(), balanceKey, err)
 	}
 
 	// update coin count
-	balance.Unlocked = balance.Unlocked.Sub(co.Value)
+	balance.Unlocked = balance.Unlocked.Sub(result.CoinValue)
 
-	// update balance and mark coin output as spend
-	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
-	rdb.conn.Send("HSET", rdb.spentCoinOutputsKey, id.String(), SpentCoinOutput{
-		UnlockHash: co.UnlockHash,
-		Value:      co.Value,
-	}.MarshalCSV())
-	err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
+	// update balance
+	err = RedisError(rdb.conn.Do("SET", balanceKey, JSONMarshal(balance)))
 	if err != nil {
-		return fmt.Errorf("redis: failed to spend coinoutput %s: %v", id.String(), err)
+		return fmt.Errorf("redis: failed to spend coin output: failed to update coinoutput %s: %v", id.String(), err)
 	}
 	return nil
 }
@@ -545,68 +593,52 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 // RevertCoinInput implements Database.RevertCoinInput
 // more or less a reverse process of SpendCoinOutput
 func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
-	// drop+get coinOutput using coinOutputID
-	var sco SpentCoinOutput
-	err := RedisCSV(&sco)(rdb.hashDropScript.Do(rdb.conn, rdb.spentCoinOutputsKey, id.String()))
+	var result CoinOutputResult
+	err := RedisStringLoader(&result)(rdb.unspendCoinOutputScript.Do(rdb.conn, id.String()))
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to revert coin input: cannot drop spend coin output %s in %s: %v",
-			id.String(), rdb.spentCoinOutputsKey, err)
+			"redis: failed to revert coin input: cannot update coin output %s in %s: %v",
+			id.String(), rdb.coinOutputsKey, err)
 	}
 
 	// get balance, so it can be updated
-	balanceKey := rdb.getAddressKey(sco.UnlockHash, addressKeySuffixBalance)
+	balanceKey := rdb.getAddressKey(result.UnlockHash, addressKeySuffixBalance)
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to revert coin input %s: failed to get balance for %s at %s: %v",
-			id.String(), sco.UnlockHash.String(), balanceKey, err)
+			"redis: failed to revert coin inpt: failed to get balance for %s at %s: %v", result.UnlockHash.String(), balanceKey, err)
 	}
 
-	// update coin count, adding the coins back to the user
-	balance.Unlocked = balance.Unlocked.Add(sco.Value)
+	// update coin count
+	balance.Unlocked = balance.Unlocked.Add(result.CoinValue)
 
-	// update balance and mark coin output as spend
-	rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
-	rdb.conn.Send("HSET", rdb.unspentCoinOutputsKey, id.String(), UnspentCoinOutput{
-		UnlockHash: sco.UnlockHash,
-		Value:      sco.Value,
-	}.MarshalCSV())
-	err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
+	// update balance
+	err = RedisError(rdb.conn.Do("SET", balanceKey, JSONMarshal(balance)))
 	if err != nil {
-		return fmt.Errorf("redis: failed to revert coin input %s: %v", id.String(), err)
+		return fmt.Errorf("redis: failed to revert coin input: failed to update coinoutput %s: %v", id.String(), err)
 	}
 	return nil
 }
 
 // RevertCoinOutput implements Database.RevertCoinOutput
 func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputState, error) {
-	// drop+get spent/unspent coinOutput using coinOutputID
-	var (
-		state CoinOutputState
-		co    UnspentCoinOutput
-	)
-	err := RedisCSV(&co)(rdb.hashDropScript.Do(rdb.conn, rdb.unspentCoinOutputsKey, id.String()))
+	var co CoinOutput
+	err := RedisStringLoader(&co)(rdb.coinOutputDropScript.Do(rdb.conn, id.String()))
 	if err != nil {
-		if err != redis.ErrNil {
-			return CoinOutputStateNil, fmt.Errorf(
-				"redis: failed to revert unspent(?) coin output: cannot drop coin output %s in %s: %v",
-				id.String(), rdb.unspentCoinOutputsKey, err)
-		}
-		var sco SpentCoinOutput
-		err = RedisCSV(&sco)(rdb.hashDropScript.Do(rdb.conn, rdb.spentCoinOutputsKey, id.String()))
-		if err != nil {
-			return CoinOutputStateNil, fmt.Errorf(
-				"redis: failed to revert spent(?) coin output: cannot drop coin output %s in %s: %v",
-				id.String(), rdb.spentCoinOutputsKey, err)
-		}
-		state = CoinOutputStateSpent
-		co.UnlockHash, co.Value = sco.UnlockHash, sco.Value
+		return CoinOutputStateNil, fmt.Errorf(
+			"redis: failed to revert coin output: cannot drop coin output %s in %s: %v",
+			id.String(), rdb.coinOutputsKey, err)
+	}
+	if co.State == CoinOutputStateNil {
+		return CoinOutputStateNil, fmt.Errorf(
+			"redis: failed to revert coin output: nil coin output state %s in %s: %v",
+			id.String(), rdb.coinOutputsKey, err)
 	}
 
-	if state == CoinOutputStateNil {
+	var sendCount int
+	if co.State != CoinOutputStateSpent {
 		// update all data for this unspent coin output
-		sendCount := 1
+		sendCount++
 
 		// get balance, so it can be updated
 		balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
@@ -616,90 +648,130 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 				"redis: failed to get balance for %s at %s: %v", co.UnlockHash.String(), balanceKey, err)
 		}
 
-		if co.Lock == LockTypeNone {
-			state = CoinOutputStateLiquid
+		// update correct balanace
+		switch co.State {
+		case CoinOutputStateLiquid:
 			// update unlocked balance of address wallet
-			balance.Unlocked = balance.Unlocked.Sub(co.Value)
-		} else {
-			state = CoinOutputStateLocked
-			sendCount += 2
+			balance.Unlocked = balance.Unlocked.Sub(co.CoinValue)
+		case CoinOutputStateLocked:
 			// update locked balance of address wallet
-			balance.Locked = balance.Locked.Sub(co.Value)
-			// remove locked coin output from the locked coin output list linked to the address
-			rdb.conn.Send("HDEL", rdb.getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
-			// remove locked coin output value (marker)
-			lockMarkerValue := LockedCoinOutputValue{
-				UnlockHash:   co.UnlockHash,
-				CoinOutputID: id,
-				LockValue:    co.LockValue,
-			}.MarshalCSV()
-			switch co.Lock {
-			case LockTypeHeight:
-				rdb.conn.Send("LREM", rdb.getLockHeightBucketKey(co.LockValue), 1, lockMarkerValue)
-			case LockTypeTime:
-				rdb.conn.Send("LREM", rdb.getLockTimeBucketKey(co.LockValue), 1, lockMarkerValue)
-			}
+			balance.Locked = balance.Locked.Sub(co.CoinValue)
 		}
 
 		// update balance
 		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
-		// submit all changes
+	}
+
+	// always remove lock properties if a lock is used, no matter the state
+	if co.LockType != LockTypeNone {
+		sendCount += 2
+		// remove locked coin output from the locked coin output list linked to the address
+		rdb.conn.Send("HDEL", rdb.getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
+		// remove locked coin output lock
+		switch co.LockType {
+		case LockTypeHeight:
+			rdb.conn.Send("LREM", rdb.getLockHeightBucketKey(co.LockValue), 1, id.String())
+		case LockTypeTime:
+			rdb.conn.Send("LREM", rdb.getLockTimeBucketKey(co.LockValue), 1, CoinOutputLock{
+				CoinOutputID: id,
+				LockValue:    co.LockValue,
+			}.String())
+		}
+	}
+
+	if sendCount > 0 {
 		err = RedisError(RedisFlushAndReceive(rdb.conn, sendCount))
 		if err != nil {
 			return CoinOutputStateNil, fmt.Errorf(
-				"redis: failed to update state based on reverted coin output %s: %v",
-				id.String(), err)
+				"redis: failed to revert coin output %s: failed to submit %d changes: %v",
+				id.String(), sendCount, err)
 		}
 	}
-	return state, nil
+
+	return co.State, nil
 }
 
-// UpdateLockedCoinOutputs implements Database.UpdateLockedCoinOutputs
-func (rdb *RedisDatabase) UpdateLockedCoinOutputs(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
-	// pop all unlocked outputs which were previously locked
-	rdb.popAllScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(uint64(height)))
-	rdb.popIfNotLessThenScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(uint64(time)), uint64(time))
+// ApplyCoinOutputLocks implements Database.ApplyCoinOutputLocks
+func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
+	rdb.unlockByHeightScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(LockValue(height)))
+	rdb.unlockByTimeScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
-		return 0, types.Currency{}, fmt.Errorf("failed to pop locked outputs: %v", err)
+		return 0, types.Currency{}, fmt.Errorf("failed to unlock outputs: %v", err)
 	}
-	lockedByHeightCoinOutputs, err := RedisLockedCoinOutputValues(values[0], nil)
+	lockedByHeightCoinOutputResults, err := RedisCoinOutputResults(values[0], nil)
 	if err != nil && err != redis.ErrNil {
-		return 0, types.Currency{}, fmt.Errorf("failed to pop+parse locked-by-height outputs: %v", err)
+		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-height output results: %v", err)
 	}
-	lockedByTimeCoinOutputs, err := RedisLockedCoinOutputValues(values[1], nil)
+	lockedByTimeCoinOutputResults, err := RedisCoinOutputResults(values[1], nil)
 	if err != nil && err != redis.ErrNil {
-		return 0, types.Currency{}, fmt.Errorf("failed to pop+parse locked-by-time outputs: %v", err)
+		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-time output results: %v", err)
 	}
-	lockedCoinOuts := append(lockedByHeightCoinOutputs, lockedByTimeCoinOutputs...)
-	for _, lco := range lockedCoinOuts {
-		// update and return unspent coin output
-		var uco UnspentCoinOutput
-		err = RedisCSV(&uco)(rdb.updateLockTypeUCOScript.Do(rdb.conn,
-			rdb.unspentCoinOutputsKey, lco.CoinOutputID.String(), "0"))
-		if err != nil {
-			return 0, types.Currency{}, fmt.Errorf("failed to parse returned CSV UnspentCoinOutput value for ID %s: %v", lco.CoinOutputID.String(), err)
-		}
+	lockedCoinOutputResults := append(lockedByHeightCoinOutputResults, lockedByTimeCoinOutputResults...)
+	for _, lcor := range lockedCoinOutputResults {
 		// get balance of user and update it
-		balanceKey := rdb.getAddressKey(lco.UnlockHash, addressKeySuffixBalance)
+		balanceKey := rdb.getAddressKey(lcor.UnlockHash, addressKeySuffixBalance)
 		// get initial values
 		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
-				"redis: failed to get balance for %s at %s: %v", lco.UnlockHash.String(), balanceKey, err)
+				"redis: failed to get balance for %s at %s: %v", lcor.UnlockHash.String(), balanceKey, err)
 		}
-		balance.Locked = balance.Locked.Sub(uco.Value) // locked -> unlocked
-		coins = coins.Add(uco.Value)
+		balance.Locked = balance.Locked.Sub(lcor.CoinValue) // locked -> unlocked
+		coins = coins.Add(lcor.CoinValue)
 		n++
-		balance.Unlocked = balance.Unlocked.Add(uco.Value)
-		// update balance and pop unlocked output from address (assume we can pop in order)
-		rdb.conn.Send("HDEL", rdb.getAddressKey(lco.UnlockHash, addressKeySuffixLockedOutputs), lco.CoinOutputID.String())
+		balance.Unlocked = balance.Unlocked.Add(lcor.CoinValue)
+		// update balance and pop unlocked output from address
+		rdb.conn.Send("HDEL", rdb.getAddressKey(lcor.UnlockHash, addressKeySuffixLockedOutputs), lcor.CoinOutputID.String())
 		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 		err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
-				"failed to update balance of %q and pop the unlocked locked coin output: %v",
-				lco.UnlockHash.String(), err)
+				"failed to update balance of %q and update unlocked coin outputs: %v",
+				lcor.UnlockHash.String(), err)
+		}
+	}
+	return n, coins, nil
+}
+
+// RevertCoinOutputLocks implements Database.ApplyCoinOutputLocks
+func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
+	rdb.lockByHeightScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(LockValue(height)))
+	rdb.lockByTimeScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
+	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
+	if err != nil {
+		return 0, types.Currency{}, fmt.Errorf("failed to lock outputs: %v", err)
+	}
+	unlockedByHeightCoinOutputResults, err := RedisCoinOutputResults(values[0], nil)
+	if err != nil && err != redis.ErrNil {
+		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-height output results: %v", err)
+	}
+	unlockedByTimeCoinOutputResults, err := RedisCoinOutputResults(values[1], nil)
+	if err != nil && err != redis.ErrNil {
+		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-time output results: %v", err)
+	}
+	unlockedCoinOutputResults := append(unlockedByHeightCoinOutputResults, unlockedByTimeCoinOutputResults...)
+	for _, ulcor := range unlockedCoinOutputResults {
+		// get balance of user and update it
+		balanceKey := rdb.getAddressKey(ulcor.UnlockHash, addressKeySuffixBalance)
+		// get initial values
+		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
+		if err != nil {
+			return 0, types.Currency{}, fmt.Errorf(
+				"redis: failed to get balance for %s at %s: %v", ulcor.UnlockHash.String(), balanceKey, err)
+		}
+		balance.Locked = balance.Locked.Add(ulcor.CoinValue) // unlocked -> locked
+		coins = coins.Add(ulcor.CoinValue)
+		n++
+		balance.Unlocked = balance.Unlocked.Sub(ulcor.CoinValue)
+		// update balance and pop unlocked output from address
+		rdb.conn.Send("HDEL", rdb.getAddressKey(ulcor.UnlockHash, addressKeySuffixLockedOutputs), ulcor.CoinOutputID.String())
+		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
+		err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
+		if err != nil {
+			return 0, types.Currency{}, fmt.Errorf(
+				"failed to update balance of %q and update locked coin outputs: %v",
+				ulcor.UnlockHash.String(), err)
 		}
 	}
 	return n, coins, nil
@@ -748,15 +820,15 @@ func (rdb *RedisDatabase) getAddressKey(uh types.UnlockHash, suffix string) stri
 
 // getLockTimeBucketKey is an internal util function,
 // used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
-func (rdb *RedisDatabase) getLockTimeBucketKey(lockValue uint64) string {
-	str := strconv.FormatUint(lockValue, 10)
-	return fmt.Sprintf("%s:%s", rdb.lockedByTimestampOutputsKey, str[:len(str)-5])
+func (rdb *RedisDatabase) getLockTimeBucketKey(lockValue LockValue) string {
+	str := lockValue.String()
+	return rdb.lockedByTimestampOutputsKey + ":" + str[:len(str)-5]
 }
 
 // getLockHeightBucketKey is an internal util function,
 // used to create the heightlocked bucket keys, grouping all heightlocked outputs with the same lock-height value.
-func (rdb *RedisDatabase) getLockHeightBucketKey(lockValue uint64) string {
-	return fmt.Sprintf("%s:%d", rdb.lockedByHeightOutputsKey, lockValue)
+func (rdb *RedisDatabase) getLockHeightBucketKey(lockValue LockValue) string {
+	return rdb.lockedByHeightOutputsKey + ":" + lockValue.String()
 }
 
 // JSON Helper Functions
@@ -804,15 +876,15 @@ func RedisJSONValue(v interface{}) func(interface{}, error) error {
 	}
 }
 
-// RedisCSV creates a function that can be used to unmarshal a string value
-// as a (custom) CSV value into the given (reference) value (v).
-func RedisCSV(v ColonSeperatedStringValue) func(interface{}, error) error {
+// RedisStringLoader creates a function that can be used to unmarshal a string value
+// as a (custom) StringLoader value into the given (reference) value (v).
+func RedisStringLoader(sl StringLoader) func(interface{}, error) error {
 	return func(reply interface{}, err error) error {
 		s, err := redis.String(reply, err)
 		if err != nil {
 			return err
 		}
-		return v.UnmarshalCSV(s)
+		return sl.LoadString(s)
 	}
 }
 
@@ -827,21 +899,21 @@ func RedisAddressBalance(r interface{}, e error) (balance AddressBalance, err er
 	return
 }
 
-// RedisLockedCoinOutputValues returns all LockedCoinOutputValues found for a given []string redis reply,
+// RedisCoinOutputResults returns all CoinOutputResults found for a given []string redis reply,
 // only used in combination with `(*RedisDatabase).UpdateLockedCoinOutputs`, see that method for more information.
-func RedisLockedCoinOutputValues(reply interface{}, err error) ([]LockedCoinOutputValue, error) {
-	lcos, err := redis.Strings(reply, err)
+func RedisCoinOutputResults(reply interface{}, err error) ([]CoinOutputResult, error) {
+	strings, err := redis.Strings(reply, err)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]LockedCoinOutputValue, len(lcos))
-	for i, lco := range lcos {
-		err = values[i].UnmarshalCSV(lco)
+	results := make([]CoinOutputResult, len(strings))
+	for i, str := range strings {
+		err = results[i].LoadString(str)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return values, nil
+	return results, nil
 }
 
 // RedisFlushAndReceive is used to flush all buffered commands (using SEND),
