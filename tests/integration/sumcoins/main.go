@@ -32,9 +32,8 @@ func main() {
 		panic("failed to get network stats: " + err.Error())
 	}
 	var stats struct {
-		Coins        types.Currency `json:"coins"`
-		LockedCoins  types.Currency `json:"lockedCoins"`
-		MinerPayouts types.Currency `json:"minerPayouts"`
+		Coins       types.Currency `json:"coins"`
+		LockedCoins types.Currency `json:"lockedCoins"`
 	}
 	err = json.Unmarshal(b, &stats)
 	if err != nil {
@@ -71,14 +70,29 @@ func main() {
 	totalCoins := unlockedCoins.Add(lockedCoins)
 
 	// ensure our total coin count is as expected
-	if !lockedCoins.Equals(stats.LockedCoins) {
-		panic(fmt.Sprintf("unexpected locked coins: %s != %s",
-			lockedCoins.String(), stats.LockedCoins.String()))
+	if c := lockedCoins.Cmp(stats.LockedCoins); c != 0 {
+		var diff types.Currency
+		switch c {
+		case -1:
+			diff = stats.LockedCoins.Sub(lockedCoins)
+		case 1:
+			diff = lockedCoins.Sub(stats.LockedCoins)
+		}
+
+		panic(fmt.Sprintf("unexpected locked coins: %s != %s (diff: %s)",
+			lockedCoins.String(), stats.LockedCoins.String(), diff.String()))
 	}
-	if !totalCoins.Equals(stats.Coins) {
-		fmt.Println(stats.MinerPayouts.String())
+	if c := totalCoins.Cmp(stats.Coins); c != 0 {
+		var diff types.Currency
+		switch c {
+		case -1:
+			diff = stats.Coins.Sub(totalCoins)
+		case 1:
+			diff = totalCoins.Sub(stats.Coins)
+		}
+
 		panic(fmt.Sprintf("unexpected total coins: %s != %s (diff: %s)",
-			totalCoins.String(), stats.Coins.String(), stats.Coins.Sub(totalCoins).String()))
+			totalCoins.String(), stats.Coins.String(), diff.String()))
 	}
 
 	fmt.Println("sumcoins test passed :)")

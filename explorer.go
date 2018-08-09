@@ -22,7 +22,9 @@ type (
 		LockedCointOutputCount uint64            `json:"lockedCoinOutputCount"`
 		CointInputCount        uint64            `json:"coinInputCount"`
 		MinerPayoutCount       uint64            `json:"minerPayoutCount"`
+		TransactionFeeCount    uint64            `json:"txFeeCount"`
 		MinerPayouts           types.Currency    `json:"minerPayouts"`
+		TransactionFees        types.Currency    `json:"txFees"`
 		Coins                  types.Currency    `json:"coins"`
 		LockedCoins            types.Currency    `json:"lockedCoins"`
 	}
@@ -89,10 +91,16 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 	for _, block := range css.RevertedBlocks {
 		// revert miner payouts
 		for i, mp := range block.MinerPayouts {
-			explorer.stats.MinerPayoutCount--
 			explorer.stats.CointOutputCount--
-			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(mp.Value)
-			explorer.stats.Coins = explorer.stats.Coins.Sub(mp.Value)
+			if i == 0 {
+				// only the first miner payout is newly created money
+				explorer.stats.MinerPayoutCount--
+				explorer.stats.Coins = explorer.stats.Coins.Sub(mp.Value)
+				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(mp.Value)
+			} else {
+				explorer.stats.TransactionFeeCount--
+				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Sub(mp.Value)
+			}
 			state, err := explorer.db.RevertCoinOutput(block.MinerPayoutID(uint64(i)))
 			if err != nil {
 				panic(fmt.Sprintf("failed to revert miner payout of %s to %s: %v",
@@ -121,7 +129,6 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount--
 				id := tx.CoinOutputID(uint64(i))
-				explorer.stats.Coins = explorer.stats.Coins.Sub(co.Value)
 				state, err := explorer.db.RevertCoinOutput(id)
 				if err != nil {
 					panic(fmt.Sprintf("failed to revert coin output %s: %v", id.String(), err))
@@ -152,7 +159,8 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 
 	// update applied blocks
 	for _, block := range css.AppliedBlocks {
-		if block.ParentID != (types.BlockID{}) {
+		isGenesisBlock := block.ParentID == (types.BlockID{})
+		if !isGenesisBlock {
 			explorer.stats.BlockHeight++
 		}
 		explorer.stats.Timestamp = block.Timestamp
@@ -169,12 +177,15 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
-			explorer.stats.MinerPayoutCount++
 			explorer.stats.CointOutputCount++
-			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
 			if i == 0 {
 				// only the first miner payout is newly created money
+				explorer.stats.MinerPayoutCount++
 				explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
+				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
+			} else {
+				explorer.stats.TransactionFeeCount++
+				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(mp.Value)
 			}
 			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
 				Value: mp.Value,
@@ -217,7 +228,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				}
 				// only count coins of outputs for genesis block,
 				// as it is currently the only place coins can be created
-				if explorer.stats.BlockHeight == 0 {
+				if isGenesisBlock {
 					explorer.stats.Coins = explorer.stats.Coins.Add(co.Value)
 				}
 				// if it is locked, we'll always add it to the locked output

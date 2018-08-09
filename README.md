@@ -216,26 +216,29 @@ and you can run it yourself as follows:
 ```
 $ go run ./examples/getstats/main.go
 tfchain/standard has:
-  * a total of 695176220.500000001 TFT, of which 690276938.650000001 TFT is liquid,
-    4899281.85 TFT is locked and 77220.500000001 TFT is paid out as fees and miner rewards
-  * 99.29525% liquid coins of a total of 695176220.500000001 TFT coins
-  * 00.70475% locked coins of a total of 695176220.500000001 TFT coins
-  * a block height of 77189, with the time of the highest block being 2018-08-08 09:51:15 +0200 CEST (1533714675)
-  * a total of 77190 blocks, 317 value transactions and 356 coin inputs
-  * a total of 78641 coin outputs, of which 77898 are liquid, 743 are locked and 77428 are payouts/fees
-  * a total of 637 unique wallet addresses that have been used
-  * an average of 03.82650% wallet coin outputs per value transaction
-  * an average of 00.00411% value transactions per block
-  * 99.05520% liquid outputs of a total of 78641 coin outputs
-  * 00.94480% locked outputs of a total of 78641 coin outputs
-  * 00.40901% value transactions of a total of 77505 transactions
+  * a total of 695176892 TFT, of which 690324724.35 TFT is liquid,
+    4852167.65 TFT is locked, 77892 TFT is paid out as miner payouts
+    and 31.600000001 TFT is paid out as tx fees
+  * 99.30202% liquid coins of a total of 695176892 TFT coins
+  * 00.69798% locked coins of a total of 695176892 TFT coins
+  * a block height of 77892, with the time of the highest block
+    being 2018-08-09 08:23:19 +0200 CEST (1533795799)
+  * a total of 77893 blocks, 318 value transactions and 357 coin inputs
+  * a total of 79368 coin outputs, of which 78626 are liquid, 742 are locked,
+    1236 transfer value, 77892 are miner payouts and 240 are tx fees
+  * a total of 638 unique addresses that have been used
+  * an average of 03.88679% value coin outputs per value transaction
+  * an average of 00.00408% value transactions per block
+  * 99.06511% liquid outputs of a total of 79368 coin outputs
+  * 00.93489% locked outputs of a total of 79368 coin outputs
+  * 00.40660% value transactions of a total of 78209 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
 $ redis-cli get tfchain:standard:stats
-"{\"timestamp\":1533714154,\"blockHeight\":77185,\"txCount\":77501,\"valueTxCount\":317,\"coinOutputCount\":78637,\"lockedCoinOutputCount\":743,\"coinInputCount\":356,\"minerPayoutCount\":77424,\"minerPayouts\":\"77216500000001\",\"coins\":\"695176216500000001\",\"lockedCoins\":\"4899281850000000\"}"
+"{\"timestamp\":1533795799,\"blockHeight\":77892,\"txCount\":78209,\"valueTxCount\":318,\"coinOutputCount\":79368,\"lockedCoinOutputCount\":742,\"coinInputCount\":357,\"minerPayoutCount\":77892,\"txFeeCount\":240,\"minerPayouts\":\"77892000000000\",\"txFees\":\"31600000001\",\"coins\":\"695176892000000000\",\"lockedCoins\":\"4852167650000000\"}"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object.
