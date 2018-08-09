@@ -24,7 +24,7 @@ for os in darwin linux; do
 			-ldflags="-X ${package}.rawVersion=${full_version} -s -w" \
 			-o "${folder}/rexplorer" .
 	# add other artifacts
-	cp -r LICENSE README.md "$folder"
+	cp -r release_notes LICENSE README.md "$folder"
 	# zip
 	(
 		zip -rq "release/rexplorer-${version}-${os}-amd64.zip" \
