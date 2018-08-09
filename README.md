@@ -336,6 +336,32 @@ total: 108080 TFT
 ...
 ```
 
+## Testing
+
+### Unit Tests
+
+This project has no unit tests yet, and is mostly tested using manual testing
+as well as by using [automated integration tests](#integration-tests).
+
+### Integration Tests
+
+The integration tests have the following conditions:
+
++ (1) You have the [tfchain][tfchain] network standard synced —using `rexplorer`— to the desired height (be it the network height or not);
++ (2) You have the [tfchain][tfchain] network testnet synced —using `rexplorer`— to the desired height (be it the network height or not);
++ (3) You have no `rexplorer` running when running the integration tests;
++ (4) You still have the Redis server(s) running in the background which contain the aggregated data by the `rexplorer` as mentioned in (1) and (2);
+
+If you meet all conditions listed above you can run the integration tests as follows:
+
+```
+$ make integration-tests
+go run tests/integration/sumcoins/main.go --network testnet --db-address ":6379" --db-slot "1"
+sumcoins test on tfchain network testnet ——block height 88101—— passed :)
+go run tests/integration/sumcoins/main.go --network standard --db-address ":6379" --db-slot "0"
+sumcoins test on tfchain network standard ——block height 77892—— passed :)
+```
+
 [tfchain]: https://github.com/threefoldfoundation/tfchain
 [rivine]: https://github.com/rivine/rivine
 [redistypes]: https://redis.io/topics/data-types
