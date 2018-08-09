@@ -1,0 +1,97 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+
+	"github.com/rivine/rivine/types"
+
+	"github.com/gomodule/redigo/redis"
+)
+
+func main() {
+	flag.Parse()
+
+	conn, err := redis.Dial("tcp", dbAddress, redis.DialDatabase(dbSlot))
+	if err != nil {
+		panic(err)
+	}
+
+	var keyPrefix string
+	switch networkName {
+	case "standard", "testnet":
+		keyPrefix = fmt.Sprintf("tfchain:%s:", networkName)
+	default:
+		panic("invalid network name: " + networkName)
+	}
+
+	// get stats, so we know what are the to be expected total coins and total locked coins
+	b, err := redis.Bytes(conn.Do("GET", keyPrefix+"stats"))
+	if err != nil {
+		panic("failed to get network stats: " + err.Error())
+	}
+	var stats struct {
+		Coins        types.Currency `json:"coins"`
+		LockedCoins  types.Currency `json:"lockedCoins"`
+		MinerPayouts types.Currency `json:"minerPayouts"`
+	}
+	err = json.Unmarshal(b, &stats)
+	if err != nil {
+		panic("failed to json-unmarshal network stats: " + err.Error())
+	}
+
+	// get all unique addresses
+	addresses, err := redis.Strings(conn.Do("SMEMBERS", keyPrefix+"addresses"))
+	if err != nil {
+		panic("failed to get all unique addresses: " + err.Error())
+	}
+
+	// compute total unlocked and locked coins for all addresses
+	var unlockedCoins, lockedCoins types.Currency
+	for _, addr := range addresses {
+		var balance struct {
+			Locked   types.Currency `json:"locked"`
+			Unlocked types.Currency `json:"unlocked"`
+		}
+		b, err := redis.Bytes(conn.Do("GET", keyPrefix+"address:"+addr+":balance"))
+		if err != nil {
+			if err != redis.ErrNil {
+				panic("failed to get balance " + err.Error())
+			}
+			b = []byte("{}")
+		}
+		err = json.Unmarshal(b, &balance)
+		if err != nil {
+			panic("failed to json-unmarshal network stats: " + err.Error())
+		}
+		unlockedCoins = unlockedCoins.Add(balance.Unlocked)
+		lockedCoins = lockedCoins.Add(balance.Locked)
+	}
+	totalCoins := unlockedCoins.Add(lockedCoins)
+
+	// ensure our total coin count is as expected
+	if !lockedCoins.Equals(stats.LockedCoins) {
+		panic(fmt.Sprintf("unexpected locked coins: %s != %s",
+			lockedCoins.String(), stats.LockedCoins.String()))
+	}
+	if !totalCoins.Equals(stats.Coins) {
+		fmt.Println(stats.MinerPayouts.String())
+		panic(fmt.Sprintf("unexpected total coins: %s != %s (diff: %s)",
+			totalCoins.String(), stats.Coins.String(), stats.Coins.Sub(totalCoins).String()))
+	}
+
+	fmt.Println("sumcoins test passed :)")
+}
+
+var (
+	dbAddress   string
+	dbSlot      int
+	networkName string
+)
+
+func init() {
+	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
+	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
+	flag.StringVar(&networkName, "network", "standard", "network name, one of {standard,testnet}")
+}

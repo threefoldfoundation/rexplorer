@@ -172,7 +172,10 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.MinerPayoutCount++
 			explorer.stats.CointOutputCount++
 			explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
-			explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
+			if i == 0 {
+				// only the first miner payout is newly created money
+				explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
+			}
 			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
 				Value: mp.Value,
 				Condition: types.NewCondition(
