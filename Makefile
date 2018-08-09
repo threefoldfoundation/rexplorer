@@ -3,11 +3,22 @@ STANDARD_REDIS_DB = 0
 TESTNET_REDIS_ADDR = :6379
 TESTNET_REDIS_DB = 1
 
+version = $(shell git describe | cut -d '-' -f 1)
+commit = $(shell git rev-parse --short HEAD)
+ifeq ($(commit), $(shell git rev-list -n 1 $(version) | cut -c1-7))
+fullversion = $(version)
+else
+fullversion = $(version)-$(commit)
+endif
+
+stdbindir = $(GOPATH)/bin
+ldflagsversion = -X main.rawVersion=$(fullversion)
+
 install-std:
-	go build -o $(GOPATH)/bin/rexplorer .
+	go build -ldflags "$(ldflagsversion) -s -w" -o $(stdbindir)/rexplorer .
 
 install:
-	go build -tags 'debug dev' -o $(GOPATH)/bin/rexplorer .
+	go build -race -tags "debug dev" -ldflags "$(ldflagsversion)" -o $(stdbindir)/rexplorer .
 
 integration-tests: integration-test-sumcoins
 

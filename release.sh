@@ -2,7 +2,6 @@
 set -e
 
 # version is supplied as argument
-package="github.com/threefoldfoundation/rexplorer"
 version="$(git describe | cut -d '-' -f 1)"
 commit="$(git rev-parse --short HEAD)"
 
@@ -21,7 +20,7 @@ for os in darwin linux; do
 	mkdir -p "$folder"
 	# compile binary
 	GOOS=${os} go build -a \
-			-ldflags="-X ${package}.rawVersion=${full_version} -s -w" \
+			-ldflags="-X main.rawVersion=${full_version}" \
 			-o "${folder}/rexplorer" .
 	# add other artifacts
 	cp -r release_notes LICENSE README.md "$folder"

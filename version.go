@@ -2,12 +2,9 @@ package main
 
 import "github.com/rivine/rivine/build"
 
-const (
-	rawVersion = "v0.1.1"
-)
-
 var (
-	version build.ProtocolVersion
+	rawVersion = "v0.1.1"
+	version    build.ProtocolVersion
 )
 
 func init() {

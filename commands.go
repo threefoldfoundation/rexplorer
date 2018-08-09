@@ -116,7 +116,7 @@ func (cmd *Commands) perDir(module string) string {
 }
 
 func (cmd *Commands) Version(_ *cobra.Command, args []string) {
-	fmt.Printf("Tool version            v%s\n", version)
+	fmt.Printf("Tool version            v%s\n", version.String())
 	fmt.Printf("TFChain Daemon version  v%s\n", cmd.BlockchainInfo.ChainVersion.String())
 	fmt.Printf("Rivine protocol version v%s\n", cmd.BlockchainInfo.ProtocolVersion.String())
 	fmt.Println()
