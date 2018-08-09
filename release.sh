@@ -20,7 +20,7 @@ for os in darwin linux; do
 	mkdir -p "$folder"
 	# compile binary
 	GOOS=${os} go build -a \
-			-ldflags="-X main.rawVersion=${full_version}" \
+			-ldflags="-X main.rawVersion=${full_version} -s -w" \
 			-o "${folder}/rexplorer" .
 	# add other artifacts
 	cp -r release_notes LICENSE README.md "$folder"
