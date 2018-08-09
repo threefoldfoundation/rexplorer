@@ -8,7 +8,7 @@ such that the tfchain network data can be consumed/used in a meaningful way.
 
 ```
 $ go get -u github.com/threefoldfoundation/rexplorer && rexplorer version
-Tool version            v0.1.0
+Tool version            v0.1.1
 TFChain Daemon version  v1.0.7
 Rivine protocol version v1.0.7
 
@@ -25,7 +25,7 @@ you can do so as simple as:
 
 ```
 $ rexplorer
-2018/08/07 23:58:48 starting rexplorer v0.1.0...
+2018/08/07 23:58:48 starting rexplorer v0.1.1...
 2018/08/07 23:58:48 loading rivine gateway module (1/3)...
 2018/08/07 23:58:48 loading rivine consensus module (2/3)...
 2018/08/07 23:58:48 loading internal explorer module (3/3)...
@@ -127,17 +127,19 @@ JSON formats of value types defined by this module:
 
 ```json
 {
-	"timestamp": 1533714154,
-	"blockHeight": 77185,
-	"txCount": 77501,
-	"valueTxCount": 317,
-	"coinOutputCount": 78637,
-	"lockedCoinOutputCount": 743,
-	"coinInputCount": 356,
-	"minerPayoutCount": 77424,
-	"minerPayouts": "77216500000001",
-	"coins": "695176216500000001",
-	"lockedCoins": "4899281850000000"
+	"timestamp": 1533795799,
+	"blockHeight": 77892,
+	"txCount": 78209,
+	"valueTxCount": 318,
+	"coinOutputCount": 79368,
+	"lockedCoinOutputCount": 742,
+	"coinInputCount": 357,
+	"minerPayoutCount": 77892,
+	"txFeeCount": 240,
+	"minerPayouts": "77892000000000",
+	"txFees": "31600000001",
+	"coins": "695176892000000000",
+	"lockedCoins": "4852167650000000"
 }
 ```
 * example of wallet balance (stored under `<chainName>:<networkName>:address:<unlockHashHex>:balance`):
