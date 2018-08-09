@@ -32,8 +32,9 @@ func main() {
 		panic("failed to get network stats: " + err.Error())
 	}
 	var stats struct {
-		Coins       types.Currency `json:"coins"`
-		LockedCoins types.Currency `json:"lockedCoins"`
+		BlockHeight types.BlockHeight `json:"blockHeight"`
+		Coins       types.Currency    `json:"coins"`
+		LockedCoins types.Currency    `json:"lockedCoins"`
 	}
 	err = json.Unmarshal(b, &stats)
 	if err != nil {
@@ -95,7 +96,9 @@ func main() {
 			totalCoins.String(), stats.Coins.String(), diff.String()))
 	}
 
-	fmt.Println("sumcoins test passed :)")
+	fmt.Printf(
+		"sumcoins test on tfchain network %s ——block height %d—— passed :)\n",
+		networkName, stats.BlockHeight)
 }
 
 var (
