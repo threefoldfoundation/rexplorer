@@ -34,7 +34,7 @@ type Commands struct {
 }
 
 func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
-	log.Println("starting rexplorer v" + version + "...")
+	log.Println("starting rexplorer v" + version.String() + "...")
 
 	// create database
 	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.BlockchainInfo)

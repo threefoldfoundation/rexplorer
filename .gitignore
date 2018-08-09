@@ -13,3 +13,6 @@
 
 # Redis
 *.rdb
+
+# Release Dir
+release/
