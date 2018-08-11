@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -30,6 +31,13 @@ type Database interface {
 	RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash) error
+}
+
+// NetworkInfo defines the info of the chain network data is dumped from,
+// used as to prevent name colissions.
+type NetworkInfo struct {
+	ChainName   string `json:"chainName"`
+	NetworkName string `json:"networkName"`
 }
 
 // StringLoader loads a string and uses it as the (parsed) value.
@@ -316,6 +324,11 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 	rdb := RedisDatabase{
 		conn: conn,
 	}
+	// ensure the network info is as expected (or register if this is a fresh db)
+	err = rdb.registerOrValidateNetworkInfo(bcInfo)
+	if err != nil {
+		return nil, err
+	}
 	// create and load scripts
 	err = rdb.createAndLoadScripts()
 	if err != nil {
@@ -437,6 +450,35 @@ redis.call("HSET", "%[1]s", coinOutputID, output)
 return coinOutputID .. output:sub(2)
 `
 )
+
+// registerOrValidateNetworkInfo registeres the network name and chain name if it doesn't exist yet,
+// otherwise it ensures that the returned network info matches the expected network info.
+func (rdb *RedisDatabase) registerOrValidateNetworkInfo(bcInfo types.BlockchainInfo) error {
+	networkInfo := NetworkInfo{
+		ChainName:   bcInfo.Name,
+		NetworkName: bcInfo.NetworkName,
+	}
+	rdb.conn.Send("HSETNX", internalKey, internalFieldNetwork, JSONMarshal(networkInfo))
+	rdb.conn.Send("HGET", internalKey, internalFieldNetwork)
+	replies, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
+	if err != nil {
+		return fmt.Errorf("failed to register/validate network info: %v", err)
+	}
+	if len(replies) != 2 {
+		return errors.New("failed to register/validate network info: unexpected amount of replies received")
+	}
+	var receivedNetworkInfo NetworkInfo
+	err = RedisJSONValue(&receivedNetworkInfo)(replies[1], err)
+	if err != nil {
+		return fmt.Errorf("failed to validate network info: %v", err)
+	}
+	if receivedNetworkInfo != networkInfo {
+		return fmt.Errorf("cannot store data for chain %s/%s: db has already data for chain %s/%s stored",
+			networkInfo.ChainName, networkInfo.NetworkName,
+			receivedNetworkInfo.ChainName, receivedNetworkInfo.NetworkName)
+	}
+	return nil
+}
 
 // GetExplorerState implements Database.GetExplorerState
 func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
