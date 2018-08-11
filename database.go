@@ -31,6 +31,8 @@ type Database interface {
 	RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash) error
+
+	Close() error
 }
 
 // NetworkInfo defines the info of the chain network data is dumped from,
@@ -335,6 +337,17 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 		return nil, fmt.Errorf("failed to create/load a lua script: %v", err)
 	}
 	return &rdb, nil
+}
+
+// Close implements Database.Close
+//
+// closes the internal redis db client connection
+func (rdb *RedisDatabase) Close() error {
+	err := rdb.conn.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close redis db client connection: %v", err)
+	}
+	return nil
 }
 
 // internal logic to create and load scripts usd for advanced lua-script-driven logic

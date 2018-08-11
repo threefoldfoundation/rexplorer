@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/types"
@@ -53,6 +54,8 @@ type Explorer struct {
 
 	bcInfo   types.BlockchainInfo
 	chainCts types.ChainConstants
+
+	mut sync.Mutex
 }
 
 // NewExplorer creates a new custom intenral explorer module.
@@ -83,13 +86,18 @@ func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo types.BlockchainIn
 
 // Close the Explorer module.
 func (explorer *Explorer) Close() error {
+	explorer.mut.Lock()
+	defer explorer.mut.Unlock()
 	explorer.cs.Unsubscribe(explorer)
-	return nil
+	return explorer.db.Close()
 }
 
 // ProcessConsensusChange implements modules.ConsensusSetSubscriber,
 // used to apply/revert blocks to/from our Redis-stored data.
 func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
+	explorer.mut.Lock()
+	defer explorer.mut.Unlock()
+
 	var err error
 
 	// update reverted blocks
