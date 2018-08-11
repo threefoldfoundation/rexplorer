@@ -439,7 +439,8 @@ type (
 		blockFrequency LockValue
 
 		// cached version of the chain stats
-		networkStats NetworkStats
+		networkBlockHeight types.BlockHeight
+		networkTime        types.Timestamp
 
 		// All Lua scripts used by this redis client implementation, for advanced features.
 		// Loaded when creating the client, and using the script's SHA1 (EVALSHA) afterwards.
@@ -744,12 +745,13 @@ func (rdb *RedisDatabase) GetNetworkStats() (NetworkStats, error) {
 	var stats NetworkStats
 	switch err := RedisJSONValue(&stats)(rdb.conn.Do("GET", statsKey)); err {
 	case nil:
-		rdb.networkStats = stats
+		rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
 		return stats, nil
 	case redis.ErrNil:
 		// default to fresh network stats if not stored yet
-		rdb.networkStats = NewNetworkStats()
-		return rdb.networkStats, nil
+		stats = NewNetworkStats()
+		rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
+		return stats, nil
 	default:
 		return NetworkStats{}, err
 	}
@@ -761,7 +763,7 @@ func (rdb *RedisDatabase) SetNetworkStats(stats NetworkStats) error {
 	if err != nil {
 		return err
 	}
-	rdb.networkStats = stats
+	rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
 	return nil
 }
 
@@ -993,6 +995,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 
 // ApplyCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
+	rdb.networkTime, rdb.networkBlockHeight = time, height
 	rdb.unlockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
 	rdb.unlockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
@@ -1040,6 +1043,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 
 // RevertCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
+	rdb.networkTime, rdb.networkBlockHeight = time, height
 	rdb.lockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
 	rdb.lockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
@@ -1139,7 +1143,7 @@ func (rdb *RedisDatabase) lockValueAsLockTime(lt LockType, value LockValue) Lock
 	case LockTypeTime:
 		return value
 	case LockTypeHeight:
-		return LockValue(rdb.networkStats.Timestamp) + (value-LockValue(rdb.networkStats.BlockHeight))*rdb.blockFrequency
+		return LockValue(rdb.networkTime) + (value-LockValue(rdb.networkBlockHeight))*rdb.blockFrequency
 	default:
 		panic(fmt.Sprintf("invalid lock type %d", lt))
 	}
