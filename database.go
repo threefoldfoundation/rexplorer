@@ -213,14 +213,6 @@ type (
 		lockByTimeScript, unlockByTimeScript           *redis.Script
 		lockByHeightScript, unlockByHeightScript       *redis.Script
 		spendCoinOutputScript, unspendCoinOutputScript *redis.Script
-
-		// Most of the keys used by this Redis database.
-		stateKey, statsKey          string
-		addressKeyPrefix            string
-		addressesKey                string
-		coinOutputsKey              string
-		lockedByHeightOutputsKey    string
-		lockedByTimestampOutputsKey string
 	}
 )
 
@@ -292,9 +284,23 @@ func (cor *CoinOutputResult) LoadString(str string) error {
 }
 
 const (
+	internalKey          = "internal"
+	internalFieldState   = "state"
+	internalFieldNetwork = "network"
+
+	statsKey = "stats"
+
+	addressKeyPrefix                  = "address:"
 	addressKeySuffixBalance           = "balance"
 	addressKeySuffixLockedOutputs     = "outputs.locked"
 	addressKeySuffixMultiSigAddresses = "multisig.addresses"
+
+	addressesKey = "addresses"
+
+	coinOutputsKey = "cos"
+
+	lockedByHeightOutputsKey    = "lcos.height"
+	lockedByTimestampOutputsKey = "lcos.time"
 )
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
@@ -308,14 +314,7 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 	}
 	// compute all keys and return the RedisDatabase instance
 	rdb := RedisDatabase{
-		conn:                        conn,
-		stateKey:                    "state",
-		statsKey:                    "stats",
-		addressKeyPrefix:            "address:",
-		addressesKey:                "addresses",
-		coinOutputsKey:              "cos",
-		lockedByHeightOutputsKey:    "lcos.height",
-		lockedByTimestampOutputsKey: "lcos.time",
+		conn: conn,
 	}
 	// create and load scripts
 	err = rdb.createAndLoadScripts()
@@ -327,46 +326,46 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 
 // internal logic to create and load scripts usd for advanced lua-script-driven logic
 func (rdb *RedisDatabase) createAndLoadScripts() (err error) {
-	rdb.coinOutputDropScript, err = rdb.createAndLoadScript(hashDropScriptSource, rdb.coinOutputsKey)
+	rdb.coinOutputDropScript, err = rdb.createAndLoadScript(hashDropScriptSource, coinOutputsKey)
 	if err != nil {
 		return
 	}
 
 	rdb.unlockByTimeScript, err = rdb.createAndLoadScript(
 		updateTimeLocksScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String(), ">=")
+		coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String(), ">=")
 	if err != nil {
 		return
 	}
 	rdb.lockByTimeScript, err = rdb.createAndLoadScript(
 		updateTimeLocksScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String(), "<")
+		coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String(), "<")
 	if err != nil {
 		return
 	}
 
 	rdb.unlockByHeightScript, err = rdb.createAndLoadScript(
 		updateHeightLocksScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String())
+		coinOutputsKey, CoinOutputStateLocked.String(), CoinOutputStateLiquid.String())
 	if err != nil {
 		return
 	}
 	rdb.lockByHeightScript, err = rdb.createAndLoadScript(
 		updateHeightLocksScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String())
+		coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateLocked.String())
 	if err != nil {
 		return
 	}
 
 	rdb.spendCoinOutputScript, err = rdb.createAndLoadScript(
 		updateCoinOutputScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateSpent.String())
+		coinOutputsKey, CoinOutputStateLiquid.String(), CoinOutputStateSpent.String())
 	if err != nil {
 		return
 	}
 	rdb.unspendCoinOutputScript, err = rdb.createAndLoadScript(
 		updateCoinOutputScriptSource,
-		rdb.coinOutputsKey, CoinOutputStateSpent.String(), CoinOutputStateLiquid.String())
+		coinOutputsKey, CoinOutputStateSpent.String(), CoinOutputStateLiquid.String())
 	if err != nil {
 		return
 	}
@@ -442,7 +441,7 @@ return coinOutputID .. output:sub(2)
 // GetExplorerState implements Database.GetExplorerState
 func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
 	var state ExplorerState
-	switch err := RedisJSONValue(&state)(rdb.conn.Do("GET", rdb.stateKey)); err {
+	switch err := RedisJSONValue(&state)(rdb.conn.Do("HGET", internalKey, internalFieldState)); err {
 	case nil:
 		return state, nil
 	case redis.ErrNil:
@@ -455,13 +454,13 @@ func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
 
 // SetExplorerState implements Database.SetExplorerState
 func (rdb *RedisDatabase) SetExplorerState(state ExplorerState) error {
-	return RedisError(rdb.conn.Do("SET", rdb.stateKey, JSONMarshal(state)))
+	return RedisError(rdb.conn.Do("HSET", internalKey, internalFieldState, JSONMarshal(state)))
 }
 
 // GetNetworkStats implements Database.GetNetworkStats
 func (rdb *RedisDatabase) GetNetworkStats() (NetworkStats, error) {
 	var stats NetworkStats
-	switch err := RedisJSONValue(&stats)(rdb.conn.Do("GET", rdb.statsKey)); err {
+	switch err := RedisJSONValue(&stats)(rdb.conn.Do("GET", statsKey)); err {
 	case nil:
 		return stats, nil
 	case redis.ErrNil:
@@ -474,14 +473,14 @@ func (rdb *RedisDatabase) GetNetworkStats() (NetworkStats, error) {
 
 // SetNetworkStats implements Database.SetNetworkStats
 func (rdb *RedisDatabase) SetNetworkStats(stats NetworkStats) error {
-	return RedisError(rdb.conn.Do("SET", rdb.statsKey, JSONMarshal(stats)))
+	return RedisError(rdb.conn.Do("SET", statsKey, JSONMarshal(stats)))
 }
 
 // AddCoinOutput implements Database.AddCoinOutput
 func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co types.CoinOutput) error {
 	uh := co.Condition.UnlockHash()
 
-	balanceKey := rdb.getAddressKey(uh, addressKeySuffixBalance)
+	balanceKey := getAddressKey(uh, addressKeySuffixBalance)
 	// get initial values
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
@@ -494,9 +493,9 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co types.CoinOutp
 
 	// set all values pipelined
 	// store address, an address never gets deleted
-	rdb.conn.Send("SADD", rdb.addressesKey, uh.String())
+	rdb.conn.Send("SADD", addressesKey, uh.String())
 	// store output
-	rdb.conn.Send("HSET", rdb.coinOutputsKey, id.String(), CoinOutput{
+	rdb.conn.Send("HSET", coinOutputsKey, id.String(), CoinOutput{
 		UnlockHash: uh,
 		CoinValue:  co.Value,
 		State:      CoinOutputStateLiquid,
@@ -516,7 +515,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co types.CoinOutp
 func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.CoinOutput, lt LockType, lockValue LockValue) error {
 	uh := co.Condition.UnlockHash()
 
-	balanceKey := rdb.getAddressKey(uh, addressKeySuffixBalance)
+	balanceKey := getAddressKey(uh, addressKeySuffixBalance)
 	// get initial values
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
@@ -530,21 +529,21 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co types.Co
 	// set all values pipeline
 
 	// store address, an address never gets deleted
-	rdb.conn.Send("SADD", rdb.addressesKey, uh.String())
+	rdb.conn.Send("SADD", addressesKey, uh.String())
 	// store coinoutput in list of locked coins for wallet
-	rdb.conn.Send("HSET", rdb.getAddressKey(uh, addressKeySuffixLockedOutputs), id.String(), JSONMarshal(co))
+	rdb.conn.Send("HSET", getAddressKey(uh, addressKeySuffixLockedOutputs), id.String(), JSONMarshal(co))
 	// keep track of locked output
 	switch lt {
 	case LockTypeHeight:
-		rdb.conn.Send("RPUSH", rdb.getLockHeightBucketKey(lockValue), id.String())
+		rdb.conn.Send("RPUSH", getLockHeightBucketKey(lockValue), id.String())
 	case LockTypeTime:
-		rdb.conn.Send("RPUSH", rdb.getLockTimeBucketKey(lockValue), CoinOutputLock{
+		rdb.conn.Send("RPUSH", getLockTimeBucketKey(lockValue), CoinOutputLock{
 			CoinOutputID: id,
 			LockValue:    lockValue,
 		}.String())
 	}
 	// store output
-	rdb.conn.Send("HSET", rdb.coinOutputsKey, id.String(), CoinOutput{
+	rdb.conn.Send("HSET", coinOutputsKey, id.String(), CoinOutput{
 		UnlockHash: uh,
 		CoinValue:  co.Value,
 		State:      CoinOutputStateLocked,
@@ -567,11 +566,11 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to spend coin output: cannot update coin output %s in %s: %v",
-			id.String(), rdb.coinOutputsKey, err)
+			id.String(), coinOutputsKey, err)
 	}
 
 	// get balance, so it can be updated
-	balanceKey := rdb.getAddressKey(result.UnlockHash, addressKeySuffixBalance)
+	balanceKey := getAddressKey(result.UnlockHash, addressKeySuffixBalance)
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
 		return fmt.Errorf(
@@ -597,11 +596,11 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to revert coin input: cannot update coin output %s in %s: %v",
-			id.String(), rdb.coinOutputsKey, err)
+			id.String(), coinOutputsKey, err)
 	}
 
 	// get balance, so it can be updated
-	balanceKey := rdb.getAddressKey(result.UnlockHash, addressKeySuffixBalance)
+	balanceKey := getAddressKey(result.UnlockHash, addressKeySuffixBalance)
 	balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 	if err != nil {
 		return fmt.Errorf(
@@ -626,12 +625,12 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 	if err != nil {
 		return CoinOutputStateNil, fmt.Errorf(
 			"redis: failed to revert coin output: cannot drop coin output %s in %s: %v",
-			id.String(), rdb.coinOutputsKey, err)
+			id.String(), coinOutputsKey, err)
 	}
 	if co.State == CoinOutputStateNil {
 		return CoinOutputStateNil, fmt.Errorf(
 			"redis: failed to revert coin output: nil coin output state %s in %s: %v",
-			id.String(), rdb.coinOutputsKey, err)
+			id.String(), coinOutputsKey, err)
 	}
 
 	var sendCount int
@@ -640,7 +639,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 		sendCount++
 
 		// get balance, so it can be updated
-		balanceKey := rdb.getAddressKey(co.UnlockHash, addressKeySuffixBalance)
+		balanceKey := getAddressKey(co.UnlockHash, addressKeySuffixBalance)
 		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 		if err != nil {
 			return CoinOutputStateNil, fmt.Errorf(
@@ -665,13 +664,13 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 	if co.LockType != LockTypeNone {
 		sendCount += 2
 		// remove locked coin output from the locked coin output list linked to the address
-		rdb.conn.Send("HDEL", rdb.getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
+		rdb.conn.Send("HDEL", getAddressKey(co.UnlockHash, addressKeySuffixLockedOutputs), id.String())
 		// remove locked coin output lock
 		switch co.LockType {
 		case LockTypeHeight:
-			rdb.conn.Send("LREM", rdb.getLockHeightBucketKey(co.LockValue), 1, id.String())
+			rdb.conn.Send("LREM", getLockHeightBucketKey(co.LockValue), 1, id.String())
 		case LockTypeTime:
-			rdb.conn.Send("LREM", rdb.getLockTimeBucketKey(co.LockValue), 1, CoinOutputLock{
+			rdb.conn.Send("LREM", getLockTimeBucketKey(co.LockValue), 1, CoinOutputLock{
 				CoinOutputID: id,
 				LockValue:    co.LockValue,
 			}.String())
@@ -692,8 +691,8 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 
 // ApplyCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
-	rdb.unlockByHeightScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(LockValue(height)))
-	rdb.unlockByTimeScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
+	rdb.unlockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
+	rdb.unlockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to unlock outputs: %v", err)
@@ -709,7 +708,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 	lockedCoinOutputResults := append(lockedByHeightCoinOutputResults, lockedByTimeCoinOutputResults...)
 	for _, lcor := range lockedCoinOutputResults {
 		// get balance of user and update it
-		balanceKey := rdb.getAddressKey(lcor.UnlockHash, addressKeySuffixBalance)
+		balanceKey := getAddressKey(lcor.UnlockHash, addressKeySuffixBalance)
 		// get initial values
 		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 		if err != nil {
@@ -721,7 +720,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 		n++
 		balance.Unlocked = balance.Unlocked.Add(lcor.CoinValue)
 		// update balance and pop unlocked output from address
-		rdb.conn.Send("HDEL", rdb.getAddressKey(lcor.UnlockHash, addressKeySuffixLockedOutputs), lcor.CoinOutputID.String())
+		rdb.conn.Send("HDEL", getAddressKey(lcor.UnlockHash, addressKeySuffixLockedOutputs), lcor.CoinOutputID.String())
 		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 		err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 		if err != nil {
@@ -735,8 +734,8 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 
 // RevertCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
-	rdb.lockByHeightScript.SendHash(rdb.conn, rdb.getLockHeightBucketKey(LockValue(height)))
-	rdb.lockByTimeScript.SendHash(rdb.conn, rdb.getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
+	rdb.lockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
+	rdb.lockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to lock outputs: %v", err)
@@ -752,7 +751,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 	unlockedCoinOutputResults := append(unlockedByHeightCoinOutputResults, unlockedByTimeCoinOutputResults...)
 	for _, ulcor := range unlockedCoinOutputResults {
 		// get balance of user and update it
-		balanceKey := rdb.getAddressKey(ulcor.UnlockHash, addressKeySuffixBalance)
+		balanceKey := getAddressKey(ulcor.UnlockHash, addressKeySuffixBalance)
 		// get initial values
 		balance, err := RedisAddressBalance(rdb.conn.Do("GET", balanceKey))
 		if err != nil {
@@ -764,7 +763,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		n++
 		balance.Unlocked = balance.Unlocked.Sub(ulcor.CoinValue)
 		// update balance and pop unlocked output from address
-		rdb.conn.Send("HDEL", rdb.getAddressKey(ulcor.UnlockHash, addressKeySuffixLockedOutputs), ulcor.CoinOutputID.String())
+		rdb.conn.Send("HDEL", getAddressKey(ulcor.UnlockHash, addressKeySuffixLockedOutputs), ulcor.CoinOutputID.String())
 		rdb.conn.Send("SET", balanceKey, JSONMarshal(balance))
 		err = RedisError(RedisFlushAndReceive(rdb.conn, 2))
 		if err != nil {
@@ -779,7 +778,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 // SetMultisigAddresses implements Database.SetMultisigAddresses
 func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash) error {
 	for _, owner := range owners {
-		rdb.conn.Send("SADD", rdb.getAddressKey(owner, addressKeySuffixMultiSigAddresses), address.String())
+		rdb.conn.Send("SADD", getAddressKey(owner, addressKeySuffixMultiSigAddresses), address.String())
 	}
 	n, err := RedisSumInt64s(RedisFlushAndReceive(rdb.conn, len(owners)))
 	if err != nil {
@@ -800,7 +799,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	}
 	// we'll assume that multisig address doesn't have the wallet created yet, if this happens
 	for _, owner := range owners {
-		rdb.conn.Send("SADD", rdb.getAddressKey(address, addressKeySuffixMultiSigAddresses), owner.String())
+		rdb.conn.Send("SADD", getAddressKey(address, addressKeySuffixMultiSigAddresses), owner.String())
 	}
 	err = RedisError(RedisFlushAndReceive(rdb.conn, len(owners)))
 	if err != nil {
@@ -813,20 +812,20 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 
 // getAddressKey is an internal util function,
 // used to create an address key using the suffix as property and the UnlockHash (uh) as identifier.
-func (rdb *RedisDatabase) getAddressKey(uh types.UnlockHash, suffix string) string {
-	return rdb.addressKeyPrefix + uh.String() + ":" + suffix
+func getAddressKey(uh types.UnlockHash, suffix string) string {
+	return addressKeyPrefix + uh.String() + ":" + suffix
 }
 
 // getLockTimeBucketKey is an internal util function,
 // used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
-func (rdb *RedisDatabase) getLockTimeBucketKey(lockValue LockValue) string {
-	return rdb.lockedByTimestampOutputsKey + ":" + (lockValue - lockValue%7200).String()
+func getLockTimeBucketKey(lockValue LockValue) string {
+	return lockedByTimestampOutputsKey + ":" + (lockValue - lockValue%7200).String()
 }
 
 // getLockHeightBucketKey is an internal util function,
 // used to create the heightlocked bucket keys, grouping all heightlocked outputs with the same lock-height value.
-func (rdb *RedisDatabase) getLockHeightBucketKey(lockValue LockValue) string {
-	return rdb.lockedByHeightOutputsKey + ":" + lockValue.String()
+func getLockHeightBucketKey(lockValue LockValue) string {
+	return lockedByHeightOutputsKey + ":" + lockValue.String()
 }
 
 // JSON Helper Functions
