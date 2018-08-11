@@ -307,16 +307,15 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo) (*Red
 			"failed to dial a Redis connection to tcp://%s@%d: %v", address, db, err)
 	}
 	// compute all keys and return the RedisDatabase instance
-	prefix := fmt.Sprintf("%s:%s:", strings.ToLower(bcInfo.Name), strings.ToLower(bcInfo.NetworkName))
 	rdb := RedisDatabase{
 		conn:                        conn,
-		stateKey:                    prefix + "state",
-		statsKey:                    prefix + "stats",
-		addressKeyPrefix:            prefix + "address:",
-		addressesKey:                prefix + "addresses",
-		coinOutputsKey:              prefix + "cos",
-		lockedByHeightOutputsKey:    prefix + "lcos.height",
-		lockedByTimestampOutputsKey: prefix + "lcos.time",
+		stateKey:                    "state",
+		statsKey:                    "stats",
+		addressKeyPrefix:            "address:",
+		addressesKey:                "addresses",
+		coinOutputsKey:              "cos",
+		lockedByHeightOutputsKey:    "lcos.height",
+		lockedByTimestampOutputsKey: "lcos.time",
 	}
 	// create and load scripts
 	err = rdb.createAndLoadScripts()

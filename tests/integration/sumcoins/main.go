@@ -17,17 +17,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	var keyPrefix string
-	switch networkName {
-	case "standard", "testnet":
-		keyPrefix = fmt.Sprintf("tfchain:%s:", networkName)
-	default:
-		panic("invalid network name: " + networkName)
-	}
-
 	// get stats, so we know what are the to be expected total coins and total locked coins
-	b, err := redis.Bytes(conn.Do("GET", keyPrefix+"stats"))
+	b, err := redis.Bytes(conn.Do("GET", "stats"))
 	if err != nil {
 		panic("failed to get network stats: " + err.Error())
 	}
@@ -42,7 +33,7 @@ func main() {
 	}
 
 	// get all unique addresses
-	addresses, err := redis.Strings(conn.Do("SMEMBERS", keyPrefix+"addresses"))
+	addresses, err := redis.Strings(conn.Do("SMEMBERS", "addresses"))
 	if err != nil {
 		panic("failed to get all unique addresses: " + err.Error())
 	}
@@ -54,7 +45,7 @@ func main() {
 			Locked   types.Currency `json:"locked"`
 			Unlocked types.Currency `json:"unlocked"`
 		}
-		b, err := redis.Bytes(conn.Do("GET", keyPrefix+"address:"+addr+":balance"))
+		b, err := redis.Bytes(conn.Do("GET", "address:"+addr+":balance"))
 		if err != nil {
 			if err != redis.ErrNil {
 				panic("failed to get balance " + err.Error())
@@ -97,18 +88,15 @@ func main() {
 	}
 
 	fmt.Printf(
-		"sumcoins test on tfchain network %s ——block height %d—— passed :)\n",
-		networkName, stats.BlockHeight)
+		"sumcoins test on block height %d passed :)\n", stats.BlockHeight)
 }
 
 var (
-	dbAddress   string
-	dbSlot      int
-	networkName string
+	dbAddress string
+	dbSlot    int
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
-	flag.StringVar(&networkName, "network", "standard", "network name, one of {standard,testnet}")
 }

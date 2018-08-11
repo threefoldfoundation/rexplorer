@@ -21,17 +21,10 @@ func main() {
 		panic(err)
 	}
 
-	var (
-		statsKey     string
-		addressesKey string
+	const (
+		statsKey     = "stats"
+		addressesKey = "addresses"
 	)
-	switch networkName {
-	case "standard", "testnet":
-		statsKey = fmt.Sprintf("tfchain:%s:stats", networkName)
-		addressesKey = fmt.Sprintf("tfchain:%s:addresses", networkName)
-	default:
-		panic("invalid network name: " + networkName)
-	}
 
 	b, err := redis.Bytes(conn.Do("GET", statsKey))
 	if err != nil {
@@ -65,7 +58,7 @@ func main() {
 	cfg := config.GetBlockchainInfo()
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
 
-	fmt.Printf("tfchain/%s has:\n", networkName)
+	fmt.Println("tfchain network has:")
 	liquidCoins := stats.Coins.Sub(stats.LockedCoins)
 	fmt.Printf("  * a total of %s, of which %s is liquid,\n    %s is locked, %s is paid out as miner payouts\n    and %s is paid out as tx fees\n",
 		cc.ToCoinStringWithUnit(stats.Coins), cc.ToCoinStringWithUnit(liquidCoins),
@@ -112,13 +105,11 @@ func main() {
 }
 
 var (
-	dbAddress   string
-	dbSlot      int
-	networkName string
+	dbAddress string
+	dbSlot    int
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
-	flag.StringVar(&networkName, "network", "standard", "network name, one of {standard,testnet}")
 }

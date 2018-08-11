@@ -23,5 +23,5 @@ install:
 integration-tests: integration-test-sumcoins
 
 integration-test-sumcoins:
-	go run tests/integration/sumcoins/main.go --network testnet --db-address "$(TESTNET_REDIS_ADDR)" --db-slot "$(TESTNET_REDIS_DB)"
-	go run tests/integration/sumcoins/main.go --network standard --db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)"
+	go run tests/integration/sumcoins/main.go --db-address "$(TESTNET_REDIS_ADDR)" --db-slot "$(TESTNET_REDIS_DB)"
+	go run tests/integration/sumcoins/main.go --db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)"

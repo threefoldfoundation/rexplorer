@@ -29,13 +29,7 @@ func main() {
 		panic(err)
 	}
 
-	var multiSigAddressesKey string
-	switch networkName {
-	case "standard", "testnet":
-		multiSigAddressesKey = fmt.Sprintf("tfchain:%s:address:%s:multisig.addresses", networkName, uh.String())
-	default:
-		panic("invalid network name: " + networkName)
-	}
+	multiSigAddressesKey := fmt.Sprintf("address:%s:multisig.addresses", uh.String())
 
 	// get all addresses
 	ss, err := redis.Strings(conn.Do("SMEMBERS", multiSigAddressesKey))
@@ -62,13 +56,11 @@ func main() {
 }
 
 var (
-	dbAddress   string
-	dbSlot      int
-	networkName string
+	dbAddress string
+	dbSlot    int
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
-	flag.StringVar(&networkName, "network", "standard", "network name, one of {standard,testnet}")
 }

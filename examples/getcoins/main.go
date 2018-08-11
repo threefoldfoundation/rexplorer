@@ -32,13 +32,7 @@ func main() {
 		panic(err)
 	}
 
-	var balanceKey string
-	switch networkName {
-	case "standard", "testnet":
-		balanceKey = fmt.Sprintf("tfchain:%s:address:%s:balance", networkName, uh.String())
-	default:
-		panic("invalid network name: " + networkName)
-	}
+	balanceKey := fmt.Sprintf("address:%s:balance", uh.String())
 
 	var balance struct {
 		Locked   types.Currency `json:"locked"`
@@ -66,13 +60,11 @@ func main() {
 }
 
 var (
-	dbAddress   string
-	dbSlot      int
-	networkName string
+	dbAddress string
+	dbSlot    int
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
-	flag.StringVar(&networkName, "network", "standard", "network name, one of {standard,testnet}")
 }

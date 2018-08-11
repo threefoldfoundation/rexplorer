@@ -71,45 +71,45 @@ There are two types of keys:
 
 Following _internal_ keys are reserved:
 
-* `<chainName>:<networkName>:state`:
+* `state`:
     * used for internal state of this explorer, in JSON format
     * format value: JSON
-    * example key: `tfchain:standard:state`
-* `<chainName>:<networkName>:cos`:
+    * example key: `state`
+* `cos`:
     * all coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
     * format value: custom
-    * example key: `tfchain:testnet:cos`
-* `<chainName>:<networkName>:lcos.height:<height>`:
+    * example key: `cos`
+* `lcos.height:<height>`:
     * all locked coin outputs on a given height
     * format value: custom
-    * example key: `tfchain:standard:lcos.height:42`
-* `<chainName>:<networkName>:lcos.time:<timestamp-(timestamp%7200)>`:
+    * example key: `lcos.height:42`
+* `lcos.time:<timestamp-(timestamp%7200)>`:
     * all locked coin outputs for a given timestmap range
     * format value: custom
-    * example key: `tfchain:standard:lcos.time:1526335200`
+    * example key: `lcos.time:1526335200`
 
 Following _public_ keys are reserved:
 
-* `<chainName>:<networkName>:stats`:
+* `stats`:
     * used for global network statistics
     * format value: JSON
-    * example key: `tfchain:standard:stats`
-* `<chainName>:<networkName>:addresses`:
+    * example key: `stats`
+* `addresses`:
     * set of unique wallet addresses used (even if reverted) in the network
     * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
-    * example key: `tfchain:standard:addresses`
-* `<chainName>:<networkName>:address:<unlockHashHex>:balance`:
+    * example key: `addresses`
+* `address:<unlockHashHex>:balance`:
     * used by all wallet addresses, contains both locked and unlocked (coin) balance
     * format value: JSON
-    * example key: `tfchain:testnet:address:0178f4ea48f511d1a59f90bd44f237c7b2e7016557ce74eb688419f53764a91543b4466b2ff481:balance`
-* `<chainName>:<networkName>:address:<unlockHashHex>:outputs.locked`:
+    * example key: `address:0178f4ea48f511d1a59f90bd44f237c7b2e7016557ce74eb688419f53764a91543b4466b2ff481:balance`
+* `address:<unlockHashHex>:outputs.locked`:
     * used to store locked (by time or blockHeight) outputs destined for an address
     * format value: [Redis HASHMAP][redistypes], where each key is hex-encoded CoinOutputID and the value being the [Rivine][rivine]-defined JSON-encoded CoinOutput
-    * example key: `tfchain:standard:address:0104089348845d5465887affb55f2133b8cdee789ddfd1b0c2f3400f2a41d1a547ecc41f029c50:outputs.locked`
-* `<chainName>:<networkName>:address:<unlockHashHex>:multisig.addresses`:
+    * example key: `address:0104089348845d5465887affb55f2133b8cdee789ddfd1b0c2f3400f2a41d1a547ecc41f029c50:outputs.locked`
+* `address:<unlockHashHex>:multisig.addresses`:
     * used in both directions for multisig (wallet) addresses (see [the Get MultiSig Addresses example](#get-multisig-addresses) for more information)
     * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
-    * example key: `tfchain:testnet:address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses`
+    * example key: `address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses`
 
 Rivine Value Encodings:
 
@@ -123,7 +123,7 @@ Rivine Value Encodings:
 
 JSON formats of value types defined by this module:
 
-* example of global stats (stored under `<chainName>:<networkName>:stats`):
+* example of global stats (stored under `stats`):
 
 ```json
 {
@@ -142,7 +142,7 @@ JSON formats of value types defined by this module:
 	"lockedCoins": "4852167650000000"
 }
 ```
-* example of wallet balance (stored under `<chainName>:<networkName>:address:<unlockHashHex>:balance`):
+* example of wallet balance (stored under `address:<unlockHashHex>:balance`):
 
 ```json
 {
@@ -172,7 +172,7 @@ total: 24791.36 TFT
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli get tfchain:standard:address:0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8:balance
+$ redis-cli get address:0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8:balance
 "{\"locked\":\"24691360000000\",\"unlocked\":\"100000000000\"}"
 ```
 
@@ -185,7 +185,7 @@ Get all the unique addresses used within a network.
 Even if an address is only used in a reverted block, it is still tracked and kept:
 
 ```
-$ redis-cli smembers tfchain:standard:addresses
+$ redis-cli smembers addresses
 1) 01fea3ae2854f6e497c92a1cdd603a0bc92ada717200e74f64731e86a923479883519804b18d9d
 2) 01fef1037d0e51042838e4265a1af4f753b8f69de5a7be85a5f3a3c6bd1fbcb8f20986b4aae3a5
 3) 0148d275cffe21a79a865d78529682e347d56615e0033ff114731014349b970c033acae5fbf3a3
@@ -206,7 +206,7 @@ you'll be able to get the balance of each of the wallets in existence of a netwo
 Following this example we can see how to get the amount of unique addresses used in a network:
 
 ```
-$ redis-cli scard tfchain:standard:addresses
+$ redis-cli scard addresses
 (integer) 635
 ```
 
@@ -239,7 +239,7 @@ tfchain/standard has:
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli get tfchain:standard:stats
+$ redis-cli get stats
 "{\"timestamp\":1533795799,\"blockHeight\":77892,\"txCount\":78209,\"valueTxCount\":318,\"coinOutputCount\":79368,\"lockedCoinOutputCount\":742,\"coinInputCount\":357,\"minerPayoutCount\":77892,\"txFeeCount\":240,\"minerPayouts\":\"77892000000000\",\"txFees\":\"31600000001\",\"coins\":\"695176892000000000\",\"lockedCoins\":\"4852167650000000\"}"
 ```
 
@@ -253,21 +253,21 @@ There is a Go example that you can checkout at [/examples/getmultisigaddresses/m
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getmultisigaddresses/main.go -network=testnet 01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
+$ go run ./examples/getmultisigaddresses/main.go --db-slot 101b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
 * 0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli smembers tfchain:testnet:address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses
+$ redis-cli smembers address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses
 1) "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"
 ```
 
 This example also works in the opposite direction, where the multisig address will return all owner addresses:
 
 ```
-$ redis-cli smembers tfchain:testnet:address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses
+$ redis-cli smembers address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses
 1) "01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa"
 2) "0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af"
 ```
@@ -277,7 +277,7 @@ $ redis-cli smembers tfchain:testnet:address:0359aaaa311a10efd7762953418b828bfe2
 Should we want to know who is the richest owner of a MultiSig wallet, we can do so by combinding some of the dumped data:
 
 ```
-$ redis-cli smembers tfchain:testnet:address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses | xargs -I % sh -c 'echo %; redis-cli get tfchain:testnet:address:%:balance'
+$ redis-cli smembers address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses | xargs -I % sh -c 'echo %; redis-cli get address:%:balance'
 01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
 (nil)
 0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af
@@ -292,8 +292,8 @@ Combining our knowledge gained from the previous examples, we can combine some c
 in order to get to know the balance of all non-nil wallets with value in the network.
 
 ```
-$ redis-cli smembers tfchain:standard:addresses | \
-    xargs -I % sh -c 'echo "%:"; redis-cli get tfchain:standard:address:%:balance; echo'
+$ redis-cli smembers addresses | \
+    xargs -I % sh -c 'echo "%:"; redis-cli get address:%:balance; echo'
 ...
 01f0b3971659d945d9412262ab8b3ce105540a36b12b3c5ba75ae881115638b4283fd645ef9b06:
 "{\"locked\":\"0\",\"unlocked\":\"142670600000000\"}"
@@ -315,7 +315,7 @@ $ redis-cli smembers tfchain:standard:addresses | \
 Or we can use a previous Go exmaple to make our output a bit nicer:
 
 ```
-$ redis-cli smembers tfchain:standard:addresses | \
+$ redis-cli smembers addresses | \
     xargs -I % sh -c 'echo "%:"; go run ./examples/getcoins/main.go %; echo'
 ...
 01bb7338ff7732935e0a1bd277f49f3addd98104fef6d319bea301299397032236b38a19e0230b:
@@ -358,9 +358,9 @@ If you meet all conditions listed above you can run the integration tests as fol
 
 ```
 $ make integration-tests
-go run tests/integration/sumcoins/main.go --network testnet --db-address ":6379" --db-slot "1"
+go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "1"
 sumcoins test on tfchain network testnet ——block height 88101—— passed :)
-go run tests/integration/sumcoins/main.go --network standard --db-address ":6379" --db-slot "0"
+go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "0"
 sumcoins test on tfchain network standard ——block height 77892—— passed :)
 ```
 
