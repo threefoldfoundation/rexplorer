@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -29,30 +30,32 @@ func main() {
 		panic(err)
 	}
 
-	multiSigAddressesKey := fmt.Sprintf("address:%s:multisig.addresses", uh.String())
-
-	// get all addresses
-	ss, err := redis.Strings(conn.Do("SMEMBERS", multiSigAddressesKey))
+	addressKey, addressField := getAddressKeyAndField(uh)
+	var wallet struct {
+		MultiSignAddresses []types.UnlockHash `json:"multisignAddresses,omitempty"`
+	}
+	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		if err != redis.ErrNil {
-			panic("failed to get multisig addresses " + err.Error())
+			panic("failed to get wallet " + err.Error())
 		}
-		fmt.Println("no multisig addresses found")
-		return
+		b = []byte("{}")
+	}
+	err = json.Unmarshal(b, &wallet)
+	if err != nil {
+		panic("failed to json-unmarshal wallet: " + err.Error())
 	}
 
-	// parse all unlock hashes first, so we can panic prior to printing, should an unlock hash be invalid
-	uhs := make([]types.UnlockHash, len(ss))
-	for i, s := range ss {
-		err = uhs[i].LoadString(s)
-		if err != nil {
-			panic(fmt.Sprintf("received invalid multisig address %q: %v", s, err))
-		}
-	}
 	// print all unlock hashes
-	for _, uh := range uhs {
+	for _, uh := range wallet.MultiSignAddresses {
 		fmt.Println("* " + uh.String())
 	}
+}
+
+func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
+	str := uh.String()
+	key, field = "a:"+str[:6], str[6:]
+	return
 }
 
 var (

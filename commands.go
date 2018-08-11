@@ -37,7 +37,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	log.Println("starting rexplorer v" + version.String() + "...")
 
 	// create database
-	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.BlockchainInfo)
+	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.BlockchainInfo, cmd.ChainConstants)
 	if err != nil {
 		return fmt.Errorf("failed to create redis db client: %v", err)
 	}

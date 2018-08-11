@@ -41,23 +41,28 @@ func main() {
 	// compute total unlocked and locked coins for all addresses
 	var unlockedCoins, lockedCoins types.Currency
 	for _, addr := range addresses {
-		var balance struct {
-			Locked   types.Currency `json:"locked"`
-			Unlocked types.Currency `json:"unlocked"`
+		var wallet struct {
+			Balance struct {
+				Unlocked types.Currency `json:"unlocked"`
+				Locked   struct {
+					Total types.Currency `json:"total"`
+				} `json:"locked"`
+			} `json:"balance,omitempty"`
 		}
-		b, err := redis.Bytes(conn.Do("GET", "address:"+addr+":balance"))
+		addressKey, addressField := getAddressKeyAndField(addr)
+		b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			if err != redis.ErrNil {
-				panic("failed to get balance " + err.Error())
+				panic("failed to get wallet " + err.Error())
 			}
 			b = []byte("{}")
 		}
-		err = json.Unmarshal(b, &balance)
+		err = json.Unmarshal(b, &wallet)
 		if err != nil {
-			panic("failed to json-unmarshal network stats: " + err.Error())
+			panic("failed to json-unmarshal wallet: " + err.Error())
 		}
-		unlockedCoins = unlockedCoins.Add(balance.Unlocked)
-		lockedCoins = lockedCoins.Add(balance.Locked)
+		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked)
+		lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
 	}
 	totalCoins := unlockedCoins.Add(lockedCoins)
 
@@ -89,6 +94,11 @@ func main() {
 
 	fmt.Printf(
 		"sumcoins test on block height %d passed :)\n", stats.BlockHeight)
+}
+
+func getAddressKeyAndField(addr string) (key, field string) {
+	key, field = "a:"+addr[:6], addr[6:]
+	return
 }
 
 var (

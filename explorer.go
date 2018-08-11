@@ -191,14 +191,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.CointOutputCount++
+			var description types.ByteSlice
 			if i == 0 {
 				// only the first miner payout is newly created money
 				explorer.stats.MinerPayoutCount++
 				explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
+				description = types.ByteSlice("block reward for " + block.ID().String())
 			} else {
 				explorer.stats.TransactionFeeCount++
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(mp.Value)
+				txID := getTransactionIDForMinerPayout(block, uint64(i-1))
+				description = types.ByteSlice("tx fee for tx" + txID.String())
 			}
 			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
 				Value: mp.Value,
@@ -206,7 +210,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					types.NewTimeLockCondition(
 						uint64(explorer.stats.BlockHeight+explorer.chainCts.MaturityDelay),
 						types.NewUnlockHashCondition(mp.UnlockHash))),
-			})
+			}, description)
 			if err != nil {
 				panic(fmt.Sprintf("failed to add miner payout of %s to %s: %v",
 					mp.UnlockHash.String(), mp.Value.String(), err))
@@ -234,7 +238,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount++
 				id := tx.CoinOutputID(uint64(i))
-				locked, err := explorer.addCoinOutput(id, co)
+				locked, err := explorer.addCoinOutput(id, co, types.ByteSlice(tx.ArbitraryData))
 				if err != nil {
 					panic(fmt.Sprintf("failed to add coin output %s from %s: %v",
 						id, co.Condition.UnlockHash().String(), err))
@@ -267,15 +271,28 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 	}
 }
 
+func getTransactionIDForMinerPayout(block types.Block, index uint64) types.TransactionID {
+	var i uint64
+	for _, tx := range block.Transactions {
+		n := uint64(len(tx.MinerFees))
+		if i+n <= index {
+			i += n
+			continue
+		}
+		return tx.ID()
+	}
+	panic(fmt.Sprintf("couldn't find tx id for miner payout in block %s at index %d", block.ID().String(), index))
+}
+
 // addCoinOutput is an internal function used to be able to store a coin output,
 // ensuring we differentiate locked and unlocked coin outputs.
 // On top of that it checks for multisig outputs, as to be able to track multisig addresses,
 // linking them to the owner addresses as well as storing the owner addresses themself for the multisig wallet.
-func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput) (locked bool, err error) {
+func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput, description types.ByteSlice) (locked bool, err error) {
 	// check if it is a multisignature condition, if so, track it
-	if ownerAddresses := getMultisigOwnerAddresses(co.Condition); len(ownerAddresses) > 0 {
+	if ownerAddresses, signaturesRequired := getMultisigProperties(co.Condition); len(ownerAddresses) > 0 {
 		multiSigAddress := co.Condition.UnlockHash()
-		err := explorer.db.SetMultisigAddresses(multiSigAddress, ownerAddresses)
+		err := explorer.db.SetMultisigAddresses(multiSigAddress, ownerAddresses, signaturesRequired)
 		if err != nil {
 			return false, fmt.Errorf(
 				"failed to set multisig addresses for multisig wallet %q: %v",
@@ -289,7 +306,11 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutp
 		BlockTime:   explorer.stats.Timestamp,
 	})
 	if isFulfillable {
-		return false, explorer.db.AddCoinOutput(id, co)
+		return false, explorer.db.AddCoinOutput(id, CoinOutput{
+			Value:       co.Value,
+			Condition:   co.Condition,
+			Description: description,
+		})
 	}
 	// only a TimeLockedCondition can be locked for now
 	tlc := co.Condition.Condition.(*types.TimeLockCondition)
@@ -297,25 +318,34 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutp
 	if tlc.LockTime < types.LockTimeMinTimestampValue {
 		lt = LockTypeHeight
 	}
-	return true, explorer.db.AddLockedCoinOutput(id, co, lt, LockValue(tlc.LockTime))
+	return true, explorer.db.AddLockedCoinOutput(id, CoinOutput{
+		Value:       co.Value,
+		Condition:   co.Condition,
+		Description: description,
+	}, lt, LockValue(tlc.LockTime))
 }
 
 // getMultisigOwnerAddresses gets the owner addresses (= internal addresses of a multisig condition)
 // from either a MultiSignatureCondition or a MultiSignatureCondition used as the internal condition of a TimeLockCondition.
-func getMultisigOwnerAddresses(condition types.UnlockConditionProxy) []types.UnlockHash {
+func getMultisigProperties(condition types.UnlockConditionProxy) (owners []types.UnlockHash, signaturesRequired uint64) {
 	ct := condition.ConditionType()
 	if ct == types.ConditionTypeTimeLock {
 		cg, ok := condition.Condition.(types.MarshalableUnlockConditionGetter)
 		if !ok {
 			panic(fmt.Sprintf("unexpected Go-type for TimeLockCondition: %T", condition))
 		}
-		return getMultisigOwnerAddresses(types.NewCondition(cg.GetMarshalableUnlockCondition()))
+		return getMultisigProperties(types.NewCondition(cg.GetMarshalableUnlockCondition()))
+	}
+
+	type multisigCondition interface {
+		types.UnlockHashSliceGetter
+		GetMinimumSignatureCount() uint64
 	}
 	switch c := condition.Condition.(type) {
-	case types.UnlockHashSliceGetter:
-		return dedupOwnerAddresses(c.UnlockHashSlice())
+	case multisigCondition:
+		return dedupOwnerAddresses(c.UnlockHashSlice()), c.GetMinimumSignatureCount()
 	default:
-		return nil
+		return nil, 0
 	}
 }
 func dedupOwnerAddresses(addresses []types.UnlockHash) (deduped []types.UnlockHash) {

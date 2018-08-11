@@ -32,31 +32,41 @@ func main() {
 		panic(err)
 	}
 
-	balanceKey := fmt.Sprintf("address:%s:balance", uh.String())
+	addressKey, addressField := getAddressKeyAndField(uh)
 
-	var balance struct {
-		Locked   types.Currency `json:"locked"`
-		Unlocked types.Currency `json:"unlocked"`
+	var wallet struct {
+		Balance struct {
+			Unlocked types.Currency `json:"unlocked"`
+			Locked   struct {
+				Total types.Currency `json:"total"`
+			} `json:"locked"`
+		} `json:"balance,omitempty"`
 	}
-	b, err := redis.Bytes(conn.Do("GET", balanceKey))
+	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		if err != redis.ErrNil {
-			panic("failed to get balance " + err.Error())
+			panic("failed to get wallet " + err.Error())
 		}
 		b = []byte("{}")
 	}
-	err = json.Unmarshal(b, &balance)
+	err = json.Unmarshal(b, &wallet)
 	if err != nil {
-		panic("failed to json-unmarshal network stats: " + err.Error())
+		panic("failed to json-unmarshal wallet: " + err.Error())
 	}
 
 	cfg := config.GetBlockchainInfo()
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
-	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(balance.Unlocked))
-	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(balance.Locked))
+	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(wallet.Balance.Unlocked))
+	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(wallet.Balance.Locked.Total))
 	fmt.Println("--------------------")
-	fmt.Println("total: " + cc.ToCoinStringWithUnit(balance.Locked.Add(balance.Unlocked)))
+	fmt.Println("total: " + cc.ToCoinStringWithUnit(
+		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked)))
+}
 
+func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
+	str := uh.String()
+	key, field = "a:"+str[:6], str[6:]
+	return
 }
 
 var (
