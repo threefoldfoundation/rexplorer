@@ -71,14 +71,13 @@ There are two types of keys:
 
 Following _internal_ keys are reserved:
 
-* `state`:
-    * used for internal state of this explorer, in JSON format
-    * format value: JSON
-    * example key: `state`
-* `cos`:
+* `internal`:
+    * used for internal state of this explorer
+    * format value: [Redis HASHMAP][redistypes], where the keys have different types and are not to be touched
+* `c:<4_random_hex_chars>`:
     * all coin outputs, and for each coin output only the info which is required for the inner workings of the `rexplorer`
     * format value: custom
-    * example key: `cos`
+    * example key: `c:6986`
 * `lcos.height:<height>`:
     * all locked coin outputs on a given height
     * format value: custom
@@ -92,24 +91,22 @@ Following _public_ keys are reserved:
 
 * `stats`:
     * used for global network statistics
-    * format value: JSON
+    * format value: JSON/MessagePack
     * example key: `stats`
 * `addresses`:
     * set of unique wallet addresses used (even if reverted) in the network
     * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
     * example key: `addresses`
-* `address:<unlockHashHex>:balance`:
-    * used by all wallet addresses, contains both locked and unlocked (coin) balance
-    * format value: JSON
-    * example key: `address:0178f4ea48f511d1a59f90bd44f237c7b2e7016557ce74eb688419f53764a91543b4466b2ff481:balance`
-* `address:<unlockHashHex>:outputs.locked`:
-    * used to store locked (by time or blockHeight) outputs destined for an address
-    * format value: [Redis HASHMAP][redistypes], where each key is hex-encoded CoinOutputID and the value being the [Rivine][rivine]-defined JSON-encoded CoinOutput
-    * example key: `address:0104089348845d5465887affb55f2133b8cdee789ddfd1b0c2f3400f2a41d1a547ecc41f029c50:outputs.locked`
-* `address:<unlockHashHex>:multisig.addresses`:
-    * used in both directions for multisig (wallet) addresses (see [the Get MultiSig Addresses example](#get-multisig-addresses) for more information)
-    * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
-    * example key: `address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses`
+* `a:01<4_random_hex_chars>`:
+    * used by all wallet addresses, contains unlocked balance, locked balance and coin outputs as well as all multisig wallets jointly owned by this wallet
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
+    * example key: `a:012b61`
+    * fields have the format <72_random_hex_chars>, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
+* `a:03<4_random_hex_chars>`:
+    * used by all multisig wallet addresses, contains unlocked balance, locked balance and coin outputs as well as owner addresses and signatures required
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
+    * example key: `a:032b61`
+    * fields have the format <72_random_hex_chars>, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
 
 Rivine Value Encodings:
 
@@ -142,12 +139,48 @@ JSON formats of value types defined by this module:
 	"lockedCoins": "4852167650000000"
 }
 ```
-* example of wallet balance (stored under `address:<unlockHashHex>:balance`):
+
+* example of a wallet (stored under a:01<4_random_hex_chars>):
 
 ```json
 {
-    "locked": "0",
-    "unlocked": "250000000000"
+    "balance": {
+        "unlocked": "10000000",
+        "locked": {
+            "total": "5000",
+            "outputs": [
+                {
+                    "amount": "2000",
+                    "lockedUntil": 1534105468
+                },
+                {
+                    "amount": "100",
+                    "lockedUntil": 1534105468,
+                    "description": "SGVsbG8=",
+                }
+            ]
+        }
+    },
+    "multisignaddresses": [
+        "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"
+    ]
+}
+```
+
+* example of a multisig wallet (stored under a:03<4_random_hex_chars>):
+
+```json
+{
+    "balance": {
+        "unlocked": "10000000"
+    },
+    "multisign": {
+        "owners": [
+            "01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa",
+            "0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af"
+        ],
+        "signaturesRequired": 1
+    }
 }
 ```
 
@@ -172,8 +205,8 @@ total: 24791.36 TFT
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli get address:0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8:balance
-"{\"locked\":\"24691360000000\",\"unlocked\":\"100000000000\"}"
+$ redis-cli HGET a:013302 1d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8
+"{\"balance\":{\"locked\":\"24691360000000\"}}"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object,
@@ -217,7 +250,7 @@ and you can run it yourself as follows:
 
 ```
 $ go run ./examples/getstats/main.go
-tfchain/standard has:
+tfchain network has:
   * a total of 695176892 TFT, of which 690324724.35 TFT is liquid,
     4852167.65 TFT is locked, 77892 TFT is paid out as miner payouts
     and 31.600000001 TFT is paid out as tx fees
@@ -260,82 +293,15 @@ $ go run ./examples/getmultisigaddresses/main.go --db-slot 101b650391f06c6292ecf
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli smembers address:01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa:multisig.addresses
-1) "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"
+$ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
+"{\"multisignaddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"]}"
 ```
 
 This example also works in the opposite direction, where the multisig address will return all owner addresses:
 
 ```
-$ redis-cli smembers address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses
-1) "01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa"
-2) "0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af"
-```
-
-### Get Balance of all MultiSig Owners
-
-Should we want to know who is the richest owner of a MultiSig wallet, we can do so by combinding some of the dumped data:
-
-```
-$ redis-cli smembers address:0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37:multisig.addresses | xargs -I % sh -c 'echo %; redis-cli get address:%:balance'
-01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-(nil)
-0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af
-"{\"locked\":\"0\",\"unlocked\":\"0\"}"
-```
-
-A `nil` balance JSON object should be accepted as a balance object with all currency properties equal to `0`.
-
-### Get Balance of all Wallets in a network
-
-Combining our knowledge gained from the previous examples, we can combine some commands
-in order to get to know the balance of all non-nil wallets with value in the network.
-
-```
-$ redis-cli smembers addresses | \
-    xargs -I % sh -c 'echo "%:"; redis-cli get address:%:balance; echo'
-...
-01f0b3971659d945d9412262ab8b3ce105540a36b12b3c5ba75ae881115638b4283fd645ef9b06:
-"{\"locked\":\"0\",\"unlocked\":\"142670600000000\"}"
-
-01160e0dedbd07c43c40ab6bf06bca0ee935601074b27d320388a3581298894dcc65663390be6d:
-"{\"locked\":\"0\",\"unlocked\":\"7576000000000\"}"
-
-01003e759f679ad11ef6b40bba72a97cf45fd14e6ffec3adbb4df0a6ca8fc95741ad424598813d:
-"{\"locked\":\"0\",\"unlocked\":\"12578000000000\"}"
-
-01d7d64b8077bcc0244786b76511078ba72d2cbc717706ffb07daa6be2f4ca5ba4fa2cf81d1459:
-"{\"locked\":\"0\",\"unlocked\":\"329511000000000\"}"
-
-011fe33d06d3315102fc4b692664fa2d96c31b37d60d479894d59047b49d6acf8321abfdfe3169:
-"{\"locked\":\"0\",\"unlocked\":\"1000000000\"}"
-...
-```
-
-Or we can use a previous Go exmaple to make our output a bit nicer:
-
-```
-$ redis-cli smembers addresses | \
-    xargs -I % sh -c 'echo "%:"; go run ./examples/getcoins/main.go %; echo'
-...
-01bb7338ff7732935e0a1bd277f49f3addd98104fef6d319bea301299397032236b38a19e0230b:
-unlocked: 0 TFT
-locked:   0 TFT
---------------------
-total: 0 TFT
-
-01a22af05052cabb77e52428994d4037d669eb7c9ad9301b21ad464398471824b689be8b9c7c06:
-unlocked: 1847 TFT
-locked:   0 TFT
---------------------
-total: 1847 TFT
-
-01a8bd9538f34db393a77309107ee713cb46f7805dc7bc27b8bc7d62e7cb3caf57d9f4bb68bfcb:
-unlocked: 108080 TFT
-locked:   0 TFT
---------------------
-total: 108080 TFT
-...
+$ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
+"{\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":1}}"
 ```
 
 ## Testing

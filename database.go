@@ -490,18 +490,15 @@ type (
 	// Following key (templates) are reserved by this Redis database implementation:
 	//
 	//	  internal keys:
-	//	  <chainName>:<networkName>:state												(JSON) used for internal state of this explorer, in JSON format
-	//	  <chainName>:<networkName>:cos													(custom) all coin outputs
-	//	  <chainName>:<networkName>:lcos.height:<height>								(custom) all locked coin outputs on a given height
-	//	  <chainName>:<networkName>:lcos.time:<timestamp-(timestamp%7200)>				(custom) all locked coin outputs for a given timestmap range
+	//	  internal																		(Redis Hashmap) used for internal state of this explorer
+	//	  c:<4_random_hex_chars>														(custom) all coin outputs
+	//	  lcos.height:<height>															(custom) all locked coin outputs on a given height
+	//	  lcos.time:<timestamp-(timestamp%7200)>										(custom) all locked coin outputs for a given timestmap range
 	//
 	//	  public keys:
-	//	  <chainName>:<networkName>:stats												(JSON) used for global network statistics
-	//	  <chainName>:<networkName>:addresses											(SET) set of unique wallet addresses used (even if reverted) in the network
-	//    <chainName>:<networkName>:address:<unlockHashHex>:balance						(JSON) used by all wallet addresses
-	//    <chainName>:<networkName>:address:<unlockHashHex>:outputs.locked				(mapping id->JSON(output))
-	//																					used to store locked (by time or blockHeight) outputs destined for an address
-	//    <chainName>:<networkName>:address:<unlockHashHex>:multisig.addresses			(SET) used in both directions for multisig (wallet) addresses
+	//	  stats																			(JSON/MsgPack) used for global network statistics
+	//	  addresses																		(SET) set of unique wallet addresses used (even if reverted) in the network
+	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack) used by all contract and wallet addresses, storing all content of the wallet/contract
 	//
 	// Rivine Value Encodings:
 	//	 + addresses are Hex-encoded and the exact format (and how it is created) is described in:
@@ -529,10 +526,42 @@ type (
 	//    	"lockedCoins": "4899281850000000"
 	//    }
 	//
-	//  example of wallet balance (stored under <chainName>:<networkName>:address:<unlockHashHex>:balance)
-	//    { // see: AddressBalance
-	//        "locked": "0",
-	//        "unlocked": "250000000000"
+	//  example of a wallet (stored under a:01<4_random_hex_chars>)
+	//    {
+	//        "balance": {
+	//            "unlocked": "10000000",
+	//            "locked": {
+	//                "total": "5000",
+	//                "outputs": [
+	//                    {
+	//                        "amount": "2000",
+	//                        "lockedUntil": 1534105468
+	//                    },
+	//                    {
+	//                        "amount": "100",
+	//                        "lockedUntil": 1534105468,
+	//                        "description": "SGVsbG8=",
+	//                    }
+	//                ]
+	//            }
+	//        },
+	//        "multisignaddresses": [
+	//            "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"
+	//        ]
+	//    }
+	//
+	//  example of a multisig wallet (stored under a:03<4_random_hex_chars>)
+	//    {
+	//        "balance": {
+	//            "unlocked": "10000000"
+	//        },
+	//        "multisign": {
+	//            "owners": [
+	//                "01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa",
+	//                "0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af"
+	//            ],
+	//            "signaturesRequired": 1
+	//        }
 	//    }
 	RedisDatabase struct {
 		// The redis connection, no time out
