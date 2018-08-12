@@ -1197,10 +1197,10 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	// store multisig wallet first, as that will indicate if the owners (should) have the address or not
 	addressKey, addressField := getAddressKeyAndField(address)
 	// get initial values
-	wallet, err := RedisWalletFocusMultiSignData(rdb.conn.Do("HGET", addressesKey, addressField))
+	wallet, err := RedisWalletFocusMultiSignData(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to get multisig wallet for %s at %s#%s: %v", address.String(), addressesKey, addressField, err)
+			"redis: failed to get multisig wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
 	}
 	if len(wallet.MultiSignData.Owners) > 0 {
 		return nil // nothing to do
