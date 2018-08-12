@@ -60,7 +60,7 @@ type Explorer struct {
 
 // NewExplorer creates a new custom intenral explorer module.
 // See Explorer for more information.
-func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo types.BlockchainInfo, chainCts types.ChainConstants) (*Explorer, error) {
+func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo types.BlockchainInfo, chainCts types.ChainConstants, cancel <-chan struct{}) (*Explorer, error) {
 	state, err := db.GetExplorerState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get explorer state from db: %v", err)
@@ -77,7 +77,7 @@ func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo types.BlockchainIn
 		bcInfo:   bcInfo,
 		chainCts: chainCts,
 	}
-	err = cs.ConsensusSetSubscribe(explorer, state.CurrentChangeID)
+	err = cs.ConsensusSetSubscribe(explorer, state.CurrentChangeID, cancel)
 	if err != nil {
 		return nil, fmt.Errorf("explorer: failed to subscribe to consensus set: %v", err)
 	}

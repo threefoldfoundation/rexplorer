@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"runtime"
+	"sync"
 
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/modules/consensus"
@@ -42,68 +43,92 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		return fmt.Errorf("failed to create redis db client: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// load all modules
 
-	log.Println("loading rivine gateway module (1/3)...")
-	gateway, err := gateway.New(
-		cmd.RPCaddr, true, cmd.perDir("gateway"),
-		cmd.BlockchainInfo, cmd.ChainConstants, cmd.BootstrapPeers)
-	if err != nil {
-		return fmt.Errorf("failed to create gateway module: %v", err)
-	}
-	defer func() {
-		log.Println("Closing gateway module...")
-		err := gateway.Close()
-		if err != nil {
-			cmdErr = err
-			log.Println("[ERROR] Closing gateway module resulted in an error: ", err)
-		}
-	}()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	log.Println("loading rivine consensus module (2/3)...")
-	cs, err := consensus.New(
-		gateway, true, cmd.perDir("consensus"),
-		cmd.BlockchainInfo, cmd.ChainConstants)
-	if err != nil {
-		return fmt.Errorf("failed to create consensus module: %v", err)
-	}
-	defer func() {
-		log.Println("Closing consensus module...")
-		err := cs.Close()
+		log.Println("loading rivine gateway module (1/3)...")
+		gateway, err := gateway.New(
+			cmd.RPCaddr, true, cmd.perDir("gateway"),
+			cmd.BlockchainInfo, cmd.ChainConstants, cmd.BootstrapPeers)
 		if err != nil {
-			cmdErr = err
-			log.Println("[ERROR] Closing consensus module resulted in an error: ", err)
+			cmdErr = fmt.Errorf("failed to create gateway module: %v", err)
+			log.Println("[ERROR] ", cmdErr)
+			cancel()
+			return
 		}
-	}()
+		defer func() {
+			log.Println("Closing gateway module...")
+			err := gateway.Close()
+			if err != nil {
+				cmdErr = err
+				log.Println("[ERROR] Closing gateway module resulted in an error: ", err)
+			}
+		}()
 
-	log.Println("loading internal explorer module (3/3)...")
-	explorer, err := NewExplorer(
-		db, cs, cmd.BlockchainInfo, cmd.ChainConstants)
-	if err != nil {
-		return fmt.Errorf("failed to create explorer module: %v", err)
-	}
-	defer func() {
-		log.Println("Closing explorer module...")
-		err := explorer.Close()
+		log.Println("loading rivine consensus module (2/3)...")
+		cs, err := consensus.New(
+			gateway, true, cmd.perDir("consensus"),
+			cmd.BlockchainInfo, cmd.ChainConstants)
 		if err != nil {
-			cmdErr = err
-			log.Println("[ERROR] Closing explorer module resulted in an error: ", err)
+			cmdErr = fmt.Errorf("failed to create consensus module: %v", err)
+			log.Println("[ERROR] ", cmdErr)
+			cancel()
+			return
 		}
+		defer func() {
+			log.Println("Closing consensus module...")
+			err := cs.Close()
+			if err != nil {
+				cmdErr = err
+				log.Println("[ERROR] Closing consensus module resulted in an error: ", err)
+			}
+		}()
+
+		log.Println("loading internal explorer module (3/3)...")
+		explorer, err := NewExplorer(
+			db, cs, cmd.BlockchainInfo, cmd.ChainConstants, ctx.Done())
+		if err != nil {
+			cmdErr = fmt.Errorf("failed to create explorer module: %v", err)
+			log.Println("[ERROR] ", cmdErr)
+			cancel()
+			return
+		}
+		defer func() {
+			log.Println("Closing explorer module...")
+			err := explorer.Close()
+			if err != nil {
+				cmdErr = err
+				log.Println("[ERROR] Closing explorer module resulted in an error: ", err)
+			}
+		}()
+
+		log.Println("rexplorer is up and running...")
+
+		// wait until done
+		<-ctx.Done()
 	}()
 
 	// stop the server if a kill signal is caught
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, os.Kill)
 
-	log.Println("rexplorer is up and running...")
-
 	// wait for server to be killed or the process to be done
 	select {
 	case <-sigChan:
 		log.Println("\r\nCaught stop signal, quitting...")
 	case <-context.Background().Done():
-		log.Println("\r\nBackground context is done, quitting...")
+		log.Println("\r\ncontext is done, quitting...")
 	}
+
+	cancel()
+	wg.Wait()
+
 	log.Println("Goodbye!")
 	return
 }
