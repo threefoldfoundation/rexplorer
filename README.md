@@ -101,12 +101,12 @@ Following _public_ keys are reserved:
     * used by all wallet addresses, contains unlocked balance, locked balance and coin outputs as well as all multisig wallets jointly owned by this wallet
     * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
     * example key: `a:012b61`
-    * fields have the format <72_random_hex_chars>, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
+    * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
 * `a:03<4_random_hex_chars>`:
     * used by all multisig wallet addresses, contains unlocked balance, locked balance and coin outputs as well as owner addresses and signatures required
     * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
     * example key: `a:032b61`
-    * fields have the format <72_random_hex_chars>, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
+    * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
 
 Rivine Value Encodings:
 
@@ -325,9 +325,9 @@ If you meet all conditions listed above you can run the integration tests as fol
 ```
 $ make integration-tests
 go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "1"
-sumcoins test on tfchain network testnet ——block height 88101—— passed :)
+sumcoins test on block height 2026 passed :)
 go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "0"
-sumcoins test on tfchain network standard ——block height 77892—— passed :)
+sumcoins test on block height 1710 passed :)
 ```
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
