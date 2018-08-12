@@ -1034,8 +1034,8 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 	}
 	if co.State == CoinOutputStateNil {
 		return CoinOutputStateNil, fmt.Errorf(
-			"redis: failed to revert coin output: nil coin output state %s: %v",
-			id.String(), err)
+			"redis: failed to revert coin output: nil coin output state %s",
+			id.String())
 	}
 
 	var sendCount int
@@ -1059,9 +1059,11 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 		case CoinOutputStateLocked:
 			// update locked ouput map and balance of address wallet
 			err = wallet.Balance.Locked.SubLockedCoinOutput(id)
-			return CoinOutputStateNil, fmt.Errorf(
-				"redis: failed to revert coin output %s: %v",
-				id.String(), err)
+			if err != nil {
+				return CoinOutputStateNil, fmt.Errorf(
+					"redis: failed to revert coin output %s: %v",
+					id.String(), err)
+			}
 		}
 
 		// update balance
@@ -1223,7 +1225,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 		wallet, err := RedisWalletFocusMultiSignAddresses(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return fmt.Errorf(
-				"redis: failed to get multisig wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
+				"redis: failed to get wallet for %s at %s#%s: %v", owner.String(), addressKey, addressField, err)
 		}
 		// add multisig address
 		if !wallet.AddUniqueMultisignAddress(address) {
