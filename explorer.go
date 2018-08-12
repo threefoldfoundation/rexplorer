@@ -191,18 +191,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		// apply miner payouts
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.CointOutputCount++
-			var description types.ByteSlice
+			var description ByteSlice
 			if i == 0 {
 				// only the first miner payout is newly created money
 				explorer.stats.MinerPayoutCount++
 				explorer.stats.Coins = explorer.stats.Coins.Add(mp.Value)
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(mp.Value)
-				description = types.ByteSlice("block reward for " + block.ID().String())
+				description = ByteSlice("block reward for " + block.ID().String())
 			} else {
 				explorer.stats.TransactionFeeCount++
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(mp.Value)
 				txID := getTransactionIDForMinerPayout(block, uint64(i-1))
-				description = types.ByteSlice("tx fee for tx" + txID.String())
+				description = ByteSlice("tx fee for tx" + txID.String())
 			}
 			locked, err := explorer.addCoinOutput(types.CoinOutputID(block.MinerPayoutID(uint64(i))), types.CoinOutput{
 				Value: mp.Value,
@@ -238,7 +238,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount++
 				id := tx.CoinOutputID(uint64(i))
-				locked, err := explorer.addCoinOutput(id, co, types.ByteSlice(tx.ArbitraryData))
+				locked, err := explorer.addCoinOutput(id, co, ByteSlice(tx.ArbitraryData))
 				if err != nil {
 					panic(fmt.Sprintf("failed to add coin output %s from %s: %v",
 						id, co.Condition.UnlockHash().String(), err))
@@ -288,7 +288,7 @@ func getTransactionIDForMinerPayout(block types.Block, index uint64) types.Trans
 // ensuring we differentiate locked and unlocked coin outputs.
 // On top of that it checks for multisig outputs, as to be able to track multisig addresses,
 // linking them to the owner addresses as well as storing the owner addresses themself for the multisig wallet.
-func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput, description types.ByteSlice) (locked bool, err error) {
+func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co types.CoinOutput, description ByteSlice) (locked bool, err error) {
 	// check if it is a multisignature condition, if so, track it
 	if ownerAddresses, signaturesRequired := getMultisigProperties(co.Condition); len(ownerAddresses) > 0 {
 		multiSigAddress := co.Condition.UnlockHash()

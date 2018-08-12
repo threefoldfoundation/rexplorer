@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,7 +44,7 @@ type (
 	CoinOutput struct {
 		Value       types.Currency             `json:"value"`
 		Condition   types.UnlockConditionProxy `json:"condition"`
-		Description types.ByteSlice            `json:"description"`
+		Description ByteSlice                  `json:"description"`
 	}
 )
 
@@ -103,38 +104,38 @@ type (
 	// See Wallet for more information about all properties.
 	WalletFocusBalance struct {
 		Balance            WalletBalance   `json:"balance"`
-		MultiSignAddresses json.RawMessage `json:"multisignaddresses"`
-		MultiSignData      json.RawMessage `json:"multisign"`
+		MultiSignAddresses json.RawMessage `json:"multisignaddresses,omitemtpy"`
+		MultiSignData      json.RawMessage `json:"multisign,omitemtpy"`
 	}
 	// WalletFocusUnlockedBalance decodes only the unlocked balance property
 	//
 	// See Wallet for more information about all properties.
 	WalletFocusUnlockedBalance struct {
 		Balance            WalletBalanceFocusUnlocked `json:"balance"`
-		MultiSignAddresses json.RawMessage            `json:"multisignaddresses"`
-		MultiSignData      json.RawMessage            `json:"multisign"`
+		MultiSignAddresses json.RawMessage            `json:"multisignaddresses,omitemtpy"`
+		MultiSignData      json.RawMessage            `json:"multisign,omitemtpy"`
 	}
 	// WalletBalanceFocusUnlocked decodes only the unlocked property
 	//
 	// See WalletBalance for more information about all properties.
 	WalletBalanceFocusUnlocked struct {
-		Unlocked types.Currency  `json:"unlocked,omitemtpy"`
+		Unlocked types.Currency  `json:"unlocked"`
 		Locked   json.RawMessage `json:"locked,omitemtpy"`
 	}
 	// WalletFocusMultiSignAddresses decodes only the MultiSignAddresses property
 	//
 	// See Wallet for more information  about all properties.
 	WalletFocusMultiSignAddresses struct {
-		Balance            json.RawMessage    `json:"balance"`
+		Balance            json.RawMessage    `json:"balance,omitemtpy"`
 		MultiSignAddresses []types.UnlockHash `json:"multisignaddresses"`
-		MultiSignData      json.RawMessage    `json:"multisign"`
+		MultiSignData      json.RawMessage    `json:"multisign,omitemtpy"`
 	}
 	// WalletFocusMultiSignData decodes only the MultiSignData property
 	//
 	// See Wallet for more information  about all properties.
 	WalletFocusMultiSignData struct {
-		Balance            json.RawMessage     `json:"balance"`
-		MultiSignAddresses json.RawMessage     `json:"multisignaddresses"`
+		Balance            json.RawMessage     `json:"balance,omitemtpy"`
+		MultiSignAddresses json.RawMessage     `json:"multisignaddresses,omitemtpy"`
 		MultiSignData      WalletMultiSignData `json:"multisign"`
 	}
 )
@@ -155,6 +156,92 @@ func (w Wallet) MarshalJSON() ([]byte, error) {
 			return nil, fmt.Errorf("failed to marshal multisign addresses: %v", err)
 		}
 		m["multisignaddresses"] = json.RawMessage(b)
+	}
+	if len(w.MultiSignData.Owners) > 0 {
+		b, err := json.Marshal(w.MultiSignData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal multisign data: %v", err)
+		}
+		m["multisign"] = json.RawMessage(b)
+	}
+	return json.Marshal(m)
+}
+
+// MarshalJSON implements json.Marshaller.MarshalJSON
+func (w WalletFocusBalance) MarshalJSON() ([]byte, error) {
+	m := make(map[string]json.RawMessage)
+	b, err := json.Marshal(w.Balance)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal balance: %v", err)
+	}
+	m["balance"] = json.RawMessage(b)
+	if len(w.MultiSignAddresses) > 0 {
+		m["multisignaddresses"] = w.MultiSignAddresses
+	}
+	if len(w.MultiSignData) > 0 {
+		m["multisign"] = w.MultiSignData
+	}
+	return json.Marshal(m)
+}
+
+// MarshalJSON implements json.Marshaller.MarshalJSON
+func (w WalletFocusUnlockedBalance) MarshalJSON() ([]byte, error) {
+	m := make(map[string]json.RawMessage)
+	b, err := json.Marshal(w.Balance)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal balance: %v", err)
+	}
+	m["balance"] = json.RawMessage(b)
+	if len(w.MultiSignAddresses) > 0 {
+		m["multisignaddresses"] = w.MultiSignAddresses
+	}
+	if len(w.MultiSignData) > 0 {
+		m["multisign"] = w.MultiSignData
+	}
+	return json.Marshal(m)
+}
+
+// MarshalJSON implements json.Marshaller.MarshalJSON
+func (wb WalletBalanceFocusUnlocked) MarshalJSON() ([]byte, error) {
+	m := make(map[string]json.RawMessage)
+	b, err := json.Marshal(wb.Unlocked)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal unlocked balance: %v", err)
+	}
+	m["unlocked"] = json.RawMessage(b)
+	if len(wb.Locked) > 0 {
+		m["locked"] = wb.Locked
+	}
+	return json.Marshal(m)
+}
+
+// MarshalJSON implements json.Marshaller.MarshalJSON
+func (w WalletFocusMultiSignAddresses) MarshalJSON() ([]byte, error) {
+	m := make(map[string]json.RawMessage)
+	if len(w.Balance) > 0 {
+		m["balance"] = w.Balance
+	}
+	if len(w.MultiSignAddresses) > 0 {
+		b, err := json.Marshal(w.MultiSignAddresses)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal multisign addresses: %v", err)
+		}
+		m["multisignaddresses"] = json.RawMessage(b)
+	}
+	if len(w.MultiSignData) > 0 {
+		m["multisign"] = w.MultiSignData
+	}
+	return json.Marshal(m)
+}
+
+// MarshalJSON implements json.Marshaller.MarshalJSON
+func (w WalletFocusMultiSignData) MarshalJSON() ([]byte, error) {
+	m := make(map[string]json.RawMessage)
+	if len(w.Balance) > 0 {
+		m["balance"] = w.Balance
+	}
+	if len(w.MultiSignAddresses) > 0 {
+		m["multisignaddresses"] = w.MultiSignAddresses
 	}
 	if len(w.MultiSignData.Owners) > 0 {
 		b, err := json.Marshal(w.MultiSignData)
@@ -374,6 +461,21 @@ func (cos *CoinOutputState) LoadString(str string) error {
 	return nil
 }
 
+// ByteSlice can be loaded from a base64-encoded string,
+// and encodes to one as well when turned into a string.
+type ByteSlice []byte
+
+// String implements fmt.Stringer.String
+func (bs ByteSlice) String() string {
+	return base64.StdEncoding.EncodeToString([]byte(bs))
+}
+
+// LoadString implements StringLoader.LoadString
+func (bs *ByteSlice) LoadString(str string) (err error) {
+	*bs, err = base64.StdEncoding.DecodeString(str)
+	return
+}
+
 type (
 	// RedisDatabase is a Database (client) implementation for Redis, using github.com/gomodule/redigo.
 	//
@@ -468,7 +570,7 @@ type (
 		State       CoinOutputState
 		LockType    LockType
 		LockValue   LockValue
-		Description types.ByteSlice
+		Description ByteSlice
 	}
 	// DatabaseCoinOutputLock is used to store the lock value and a reference to its parent CoinOutput,
 	// as to store the lock in a scoped bucket.
@@ -483,7 +585,7 @@ type (
 		CoinValue    types.Currency
 		LockType     LockType
 		LockValue    LockValue
-		Description  types.ByteSlice
+		Description  ByteSlice
 	}
 )
 
