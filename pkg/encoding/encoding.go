@@ -83,10 +83,12 @@ func NewEncoder(et Type) (Encoder, error) {
 type (
 	// MessagePackEncoder defines the standard implementation for the
 	// MessagePack Encoding Type, using a single bytes.Buffer for all marshal calls,
-	// and using the Writer type of the github.com/tinylib/msgp/msgp pkg internally.
+	// and using a single shared instance of the Reader/Writer types of the github.com/tinylib/msgp/msgp pkg internally.
 	MessagePackEncoder struct {
 		w  *msgp.Writer
 		wb *bytes.Buffer
+		r  *msgp.Reader
+		br *bytes.Reader
 	}
 	// JSONEncoder defines the standard implementation for the
 	// JSON Encoding Type, using a single bytes.Buffer for all marshal calls,
@@ -103,9 +105,12 @@ type (
 // See MessagePackEncoder for more information.
 func NewMessagePackEncoder() *MessagePackEncoder {
 	wb := bytes.NewBuffer(nil)
+	br := bytes.NewReader(nil)
 	return &MessagePackEncoder{
 		w:  msgp.NewWriter(wb),
 		wb: wb,
+		r:  msgp.NewReader(br),
+		br: br,
 	}
 }
 
@@ -136,8 +141,9 @@ func (encoder MessagePackEncoder) Marshal(v interface{}) ([]byte, error) {
 func (encoder MessagePackEncoder) Unmarshal(data []byte, v interface{}) error {
 	switch tv := v.(type) {
 	case msgp.Decodable:
-		r := msgp.NewReader(bytes.NewReader(data))
-		err := tv.DecodeMsg(r)
+		encoder.br.Reset(data)
+		encoder.r.Reset(encoder.br)
+		err := tv.DecodeMsg(encoder.r)
 		if err != nil {
 			return fmt.Errorf("failed to message unpack Decodable value: %v", err)
 		}
