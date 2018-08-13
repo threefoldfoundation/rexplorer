@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"sync"
 
@@ -205,7 +204,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			for i, co := range tx.CoinOutputs {
 				explorer.stats.CointOutputCount++
 				id := tx.CoinOutputID(uint64(i))
-				description := base64.StdEncoding.EncodeToString(tx.ArbitraryData)
+				description := string(tx.ArbitraryData)
 				locked, err := explorer.addCoinOutput(types.AsCoinOutputID(id), co, description)
 				if err != nil {
 					panic(fmt.Sprintf("failed to add coin output %s from %s: %v",
