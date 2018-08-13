@@ -68,8 +68,8 @@ type StringLoader interface {
 	LoadString(string) error
 }
 
-// FormatStringers formats the given stringers into one string using the given seperator
-func FormatStringers(seperator string, stringers ...interface{}) string {
+// FormatStringers formats the given stringers into one string using the given separator
+func FormatStringers(separator string, stringers ...interface{}) string {
 	n := len(stringers)
 	if n == 0 {
 		return ""
@@ -85,14 +85,14 @@ func FormatStringers(seperator string, stringers ...interface{}) string {
 			panic(fmt.Sprintf("unsuported value %[1]v (T: %[1]T)", stringer))
 		}
 	}
-	return strings.Join(ss, seperator)
+	return strings.Join(ss, separator)
 }
 
-// ParseStringLoaders splits the given string into the given seperator
+// ParseStringLoaders splits the given string into the given separator
 // and loads each part into a given string loader.
-func ParseStringLoaders(csv, seperator string, stringLoaders ...interface{}) (err error) {
+func ParseStringLoaders(csv, separator string, stringLoaders ...interface{}) (err error) {
 	n := len(stringLoaders)
-	parts := strings.SplitN(csv, seperator, n)
+	parts := strings.SplitN(csv, separator, n)
 	if m := len(parts); n != m {
 		return fmt.Errorf("CSV record has incorrect amount of records, expected %d but received %d", n, m)
 	}

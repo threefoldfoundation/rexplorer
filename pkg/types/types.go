@@ -57,7 +57,7 @@ type (
 	}
 	// WalletLockedOutputMap defines the mapping between a coin output ID and its walletLockedOutput data
 	WalletLockedOutputMap map[string]WalletLockedOutput
-	// WalletLockedOutput defines a locked output targetted at a wallet.
+	// WalletLockedOutput defines a locked output targeted at a wallet.
 	WalletLockedOutput struct {
 		Amount      Currency  `json:"amount" msg:"amount"`
 		LockedUntil LockValue `json:"lockedUntil" msg:"lockedUntil"`

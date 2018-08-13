@@ -4,8 +4,8 @@
 [![GoDoc](https://godoc.org/github.com/threefoldfoundation/rexplorer?status.svg)](https://godoc.org/github.com/threefoldfoundation/rexplorer)
 [![Go Report Card](https://goreportcard.com/badge/github.com/threefoldfoundation/rexplorer)](https://goreportcard.com/report/github.com/threefoldfoundation/rexplorer)
 
-rexplorer is a small explorer binary, that can aid in explorering a [tfchain][tfchain] network.
-It applies/reverts data —received from an embedded consensus module— into a redis db of choice,
+rexplorer is a small explorer binary, that can aid in exploring a [tfchain][tfchain] network.
+It applies/reverts data —received from an embedded consensus module— into a Redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.
 
 ## Install
@@ -24,7 +24,7 @@ GOARCH       amd64
 ## Usage
 
 To start a rexplorer instance for the standard network,
-storing all persistent non-redis data into a subdir of the current root directory,
+storing all persistent non-redis data into a sub directory of the current root directory,
 you can do so as simple as:
 
 ```
@@ -35,7 +35,7 @@ $ rexplorer
 2018/08/07 23:58:48 loading internal explorer module (3/3)...
 ```
 
-The persistent dir (used for some local boltdb consensus/gateway data) can be changed
+The persistent dir (used for some local BoltDB consensus/gateway data) can be changed
 using the `-d`/`--persistent-directory` flag.
 
 Should you want to explore `testnet` instead of the `standard` net you can use the `--network testnet` flag.

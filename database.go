@@ -64,7 +64,7 @@ type (
 	//	  internal																		(Redis Hashmap) used for internal state of this explorer
 	//	  c:<4_random_hex_chars>														(custom) all coin outputs
 	//	  lcos.height:<height>															(custom) all locked coin outputs on a given height
-	//	  lcos.time:<timestamp-(timestamp%7200)>										(custom) all locked coin outputs for a given timestmap range
+	//	  lcos.time:<timestamp-(timestamp%7200)>										(custom) all locked coin outputs for a given timestamp range
 	//
 	//	  public keys:
 	//	  stats																			(JSON/MsgPack) used for global network statistics
@@ -696,7 +696,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 			// update unlocked balance of address wallet
 			wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(co.CoinValue)
 		case CoinOutputStateLocked:
-			// update locked ouput map and balance of address wallet
+			// update locked output map and balance of address wallet
 			err = wallet.Balance.Locked.SubLockedCoinOutput(id)
 			if err != nil {
 				return CoinOutputStateNil, fmt.Errorf(
