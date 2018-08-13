@@ -67,6 +67,12 @@
   version = "v1.1"
 
 [[projects]]
+  name = "github.com/philhofer/fwd"
+  packages = ["."]
+  revision = "bb6d471dc95d4fe11e432687f8b70ff496cf3136"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/pkg/errors"
   packages = ["."]
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
@@ -123,6 +129,12 @@
     "pkg/types"
   ]
   revision = "7747495c8e7845d4388f21daeff67e934459248b"
+
+[[projects]]
+  name = "github.com/tinylib/msgp"
+  packages = ["msgp"]
+  revision = "b2b6a672cf1e5b90748f79b8b81fc8c5cf0571a1"
+  version = "1.0.2"
 
 [[projects]]
   branch = "master"
@@ -191,6 +203,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "71db2dc96274ae9dd99a9b3cfac465895f49208f2de3e6d93a8ac82d72635207"
+  inputs-digest = "8d4cc1a23c229a7fa49685bb680f45911736f2d3505f4df5b2b0dce586e65e54"
   solver-name = "gps-cdcl"
   solver-version = 1
