@@ -201,15 +201,13 @@ func (c Currency) Msgsize() int {
 // Add adds two currencies together, returning this Currency instance,
 // containing the sum of the two currencies as value.
 func (c *Currency) Add(o Currency) Currency {
-	c.Currency = c.Currency.Add(o.Currency)
-	return *c
+	return AsCurrency(c.Currency.Add(o.Currency))
 }
 
 // Sub subtracts two currencies from one another, returning this Currency instance,
 // containing the difference of the two currencies as value.
 func (c *Currency) Sub(o Currency) Currency {
-	c.Currency = c.Currency.Sub(o.Currency)
-	return *c
+	return AsCurrency(c.Currency.Sub(o.Currency))
 }
 
 // Cmp compares two currencies, returning
