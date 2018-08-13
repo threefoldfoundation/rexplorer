@@ -82,6 +82,12 @@ func main() {
 		cmd.RedisAddr,
 		"which (tcp) address the redis server listens on",
 	)
+	cmdRoot.Flags().StringVar(
+		&cmd.ProfilingAddr,
+		"profile-addr",
+		cmd.ProfilingAddr,
+		"enables profiling of this rexplorer instance as an http service",
+	)
 	cmdRoot.Flags().IntVar(
 		&cmd.RedisDB,
 		"redis-db",

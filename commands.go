@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"runtime"
 	"sync"
+
+	_ "net/http/pprof"
 
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/modules/consensus"
@@ -33,6 +36,10 @@ type Commands struct {
 	RedisAddr string
 	RedisDB   int
 
+	// ProfilingAddr is optionally used to
+	// enable the (std pprof) profiler and expose is as a HTTP interface
+	ProfilingAddr string
+
 	// encoding info
 	EncodingType encoding.Type
 
@@ -45,6 +52,17 @@ type Commands struct {
 // starting a rexplorer daemon instance, running until the user intervenes.
 func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	log.Println("starting rexplorer v" + version.String() + "...")
+
+	// optionally enable profiling and expose it over a HTTP interface
+	if len(cmd.ProfilingAddr) > 0 {
+		go func() {
+			log.Println("profiling enabled, available on", cmd.ProfilingAddr)
+			err := http.ListenAndServe(cmd.ProfilingAddr, http.DefaultServeMux)
+			if err != nil {
+				fmt.Println("[ERROR] profiler couldn't be started:", err)
+			}
+		}()
+	}
 
 	// create database
 	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants)
