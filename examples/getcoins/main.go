@@ -1,14 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
 	"github.com/rivine/rivine/pkg/client"
-	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
+
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -16,12 +17,17 @@ import (
 func main() {
 	flag.Parse()
 
+	encoder, err := encoding.NewEncoder(encodingType)
+	if err != nil {
+		panic(err)
+	}
+
 	args := flag.Args()
 	if len(args) != 1 {
 		panic("usage: " + os.Args[0] + " <unlockhash>")
 	}
 	var uh types.UnlockHash
-	err := uh.LoadString(args[0])
+	err = uh.LoadString(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "usage: "+os.Args[0]+" <unlockhash>")
 		panic(fmt.Sprintf("invalid uh %q: %v", args[0], err))
@@ -34,33 +40,28 @@ func main() {
 
 	addressKey, addressField := getAddressKeyAndField(uh)
 
-	var wallet struct {
-		Balance struct {
-			Unlocked types.Currency `json:"unlocked"`
-			Locked   struct {
-				Total types.Currency `json:"total"`
-			} `json:"locked"`
-		} `json:"balance,omitempty"`
-	}
+	var wallet types.Wallet
 	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		if err != redis.ErrNil {
 			panic("failed to get wallet " + err.Error())
 		}
-		b = []byte("{}")
+		b = nil
 	}
-	err = json.Unmarshal(b, &wallet)
-	if err != nil {
-		panic("failed to json-unmarshal wallet: " + err.Error())
+	if len(b) > 0 {
+		err = encoder.Unmarshal(b, &wallet)
+		if err != nil {
+			panic("failed to unmarshal wallet: " + err.Error())
+		}
 	}
 
 	cfg := config.GetBlockchainInfo()
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
-	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(wallet.Balance.Unlocked))
-	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(wallet.Balance.Locked.Total))
+	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(wallet.Balance.Unlocked.Currency))
+	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(wallet.Balance.Locked.Total.Currency))
 	fmt.Println("--------------------")
 	fmt.Println("total: " + cc.ToCoinStringWithUnit(
-		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked)))
+		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked).Currency))
 }
 
 func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
@@ -70,11 +71,14 @@ func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
 }
 
 var (
-	dbAddress string
-	dbSlot    int
+	dbAddress    string
+	dbSlot       int
+	encodingType encoding.Type
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
+	flag.Var(&encodingType, "encoding",
+		"which encoding protocol to use, one of {json,msgp} (default: "+encodingType.String()+")")
 }

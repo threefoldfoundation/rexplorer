@@ -1,17 +1,22 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
 	"github.com/gomodule/redigo/redis"
 )
 
 func main() {
 	flag.Parse()
+
+	encoder, err := encoding.NewEncoder(encodingType)
+	if err != nil {
+		panic(err)
+	}
 
 	conn, err := redis.Dial("tcp", dbAddress, redis.DialDatabase(dbSlot))
 	if err != nil {
@@ -22,14 +27,10 @@ func main() {
 	if err != nil {
 		panic("failed to get network stats: " + err.Error())
 	}
-	var stats struct {
-		BlockHeight types.BlockHeight `json:"blockHeight"`
-		Coins       types.Currency    `json:"coins"`
-		LockedCoins types.Currency    `json:"lockedCoins"`
-	}
-	err = json.Unmarshal(b, &stats)
+	var stats types.NetworkStats
+	err = encoder.Unmarshal(b, &stats)
 	if err != nil {
-		panic("failed to json-unmarshal network stats: " + err.Error())
+		panic("failed to unmarshal network stats: " + err.Error())
 	}
 
 	// get all unique addresses
@@ -41,25 +42,20 @@ func main() {
 	// compute total unlocked and locked coins for all addresses
 	var unlockedCoins, lockedCoins types.Currency
 	for _, addr := range addresses {
-		var wallet struct {
-			Balance struct {
-				Unlocked types.Currency `json:"unlocked"`
-				Locked   struct {
-					Total types.Currency `json:"total"`
-				} `json:"locked"`
-			} `json:"balance,omitempty"`
-		}
+		var wallet types.Wallet
 		addressKey, addressField := getAddressKeyAndField(addr)
 		b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			if err != redis.ErrNil {
 				panic("failed to get wallet " + err.Error())
 			}
-			b = []byte("{}")
+			b = nil
 		}
-		err = json.Unmarshal(b, &wallet)
-		if err != nil {
-			panic("failed to json-unmarshal wallet: " + err.Error())
+		if len(b) > 0 {
+			err = encoder.Unmarshal(b, &wallet)
+			if err != nil {
+				panic("failed to json-unmarshal wallet: " + err.Error())
+			}
 		}
 		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked)
 		lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
@@ -93,7 +89,8 @@ func main() {
 	}
 
 	fmt.Printf(
-		"sumcoins test on block height %d passed :)\n", stats.BlockHeight)
+		"sumcoins test —using encoding %s— on block height %d passed :)\n",
+		encodingType.String(), stats.BlockHeight.BlockHeight)
 }
 
 func getAddressKeyAndField(addr string) (key, field string) {
@@ -102,11 +99,14 @@ func getAddressKeyAndField(addr string) (key, field string) {
 }
 
 var (
-	dbAddress string
-	dbSlot    int
+	dbAddress    string
+	dbSlot       int
+	encodingType encoding.Type
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
+	flag.Var(&encodingType, "encoding",
+		"which encoding protocol to use, one of {json,msgp} (default: "+encodingType.String()+")")
 }

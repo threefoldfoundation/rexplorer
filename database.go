@@ -1,15 +1,14 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/rexplorer/pkg/types"
+
+	rivinetypes "github.com/rivine/rivine/types"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -19,11 +18,11 @@ type Database interface {
 	GetExplorerState() (ExplorerState, error)
 	SetExplorerState(state ExplorerState) error
 
-	GetNetworkStats() (NetworkStats, error)
-	SetNetworkStats(stats NetworkStats) error
+	GetNetworkStats() (types.NetworkStats, error)
+	SetNetworkStats(stats types.NetworkStats) error
 
 	AddCoinOutput(id types.CoinOutputID, co CoinOutput) error
-	AddLockedCoinOutput(id types.CoinOutputID, co CoinOutput, lt LockType, lockValue LockValue) error
+	AddLockedCoinOutput(id types.CoinOutputID, co CoinOutput, lt LockType, lockValue types.LockValue) error
 	SpendCoinOutput(id types.CoinOutputID) error
 	RevertCoinInput(id types.CoinOutputID) error
 	RevertCoinOutput(id types.CoinOutputID) (oldState CoinOutputState, err error)
@@ -42,439 +41,11 @@ type (
 	// The description field is usually taken directly from the ArbitraryData field,
 	// it is however hardcoded for tx fees and block creator rewards.
 	CoinOutput struct {
-		Value       types.Currency             `json:"value"`
-		Condition   types.UnlockConditionProxy `json:"condition"`
-		Description ByteSlice                  `json:"description"`
+		Value       types.Currency
+		Condition   rivinetypes.UnlockConditionProxy
+		Description string
 	}
 )
-
-// internal data structures
-type (
-	// NetworkInfo defines the info of the chain network data is dumped from,
-	// used as to prevent name colissions.
-	NetworkInfo struct {
-		ChainName   string `json:"chainName"`
-		NetworkName string `json:"networkName"`
-	}
-)
-
-// public data structures
-type (
-	// Wallet collects all data for an address in a simple format,
-	// focussing on its balance and multisign properties.
-	Wallet struct {
-		// Balance is optional and defines the balance the wallet currently has.
-		Balance WalletBalance `json:"balance"`
-		// MultiSignAddresses is optional and is only defined if the wallet is part of
-		// one or multiple multisign wallets.
-		MultiSignAddresses []types.UnlockHash `json:"multisignaddresses"`
-		// MultiSignData is optional and is only defined if the wallet is a multisign wallet.
-		MultiSignData WalletMultiSignData `json:"multisign"`
-	}
-	// WalletBalance contains the unlocked and/or locked balance of a wallet.
-	WalletBalance struct {
-		Unlocked types.Currency      `json:"unlocked,omitemtpy"`
-		Locked   WalletLockedBalance `json:"locked,omitemtpy"`
-	}
-	// WalletLockedBalance contains the locked balance of a wallet,
-	// defining the total amount of coins as well as all the outputs that are locked.
-	WalletLockedBalance struct {
-		Total   types.Currency        `json:"total"`
-		Outputs WalletLockedOutputMap `json:"outputs"`
-	}
-	// WalletLockedOutputMap defines the mapping between a coin output ID and its walletLockedOutput data
-	WalletLockedOutputMap map[types.CoinOutputID]WalletLockedOutput
-	// WalletLockedOutput defines a locked output targetted at a wallet.
-	WalletLockedOutput struct {
-		Amount      types.Currency `json:"amount"`
-		LockedUntil LockValue      `json:"lockedUntil"`
-		Description []byte         `json:"description,omitemtpy"`
-	}
-	// WalletMultiSignData defines the extra data defined for a MultiSignWallet.
-	WalletMultiSignData struct {
-		Owners             []types.UnlockHash `json:"owners"`
-		SignaturesRequired uint64             `json:"signaturesRequired"`
-	}
-)
-
-// Specialised Wallet Structures to prevent the decoding of data which isn't required
-type (
-	// WalletFocusBalance decodes only the balance property
-	//
-	// See Wallet for more information about all properties.
-	WalletFocusBalance struct {
-		Balance            WalletBalance   `json:"balance"`
-		MultiSignAddresses json.RawMessage `json:"multisignaddresses,omitemtpy"`
-		MultiSignData      json.RawMessage `json:"multisign,omitemtpy"`
-	}
-	// WalletFocusUnlockedBalance decodes only the unlocked balance property
-	//
-	// See Wallet for more information about all properties.
-	WalletFocusUnlockedBalance struct {
-		Balance            WalletBalanceFocusUnlocked `json:"balance"`
-		MultiSignAddresses json.RawMessage            `json:"multisignaddresses,omitemtpy"`
-		MultiSignData      json.RawMessage            `json:"multisign,omitemtpy"`
-	}
-	// WalletBalanceFocusUnlocked decodes only the unlocked property
-	//
-	// See WalletBalance for more information about all properties.
-	WalletBalanceFocusUnlocked struct {
-		Unlocked types.Currency  `json:"unlocked"`
-		Locked   json.RawMessage `json:"locked,omitemtpy"`
-	}
-	// WalletFocusMultiSignAddresses decodes only the MultiSignAddresses property
-	//
-	// See Wallet for more information  about all properties.
-	WalletFocusMultiSignAddresses struct {
-		Balance            json.RawMessage    `json:"balance,omitemtpy"`
-		MultiSignAddresses []types.UnlockHash `json:"multisignaddresses"`
-		MultiSignData      json.RawMessage    `json:"multisign,omitemtpy"`
-	}
-	// WalletFocusMultiSignData decodes only the MultiSignData property
-	//
-	// See Wallet for more information  about all properties.
-	WalletFocusMultiSignData struct {
-		Balance            json.RawMessage     `json:"balance,omitemtpy"`
-		MultiSignAddresses json.RawMessage     `json:"multisignaddresses,omitemtpy"`
-		MultiSignData      WalletMultiSignData `json:"multisign"`
-	}
-)
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (w Wallet) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	if !w.Balance.IsZero() {
-		b, err := json.Marshal(w.Balance)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal balance: %v", err)
-		}
-		m["balance"] = json.RawMessage(b)
-	}
-	if len(w.MultiSignAddresses) > 0 {
-		b, err := json.Marshal(w.MultiSignAddresses)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal multisign addresses: %v", err)
-		}
-		m["multisignaddresses"] = json.RawMessage(b)
-	}
-	if len(w.MultiSignData.Owners) > 0 {
-		b, err := json.Marshal(w.MultiSignData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal multisign data: %v", err)
-		}
-		m["multisign"] = json.RawMessage(b)
-	}
-	return json.Marshal(m)
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (w WalletFocusBalance) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	b, err := json.Marshal(w.Balance)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal balance: %v", err)
-	}
-	m["balance"] = json.RawMessage(b)
-	if len(w.MultiSignAddresses) > 0 {
-		m["multisignaddresses"] = w.MultiSignAddresses
-	}
-	if len(w.MultiSignData) > 0 {
-		m["multisign"] = w.MultiSignData
-	}
-	return json.Marshal(m)
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (w WalletFocusUnlockedBalance) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	b, err := json.Marshal(w.Balance)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal balance: %v", err)
-	}
-	m["balance"] = json.RawMessage(b)
-	if len(w.MultiSignAddresses) > 0 {
-		m["multisignaddresses"] = w.MultiSignAddresses
-	}
-	if len(w.MultiSignData) > 0 {
-		m["multisign"] = w.MultiSignData
-	}
-	return json.Marshal(m)
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (wb WalletBalanceFocusUnlocked) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	b, err := json.Marshal(wb.Unlocked)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal unlocked balance: %v", err)
-	}
-	m["unlocked"] = json.RawMessage(b)
-	if len(wb.Locked) > 0 {
-		m["locked"] = wb.Locked
-	}
-	return json.Marshal(m)
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (w WalletFocusMultiSignAddresses) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	if len(w.Balance) > 0 {
-		m["balance"] = w.Balance
-	}
-	if len(w.MultiSignAddresses) > 0 {
-		b, err := json.Marshal(w.MultiSignAddresses)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal multisign addresses: %v", err)
-		}
-		m["multisignaddresses"] = json.RawMessage(b)
-	}
-	if len(w.MultiSignData) > 0 {
-		m["multisign"] = w.MultiSignData
-	}
-	return json.Marshal(m)
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (w WalletFocusMultiSignData) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	if len(w.Balance) > 0 {
-		m["balance"] = w.Balance
-	}
-	if len(w.MultiSignAddresses) > 0 {
-		m["multisignaddresses"] = w.MultiSignAddresses
-	}
-	if len(w.MultiSignData.Owners) > 0 {
-		b, err := json.Marshal(w.MultiSignData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal multisign data: %v", err)
-		}
-		m["multisign"] = json.RawMessage(b)
-	}
-	return json.Marshal(m)
-}
-
-// AddUniqueMultisignAddress adds the given multisign address to the wallet's list of
-// multisign addresses which reference this wallet's address.
-// It only adds it however if the given multisign address is not known yet.
-func (w *WalletFocusMultiSignAddresses) AddUniqueMultisignAddress(address types.UnlockHash) bool {
-	for _, uh := range w.MultiSignAddresses {
-		if uh.Cmp(address) == 0 {
-			return false // nothing to do
-		}
-	}
-	w.MultiSignAddresses = append(w.MultiSignAddresses, address)
-	return true
-}
-
-// IsZero returns true if this wallet is Zero
-func (wb *WalletBalance) IsZero() bool {
-	return wb.Unlocked.IsZero() && wb.Locked.Total.IsZero()
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (wb WalletBalance) MarshalJSON() ([]byte, error) {
-	m := make(map[string]json.RawMessage)
-	if !wb.Unlocked.IsZero() {
-		b, err := json.Marshal(wb.Unlocked)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal unlocked balance: %v", err)
-		}
-		m["unlocked"] = json.RawMessage(b)
-	}
-	if !wb.Locked.Total.IsZero() {
-		b, err := json.Marshal(wb.Locked)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal locked balance and outputs: %v", err)
-		}
-		m["locked"] = json.RawMessage(b)
-	}
-	return json.Marshal(m)
-}
-
-// AddLockedCoinOutput adds the unique locked coin output to the wallet's map of locked outputs
-// as well as adds the coin output's value to the total amount of locked coins registered for this wallet.
-func (wlb *WalletLockedBalance) AddLockedCoinOutput(id types.CoinOutputID, co WalletLockedOutput) error {
-	if len(wlb.Outputs) == 0 {
-		wlb.Outputs = make(WalletLockedOutputMap)
-	} else if _, exists := wlb.Outputs[id]; exists {
-		return fmt.Errorf("trying to add existing locked coin output %s", id.String())
-	}
-	wlb.Outputs[id] = co
-	wlb.Total = wlb.Total.Add(co.Amount)
-	return nil
-}
-
-// SubLockedCoinOutput removes the unique existing locked coin output from the wallet's map of locked outputs,
-// as well as subtract the coin output's value from the total amount of locked coins registered for this wallet.
-func (wlb *WalletLockedBalance) SubLockedCoinOutput(id types.CoinOutputID) error {
-	if len(wlb.Outputs) == 0 {
-		return fmt.Errorf("trying to remove non-existing locked coin output %s", id.String())
-	}
-	co, exists := wlb.Outputs[id]
-	if !exists {
-		return fmt.Errorf("trying to remove non-existing locked coin output %s", id.String())
-	}
-	delete(wlb.Outputs, id)
-	wlb.Total = wlb.Total.Sub(co.Amount)
-	return nil
-}
-
-// MarshalJSON implements json.Marshaller.MarshalJSON
-func (wlom WalletLockedOutputMap) MarshalJSON() ([]byte, error) {
-	m := make(map[string]WalletLockedOutput, len(wlom))
-	for k, v := range wlom {
-		m[k.String()] = v
-	}
-	return json.Marshal(m)
-}
-
-// UnmarshalJSON implements json.Unmarshaller.UnmarshalJSON
-func (wlom *WalletLockedOutputMap) UnmarshalJSON(b []byte) error {
-	var m map[string]WalletLockedOutput
-	err := json.Unmarshal(b, &m)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal raw WalletLockedOutputMap: %v", err)
-	}
-	*wlom = make(WalletLockedOutputMap, len(m))
-	for k, v := range m {
-		var id types.CoinOutputID
-		err = id.LoadString(k)
-		if err != nil {
-			return fmt.Errorf("failed to locked output %s: %v",
-				k, err)
-		}
-		(*wlom)[id] = v
-	}
-	return nil
-}
-
-// StringLoader loads a string and uses it as the (parsed) value.
-type StringLoader interface {
-	LoadString(string) error
-}
-
-// FormatStringers formats the given stringers into one string using the given seperator
-func FormatStringers(seperator string, stringers ...fmt.Stringer) string {
-	n := len(stringers)
-	if n == 0 {
-		return ""
-	}
-	ss := make([]string, n)
-	for i, stringer := range stringers {
-		ss[i] = stringer.String()
-	}
-	return strings.Join(ss, seperator)
-}
-
-// ParseStringLoaders splits the given string into the given seperator
-// and loads each part into a given string loader.
-func ParseStringLoaders(csv, seperator string, stringLoaders ...StringLoader) (err error) {
-	n := len(stringLoaders)
-	parts := strings.SplitN(csv, seperator, n)
-	if m := len(parts); n != m {
-		return fmt.Errorf("CSV record has incorrect amount of records, expected %d but received %d", n, m)
-	}
-	for i, sl := range stringLoaders {
-		err = sl.LoadString(parts[i])
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-// LockType represents the type of a lock, used to lock a (coin) output.
-type LockType uint8
-
-// The different types of locks used to lock (coin) outputs.
-const (
-	LockTypeNone LockType = iota
-	LockTypeHeight
-	LockTypeTime
-)
-
-// String implements Stringer.String
-func (lt LockType) String() string {
-	return strconv.FormatUint(uint64(lt), 10)
-}
-
-// LoadString implements StringLoader.LoadString
-func (lt *LockType) LoadString(str string) error {
-	v, err := strconv.ParseUint(str, 10, 8)
-	if err != nil {
-		return err
-	}
-	nlt := LockType(v)
-	if nlt > LockTypeTime {
-		return fmt.Errorf("invalid lock type %d", nlt)
-	}
-	*lt = nlt
-	return nil
-}
-
-// LockValue represents a LockValue,
-// representing either a timestamp or a block height
-type LockValue uint64
-
-// String implements Stringer.String
-func (lv LockValue) String() string {
-	return strconv.FormatUint(uint64(lv), 10)
-}
-
-// LoadString implements StringLoader.LoadString
-func (lv *LockValue) LoadString(str string) error {
-	v, err := strconv.ParseUint(str, 10, 64)
-	if err != nil {
-		return err
-	}
-	*lv = LockValue(v)
-	return nil
-}
-
-// CoinOutputState represents the state of a coin output.
-type CoinOutputState uint8
-
-// The different states a coin output can be in.
-const (
-	CoinOutputStateNil CoinOutputState = iota
-	CoinOutputStateLiquid
-	CoinOutputStateLocked
-	CoinOutputStateSpent
-)
-
-// String implements Stringer.String
-func (cos CoinOutputState) String() string {
-	return strconv.FormatUint(uint64(cos), 10)
-}
-
-// LoadString implements StringLoader.LoadString
-func (cos *CoinOutputState) LoadString(str string) error {
-	v, err := strconv.ParseUint(str, 10, 8)
-	if err != nil {
-		return err
-	}
-	ncos := CoinOutputState(v)
-	if ncos == CoinOutputStateNil || ncos > CoinOutputStateSpent {
-		return fmt.Errorf("invalid coin output state %d", ncos)
-	}
-	*cos = ncos
-	return nil
-}
-
-// ByteSlice can be loaded from a base64-encoded string,
-// and encodes to one as well when turned into a string.
-type ByteSlice []byte
-
-// String implements fmt.Stringer.String
-func (bs ByteSlice) String() string {
-	return base64.StdEncoding.EncodeToString([]byte(bs))
-}
-
-// LoadString implements StringLoader.LoadString
-func (bs *ByteSlice) LoadString(str string) (err error) {
-	*bs, err = base64.StdEncoding.DecodeString(str)
-	return
-}
 
 type (
 	// RedisDatabase is a Database (client) implementation for Redis, using github.com/gomodule/redigo.
@@ -567,7 +138,11 @@ type (
 		// The redis connection, no time out
 		conn redis.Conn
 
-		blockFrequency LockValue
+		// used for the encoding/decoding of structured data
+		encoder encoding.Encoder
+
+		// cached chain constants
+		blockFrequency types.LockValue
 
 		// cached version of the chain stats
 		networkBlockHeight types.BlockHeight
@@ -598,14 +173,14 @@ type (
 		CoinValue   types.Currency
 		State       CoinOutputState
 		LockType    LockType
-		LockValue   LockValue
-		Description ByteSlice
+		LockValue   types.LockValue
+		Description string
 	}
 	// DatabaseCoinOutputLock is used to store the lock value and a reference to its parent CoinOutput,
 	// as to store the lock in a scoped bucket.
 	DatabaseCoinOutputLock struct {
 		CoinOutputID types.CoinOutputID
-		LockValue    LockValue
+		LockValue    types.LockValue
 	}
 	// DatabaseCoinOutputResult is returned by a Lua scripts which updates/marks a CoinOutput.
 	DatabaseCoinOutputResult struct {
@@ -613,8 +188,8 @@ type (
 		UnlockHash   types.UnlockHash
 		CoinValue    types.Currency
 		LockType     LockType
-		LockValue    LockValue
-		Description  ByteSlice
+		LockValue    types.LockValue
+		Description  string
 	}
 )
 
@@ -652,9 +227,10 @@ func (cor *DatabaseCoinOutputResult) LoadString(str string) error {
 }
 
 const (
-	internalKey          = "internal"
-	internalFieldState   = "state"
-	internalFieldNetwork = "network"
+	internalKey           = "internal"
+	internalFieldState    = "state"
+	internalFieldNetwork  = "network"
+	internalFieldEncoding = "encoding"
 
 	statsKey = "stats"
 
@@ -666,7 +242,7 @@ const (
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
 // see RedisDatabase for more information.
-func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo, chainCts types.ChainConstants) (*RedisDatabase, error) {
+func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants) (*RedisDatabase, error) {
 	// dial a TCP connection
 	conn, err := redis.Dial("tcp", address, redis.DialDatabase(db))
 	if err != nil {
@@ -676,17 +252,27 @@ func NewRedisDatabase(address string, db int, bcInfo types.BlockchainInfo, chain
 	// compute all keys and return the RedisDatabase instance
 	rdb := RedisDatabase{
 		conn:           conn,
-		blockFrequency: LockValue(chainCts.BlockFrequency),
+		blockFrequency: types.LockValue(chainCts.BlockFrequency),
+	}
+	// ensure the encoding type is as expected (or register if this is a fresh db)
+	err = rdb.registerOrValidateEncodingType(encodingType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+	}
+	// create our encoder, now that we know our encoding type is OK, as we'll need it from here on out
+	rdb.encoder, err = encoding.NewEncoder(encodingType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
 	}
 	// ensure the network info is as expected (or register if this is a fresh db)
 	err = rdb.registerOrValidateNetworkInfo(bcInfo)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
 	}
 	// create and load scripts
 	err = rdb.createAndLoadScripts()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create/load a lua script: %v", err)
+		return nil, fmt.Errorf("failed to create RedisDatabase client instance: failed to create/load a lua script: %v", err)
 	}
 	return &rdb, nil
 }
@@ -823,14 +409,38 @@ return coinOutputID .. output:sub(2)
 `
 )
 
-// registerOrValidateNetworkInfo registeres the network name and chain name if it doesn't exist yet,
+// registerOrValidateEncodingType registers the encoding type if it doesn't exist yet,
+// otherwise it ensures that the returned encoding type matches the expected encoding type.
+func (rdb *RedisDatabase) registerOrValidateEncodingType(encodingType encoding.Type) error {
+	rdb.conn.Send("HSETNX", internalKey, internalFieldEncoding, encodingType.String())
+	rdb.conn.Send("HGET", internalKey, internalFieldEncoding)
+	replies, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
+	if err != nil {
+		return fmt.Errorf("failed to register/validate encoding type: %v", err)
+	}
+	if len(replies) != 2 {
+		return errors.New("failed to register/validate encoding type: unexpected amount of replies received")
+	}
+	var receivedEncodingType encoding.Type
+	err = RedisStringLoader(&receivedEncodingType)(replies[1], err)
+	if err != nil {
+		return fmt.Errorf("failed to validate encoding type: %v", err)
+	}
+	if receivedEncodingType != encodingType {
+		return fmt.Errorf("cannot encode data using encoding type %s: db already uses encoding type %s",
+			encodingType.String(), receivedEncodingType.String())
+	}
+	return nil
+}
+
+// registerOrValidateNetworkInfo registers the network name and chain name if it doesn't exist yet,
 // otherwise it ensures that the returned network info matches the expected network info.
-func (rdb *RedisDatabase) registerOrValidateNetworkInfo(bcInfo types.BlockchainInfo) error {
+func (rdb *RedisDatabase) registerOrValidateNetworkInfo(bcInfo rivinetypes.BlockchainInfo) error {
 	networkInfo := NetworkInfo{
 		ChainName:   bcInfo.Name,
 		NetworkName: bcInfo.NetworkName,
 	}
-	rdb.conn.Send("HSETNX", internalKey, internalFieldNetwork, JSONMarshal(networkInfo))
+	rdb.conn.Send("HSETNX", internalKey, internalFieldNetwork, rdb.marshalData(&networkInfo))
 	rdb.conn.Send("HGET", internalKey, internalFieldNetwork)
 	replies, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
@@ -840,7 +450,7 @@ func (rdb *RedisDatabase) registerOrValidateNetworkInfo(bcInfo types.BlockchainI
 		return errors.New("failed to register/validate network info: unexpected amount of replies received")
 	}
 	var receivedNetworkInfo NetworkInfo
-	err = RedisJSONValue(&receivedNetworkInfo)(replies[1], err)
+	err = rdb.redisStructuredValue(&receivedNetworkInfo)(replies[1], err)
 	if err != nil {
 		return fmt.Errorf("failed to validate network info: %v", err)
 	}
@@ -855,7 +465,7 @@ func (rdb *RedisDatabase) registerOrValidateNetworkInfo(bcInfo types.BlockchainI
 // GetExplorerState implements Database.GetExplorerState
 func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
 	var state ExplorerState
-	switch err := RedisJSONValue(&state)(rdb.conn.Do("HGET", internalKey, internalFieldState)); err {
+	switch err := rdb.redisStructuredValue(&state)(rdb.conn.Do("HGET", internalKey, internalFieldState)); err {
 	case nil:
 		return state, nil
 	case redis.ErrNil:
@@ -868,29 +478,29 @@ func (rdb *RedisDatabase) GetExplorerState() (ExplorerState, error) {
 
 // SetExplorerState implements Database.SetExplorerState
 func (rdb *RedisDatabase) SetExplorerState(state ExplorerState) error {
-	return RedisError(rdb.conn.Do("HSET", internalKey, internalFieldState, JSONMarshal(state)))
+	return RedisError(rdb.conn.Do("HSET", internalKey, internalFieldState, rdb.marshalData(&state)))
 }
 
 // GetNetworkStats implements Database.GetNetworkStats
-func (rdb *RedisDatabase) GetNetworkStats() (NetworkStats, error) {
-	var stats NetworkStats
-	switch err := RedisJSONValue(&stats)(rdb.conn.Do("GET", statsKey)); err {
+func (rdb *RedisDatabase) GetNetworkStats() (types.NetworkStats, error) {
+	var stats types.NetworkStats
+	switch err := rdb.redisStructuredValue(&stats)(rdb.conn.Do("GET", statsKey)); err {
 	case nil:
 		rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
 		return stats, nil
 	case redis.ErrNil:
 		// default to fresh network stats if not stored yet
-		stats = NewNetworkStats()
+		stats = types.NewNetworkStats()
 		rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
 		return stats, nil
 	default:
-		return NetworkStats{}, err
+		return types.NetworkStats{}, err
 	}
 }
 
 // SetNetworkStats implements Database.SetNetworkStats
-func (rdb *RedisDatabase) SetNetworkStats(stats NetworkStats) error {
-	err := RedisError(rdb.conn.Do("SET", statsKey, JSONMarshal(stats)))
+func (rdb *RedisDatabase) SetNetworkStats(stats types.NetworkStats) error {
+	err := RedisError(rdb.conn.Do("SET", statsKey, rdb.marshalData(&stats)))
 	if err != nil {
 		return err
 	}
@@ -900,11 +510,11 @@ func (rdb *RedisDatabase) SetNetworkStats(stats NetworkStats) error {
 
 // AddCoinOutput implements Database.AddCoinOutput
 func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) error {
-	uh := co.Condition.UnlockHash()
+	uh := types.AsUnlockHash(co.Condition.UnlockHash())
 
 	addressKey, addressField := getAddressKeyAndField(uh)
 	// get initial values
-	wallet, err := RedisWalletFocusUnlockedBalance(rdb.conn.Do("HGET", addressKey, addressField))
+	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to get wallet for %s at %s#%s: %v", uh.String(), addressKey, addressField, err)
@@ -927,7 +537,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 		LockValue:   0,
 		Description: co.Description,
 	}.String())
-	rdb.conn.Send("HSET", addressKey, addressField, JSONMarshal(wallet))
+	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 3))
 	if err != nil {
@@ -937,18 +547,18 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 }
 
 // AddLockedCoinOutput implements Database.AddLockedCoinOutput
-func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutput, lt LockType, lockValue LockValue) error {
-	uh := co.Condition.UnlockHash()
+func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutput, lt LockType, lockValue types.LockValue) error {
+	uh := types.AsUnlockHash(co.Condition.UnlockHash())
 
 	addressKey, addressField := getAddressKeyAndField(uh)
 	// get initial values
-	wallet, err := RedisWalletFocusBalance(rdb.conn.Do("HGET", addressKey, addressField))
+	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to get wallet for %s at %s#%s: %v", uh.String(), addressKey, addressField, err)
 	}
 
-	err = wallet.Balance.Locked.AddLockedCoinOutput(id, WalletLockedOutput{
+	err = wallet.Balance.Locked.AddLockedCoinOutput(id, types.WalletLockedOutput{
 		Amount:      co.Value,
 		LockedUntil: rdb.lockValueAsLockTime(lt, lockValue),
 		Description: co.Description,
@@ -984,7 +594,7 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 		LockValue:   lockValue,
 		Description: co.Description,
 	}.String())
-	rdb.conn.Send("HSET", addressKey, addressField, JSONMarshal(wallet))
+	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 4))
 	if err != nil {
@@ -1005,7 +615,7 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 
 	// get wallet, so its balance can be updated
 	addressKey, addressField := getAddressKeyAndField(result.UnlockHash)
-	wallet, err := RedisWalletFocusUnlockedBalance(rdb.conn.Do("HGET", addressKey, addressField))
+	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to get wallet for %s at %s#%s: %v", result.UnlockHash.String(), addressKey, addressField, err)
@@ -1015,7 +625,7 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(result.CoinValue)
 
 	// update balance
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 	if err != nil {
 		return fmt.Errorf("redis: failed to spend coin output: failed to update coinoutput %s: %v", id.String(), err)
 	}
@@ -1035,7 +645,7 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 
 	// get wallet, so its balance can be updated
 	addressKey, addressField := getAddressKeyAndField(result.UnlockHash)
-	wallet, err := RedisWalletFocusUnlockedBalance(rdb.conn.Do("HGET", addressKey, addressField))
+	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to get wallet for %s at %s#%s: %v", result.UnlockHash.String(), addressKey, addressField, err)
@@ -1045,7 +655,7 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 	wallet.Balance.Unlocked = wallet.Balance.Unlocked.Add(result.CoinValue)
 
 	// update balance
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 	if err != nil {
 		return fmt.Errorf("redis: failed to revert coin input: failed to update coinoutput %s: %v", id.String(), err)
 	}
@@ -1074,7 +684,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 
 		// get wallet, so its balance can be updated
 		addressKey, addressField := getAddressKeyAndField(co.UnlockHash)
-		wallet, err := RedisWalletFocusBalance(rdb.conn.Do("HGET", addressKey, addressField))
+		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return CoinOutputStateNil, fmt.Errorf(
 				"redis: failed to get wallet for %s at %s#%s: %v", co.UnlockHash.String(), addressKey, addressField, err)
@@ -1096,7 +706,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 		}
 
 		// update balance
-		rdb.conn.Send("HSET", addressKey, addressField, JSONMarshal(wallet))
+		rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 	}
 
 	// always remove lock properties if a lock is used, no matter the state
@@ -1129,8 +739,8 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 // ApplyCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
 	rdb.networkTime, rdb.networkBlockHeight = time, height
-	rdb.unlockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
-	rdb.unlockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
+	rdb.unlockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(types.LockValue(height.BlockHeight)))
+	rdb.unlockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(types.LockValue(time.Timestamp)), types.LockValue(time.Timestamp).String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to unlock outputs: %v", err)
@@ -1147,7 +757,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 	for _, lcor := range lockedCoinOutputResults {
 		addressKey, addressField := getAddressKeyAndField(lcor.UnlockHash)
 		// get initial values
-		wallet, err := RedisWalletFocusBalance(rdb.conn.Do("HGET", addressKey, addressField))
+		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"redis: failed to get wallet for %s at %s#%s: %v", lcor.UnlockHash.String(), addressKey, addressField, err)
@@ -1164,7 +774,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 		n++
 		wallet.Balance.Unlocked = wallet.Balance.Unlocked.Add(lcor.CoinValue)
 		// update balance
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"failed to update balance of %q and update unlocked coin outputs: %v",
@@ -1177,8 +787,8 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 // RevertCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
 	rdb.networkTime, rdb.networkBlockHeight = time, height
-	rdb.lockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(LockValue(height)))
-	rdb.lockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(LockValue(time)), LockValue(time).String())
+	rdb.lockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(height.LockValue()))
+	rdb.lockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(time.LockValue()), time.LockValue().String())
 	values, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
 	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to lock outputs: %v", err)
@@ -1195,14 +805,14 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 	for _, ulcor := range unlockedCoinOutputResults {
 		addressKey, addressField := getAddressKeyAndField(ulcor.UnlockHash)
 		// get initial values
-		wallet, err := RedisWalletFocusBalance(rdb.conn.Do("HGET", addressKey, addressField))
+		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"redis: failed to get wallet for %s at %s#%s: %v", ulcor.UnlockHash.String(), addressKey, addressField, err)
 		}
 
 		// unlocked -> locked
-		err = wallet.Balance.Locked.AddLockedCoinOutput(ulcor.CoinOutputID, WalletLockedOutput{
+		err = wallet.Balance.Locked.AddLockedCoinOutput(ulcor.CoinOutputID, types.WalletLockedOutput{
 			Amount:      ulcor.CoinValue,
 			LockedUntil: rdb.lockValueAsLockTime(ulcor.LockType, ulcor.LockValue),
 			Description: ulcor.Description,
@@ -1211,7 +821,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		n++
 		wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(ulcor.CoinValue)
 		// update balance
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"failed to update balance of %q and update locked coin outputs: %v",
@@ -1226,7 +836,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	// store multisig wallet first, as that will indicate if the owners (should) have the address or not
 	addressKey, addressField := getAddressKeyAndField(address)
 	// get initial values
-	wallet, err := RedisWalletFocusMultiSignData(rdb.conn.Do("HGET", addressKey, addressField))
+	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to get multisig wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
@@ -1238,7 +848,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	wallet.MultiSignData.SignaturesRequired = signaturesRequired
 	wallet.MultiSignData.Owners = make([]types.UnlockHash, len(owners))
 	copy(wallet.MultiSignData.Owners[:], owners[:])
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to set multisig wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
@@ -1251,7 +861,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 		// store multisig wallet first, as that will indicate if the owners (should) have the address or not
 		addressKey, addressField := getAddressKeyAndField(owner)
 		// get initial values
-		wallet, err := RedisWalletFocusMultiSignAddresses(rdb.conn.Do("HGET", addressKey, addressField))
+		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return fmt.Errorf(
 				"redis: failed to get wallet for %s at %s#%s: %v", owner.String(), addressKey, addressField, err)
@@ -1262,7 +872,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 				owner.String(), address.String())
 			continue
 		}
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, JSONMarshal(wallet)))
+		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 		if err != nil {
 			return fmt.Errorf(
 				"redis: failed to set wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
@@ -1271,15 +881,46 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	return nil
 }
 
-func (rdb *RedisDatabase) lockValueAsLockTime(lt LockType, value LockValue) LockValue {
+func (rdb *RedisDatabase) lockValueAsLockTime(lt LockType, value types.LockValue) types.LockValue {
 	switch lt {
 	case LockTypeTime:
 		return value
 	case LockTypeHeight:
-		return LockValue(rdb.networkTime) + (value-LockValue(rdb.networkBlockHeight))*rdb.blockFrequency
+		return rdb.networkTime.LockValue() + (value-rdb.networkBlockHeight.LockValue())*rdb.blockFrequency
 	default:
 		panic(fmt.Sprintf("invalid lock type %d", lt))
 	}
+}
+
+func (rdb *RedisDatabase) marshalData(v interface{}) []byte {
+	b, err := rdb.encoder.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// redisStructuredValue creates a function that can be used to unmarshal a byte-slice
+// as a structured value into the given (reference) value (v).
+func (rdb *RedisDatabase) redisStructuredValue(v interface{}) func(interface{}, error) error {
+	return func(reply interface{}, err error) error {
+		b, err := redis.Bytes(reply, err)
+		if err != nil {
+			return err
+		}
+		return rdb.encoder.Unmarshal(b, v)
+	}
+}
+
+// redisWallet unmarshals an encoded address (wallet) value,
+// but creates a fresh wallet if no wallet was created yet for that address.
+func (rdb *RedisDatabase) redisWallet(r interface{}, e error) (wallet types.Wallet, err error) {
+	err = rdb.redisStructuredValue(&wallet)(r, e)
+	if err == redis.ErrNil {
+		err = nil
+		wallet = types.Wallet{}
+	}
+	return
 }
 
 func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
@@ -1296,25 +937,14 @@ func getCoinOutputKeyAndField(id types.CoinOutputID) (key, field string) {
 
 // getLockTimeBucketKey is an internal util function,
 // used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
-func getLockTimeBucketKey(lockValue LockValue) string {
+func getLockTimeBucketKey(lockValue types.LockValue) string {
 	return lockedByTimestampOutputsKey + ":" + (lockValue - lockValue%7200).String()
 }
 
 // getLockHeightBucketKey is an internal util function,
 // used to create the heightlocked bucket keys, grouping all heightlocked outputs with the same lock-height value.
-func getLockHeightBucketKey(lockValue LockValue) string {
+func getLockHeightBucketKey(lockValue types.LockValue) string {
 	return lockedByHeightOutputsKey + ":" + lockValue.String()
-}
-
-// JSON Helper Functions
-
-// JSONMarshal marshals the given value and panics if that fails.
-func JSONMarshal(v interface{}) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
 }
 
 // Redis Helper Functions
@@ -1339,18 +969,6 @@ func RedisSumInt64s(reply interface{}, err error) (int64, error) {
 	return sum, nil
 }
 
-// RedisJSONValue creates a function that can be used to unmarshal a string/byte-slice
-// as a JSON value into the given (reference) value (v).
-func RedisJSONValue(v interface{}) func(interface{}, error) error {
-	return func(reply interface{}, err error) error {
-		b, err := redis.Bytes(reply, err)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(b, v)
-	}
-}
-
 // RedisStringLoader creates a function that can be used to unmarshal a string value
 // as a (custom) StringLoader value into the given (reference) value (v).
 func RedisStringLoader(sl StringLoader) func(interface{}, error) error {
@@ -1361,61 +979,6 @@ func RedisStringLoader(sl StringLoader) func(interface{}, error) error {
 		}
 		return sl.LoadString(s)
 	}
-}
-
-// RedisWallet unmarshals a JSON-encoded address (wallet) value,
-// but creates a fresh wallet if no wallet was created yet for that address.
-func RedisWallet(r interface{}, e error) (wallet Wallet, err error) {
-	err = RedisJSONValue(&wallet)(r, e)
-	if err == redis.ErrNil {
-		err = nil
-		wallet = Wallet{}
-	}
-	return
-}
-
-// RedisWalletFocusUnlockedBalance unmarshals a JSON-encoded address (wallet) value,
-// but creates a fresh wallet if no wallet was created yet for that address.
-func RedisWalletFocusUnlockedBalance(r interface{}, e error) (wallet WalletFocusUnlockedBalance, err error) {
-	err = RedisJSONValue(&wallet)(r, e)
-	if err == redis.ErrNil {
-		err = nil
-		wallet = WalletFocusUnlockedBalance{}
-	}
-	return
-}
-
-// RedisWalletFocusBalance unmarshals a JSON-encoded address (wallet) value,
-// but creates a fresh wallet if no wallet was created yet for that address.
-func RedisWalletFocusBalance(r interface{}, e error) (wallet WalletFocusBalance, err error) {
-	err = RedisJSONValue(&wallet)(r, e)
-	if err == redis.ErrNil {
-		err = nil
-		wallet = WalletFocusBalance{}
-	}
-	return
-}
-
-// RedisWalletFocusMultiSignAddresses unmarshals a JSON-encoded address (wallet) value,
-// but creates a fresh wallet if no wallet was created yet for that address.
-func RedisWalletFocusMultiSignAddresses(r interface{}, e error) (wallet WalletFocusMultiSignAddresses, err error) {
-	err = RedisJSONValue(&wallet)(r, e)
-	if err == redis.ErrNil {
-		err = nil
-		wallet = WalletFocusMultiSignAddresses{}
-	}
-	return
-}
-
-// RedisWalletFocusMultiSignData unmarshals a JSON-encoded address (wallet) value,
-// but creates a fresh wallet if no wallet was created yet for that address.
-func RedisWalletFocusMultiSignData(r interface{}, e error) (wallet WalletFocusMultiSignData, err error) {
-	err = RedisJSONValue(&wallet)(r, e)
-	if err == redis.ErrNil {
-		err = nil
-		wallet = WalletFocusMultiSignData{}
-	}
-	return
 }
 
 // RedisCoinOutputResults returns all CoinOutputResults found for a given []string redis reply,
