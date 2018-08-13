@@ -343,10 +343,14 @@ If you meet all conditions listed above you can run the integration tests as fol
 
 ```
 $ make integration-tests
-go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "1"
-sumcoins test on block height 2026 passed :)
-go run tests/integration/sumcoins/main.go --db-address ":6379" --db-slot "0"
-sumcoins test on block height 1710 passed :)
+go run tests/integration/sumcoins/main.go \
+                --db-address ":6379" --db-slot "1" \
+                --encoding "msgp"
+sumcoins test —using encoding msgp— on block height 91385 passed :)
+go run tests/integration/sumcoins/main.go \
+                --db-address ":6379" --db-slot "0" \
+                --encoding "msgp"
+sumcoins test —using encoding msgp— on block height 81082 passed :)
 ```
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
