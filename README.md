@@ -1,5 +1,9 @@
 # rexplorer
 
+[![Build Status](https://travis-ci.org/threefoldfoundation/rexplorer.svg?branch=master)](https://travis-ci.org/threefoldfoundation/rexplorer)
+[![GoDoc](https://godoc.org/github.com/threefoldfoundation/rexplorer?status.svg)](https://godoc.org/github.com/threefoldfoundation/rexplorer)
+[![Go Report Card](https://goreportcard.com/badge/github.com/threefoldfoundation/rexplorer)](https://goreportcard.com/report/github.com/threefoldfoundation/rexplorer)
+
 rexplorer is a small explorer binary, that can aid in explorering a [tfchain][tfchain] network.
 It applies/reverts data —received from an embedded consensus module— into a redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.

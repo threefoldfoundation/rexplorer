@@ -817,6 +817,11 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 			LockedUntil: rdb.lockValueAsLockTime(ulcor.LockType, ulcor.LockValue),
 			Description: ulcor.Description,
 		})
+		if err != nil {
+			return 0, types.Currency{}, fmt.Errorf(
+				"redis: failed to add locked coin output%s for %s: %v",
+				ulcor.UnlockHash.String(), ulcor.CoinOutputID.String(), err)
+		}
 		coins = coins.Add(ulcor.CoinValue)
 		n++
 		wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(ulcor.CoinValue)

@@ -16,14 +16,19 @@ endif
 stdbindir = $(GOPATH)/bin
 ldflagsversion = -X main.rawVersion=$(fullversion)
 
+testpkgs = . ./pkg/types ./pkg/encoding
+
 install-std: test
 	go build -ldflags "$(ldflagsversion) -s -w" -o $(stdbindir)/rexplorer .
 
 install: test
 	go build -race -tags "debug dev" -ldflags "$(ldflagsversion)" -o $(stdbindir)/rexplorer .
 
-test:
-	go test -race -tags "debug dev" . ./pkg/types ./pkg/encoding
+test: ineffassign
+	go test -race -tags "debug testing" $(testpkgs)
+
+ineffassign:
+	ineffassign $(testpkgs)
 
 integration-tests: integration-test-sumcoins
 
