@@ -14,9 +14,13 @@ import (
 	"github.com/rivine/rivine/modules/consensus"
 	"github.com/rivine/rivine/modules/gateway"
 	"github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+
 	"github.com/spf13/cobra"
 )
 
+// Commands is the stateful object used as the central method-owning object
+// for all Cobra (CLI) commands.
 type Commands struct {
 	BlockchainInfo types.BlockchainInfo
 	ChainConstants types.ChainConstants
@@ -29,16 +33,21 @@ type Commands struct {
 	RedisAddr string
 	RedisDB   int
 
+	// encoding info
+	EncodingType encoding.Type
+
 	// the parent directory where the individual module
 	// directories will be created
 	RootPersistentDir string
 }
 
+// Root represents the root (`rexplorer`) command,
+// starting a rexplorer daemon instance, running until the user intervenes.
 func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	log.Println("starting rexplorer v" + version.String() + "...")
 
 	// create database
-	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.BlockchainInfo, cmd.ChainConstants)
+	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants)
 	if err != nil {
 		return fmt.Errorf("failed to create redis db client: %v", err)
 	}
@@ -140,6 +149,9 @@ func (cmd *Commands) perDir(module string) string {
 		module)
 }
 
+// Version represents the version (`rexplorer version`) command,
+// returning the version of the tool, dependencies and Go,
+// as well as the OS and Arch type.
 func (cmd *Commands) Version(_ *cobra.Command, args []string) {
 	fmt.Printf("Tool version            v%s\n", version.String())
 	fmt.Printf("TFChain Daemon version  v%s\n", cmd.BlockchainInfo.ChainVersion.String())

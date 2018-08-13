@@ -1,5 +1,9 @@
 # rexplorer
 
+[![Build Status](https://travis-ci.org/threefoldfoundation/rexplorer.svg?branch=master)](https://travis-ci.org/threefoldfoundation/rexplorer)
+[![GoDoc](https://godoc.org/github.com/threefoldfoundation/rexplorer?status.svg)](https://godoc.org/github.com/threefoldfoundation/rexplorer)
+[![Go Report Card](https://goreportcard.com/badge/github.com/threefoldfoundation/rexplorer)](https://goreportcard.com/report/github.com/threefoldfoundation/rexplorer)
+
 rexplorer is a small explorer binary, that can aid in explorering a [tfchain][tfchain] network.
 It applies/reverts data —received from an embedded consensus module— into a redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.
@@ -35,6 +39,9 @@ The persistent dir (used for some local boltdb consensus/gateway data) can be ch
 using the `-d`/`--persistent-directory` flag.
 
 Should you want to explore `testnet` instead of the `standard` net you can use the `--network testnet` flag.
+
+By default [MessagePack](https://msgpack.org) is used to encode all public data in the Redis Database,
+should you want to use [JSON](http://json.org) instead you can use the `--encoding json` flag.
 
 For more information use the `--help` flag:
 
@@ -140,6 +147,10 @@ JSON formats of value types defined by this module:
 }
 ```
 
+> When using MessagePack (the default encoding type), the keys are the same as when encoding as JSON,
+> and the values are encoded in the exact same way, except that the resulting values
+> follow the [MessagePack spec][msgp-spec].
+
 * example of a wallet (stored under a:01<4_random_hex_chars>):
 
 ```json
@@ -167,6 +178,10 @@ JSON formats of value types defined by this module:
 }
 ```
 
+> When using MessagePack (the default encoding type), the keys are the same as when encoding as JSON,
+> and the values are encoded in the exact same way, except that the resulting values
+> follow the [MessagePack spec][msgp-spec].
+
 * example of a multisig wallet (stored under a:03<4_random_hex_chars>):
 
 ```json
@@ -183,6 +198,10 @@ JSON formats of value types defined by this module:
     }
 }
 ```
+
+> When using MessagePack (the default encoding type), the keys are the same as when encoding as JSON,
+> and the values are encoded in the exact same way, except that the resulting values
+> follow the [MessagePack spec][msgp-spec].
 
 ## Examples
 
@@ -333,3 +352,4 @@ sumcoins test on block height 1710 passed :)
 [tfchain]: https://github.com/threefoldfoundation/tfchain
 [rivine]: https://github.com/rivine/rivine
 [redistypes]: https://redis.io/topics/data-types
+[msgp-spec]: https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family

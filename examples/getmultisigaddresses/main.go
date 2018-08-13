@@ -1,12 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -14,12 +14,17 @@ import (
 func main() {
 	flag.Parse()
 
+	encoder, err := encoding.NewEncoder(encodingType)
+	if err != nil {
+		panic(err)
+	}
+
 	args := flag.Args()
 	if len(args) != 1 {
 		panic("usage: " + os.Args[0] + " <unlockhash>")
 	}
 	var uh types.UnlockHash
-	err := uh.LoadString(args[0])
+	err = uh.LoadString(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "usage: "+os.Args[0]+" <unlockhash>")
 		panic(fmt.Sprintf("invalid uh %q: %v", args[0], err))
@@ -31,19 +36,19 @@ func main() {
 	}
 
 	addressKey, addressField := getAddressKeyAndField(uh)
-	var wallet struct {
-		MultiSignAddresses []types.UnlockHash `json:"multisignAddresses,omitempty"`
-	}
+	var wallet types.Wallet
 	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		if err != redis.ErrNil {
 			panic("failed to get wallet " + err.Error())
 		}
-		b = []byte("{}")
+		b = nil
 	}
-	err = json.Unmarshal(b, &wallet)
-	if err != nil {
-		panic("failed to json-unmarshal wallet: " + err.Error())
+	if len(b) > 0 {
+		err = encoder.Unmarshal(b, &wallet)
+		if err != nil {
+			panic("failed to unmarshal wallet: " + err.Error())
+		}
 	}
 
 	// print all unlock hashes
@@ -59,11 +64,14 @@ func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
 }
 
 var (
-	dbAddress string
-	dbSlot    int
+	dbAddress    string
+	dbSlot       int
+	encodingType encoding.Type
 )
 
 func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
+	flag.Var(&encodingType, "encoding",
+		"which encoding protocol to use, one of {json,msgp} (default: "+encodingType.String()+")")
 }

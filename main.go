@@ -88,6 +88,11 @@ func main() {
 		cmd.RedisDB,
 		"which redis database slot to use",
 	)
+	cmdRoot.Flags().VarP(
+		&cmd.EncodingType,
+		"encoding", "e",
+		"which encoding protocol to use, one of {json,msgp}",
+	)
 	cmdRoot.Flags().StringVarP(
 		&cmd.BlockchainInfo.NetworkName,
 		"network", "n",
