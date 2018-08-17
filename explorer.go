@@ -8,6 +8,7 @@ import (
 
 	"github.com/rivine/rivine/modules"
 	rivinetypes "github.com/rivine/rivine/types"
+	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
 )
 
 // Explorer defines the custom (internal) explorer module,
@@ -73,10 +74,10 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		for i, mp := range block.MinerPayouts {
 			explorer.stats.CointOutputCount--
 			if i == 0 {
-				// only the first miner payout is newly created money
 				explorer.stats.MinerPayoutCount--
-				explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(mp.Value))
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(types.AsCurrency(mp.Value))
+				// block reward is always created money, no matter what txs the block contains
+				explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(mp.Value))
 			} else {
 				explorer.stats.TransactionFeeCount--
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Sub(types.AsCurrency(mp.Value))
@@ -93,7 +94,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		}
 		// revert txs
 		for _, tx := range block.Transactions {
+			var isCoinCreationTransaction bool
+			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
+				explorer.stats.CoinCreationTransactionCount--
+				isCoinCreationTransaction = true
+				// sub miner fees if it was a coin created tx,
+				// as fees are created from new coins in a coin creation tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(fee))
+				}
+			}
 			explorer.stats.TransactionCount--
+
 			if len(tx.CoinInputs) > 0 || len(tx.BlockStakeOutputs) > 1 {
 				explorer.stats.ValueTransactionCount--
 			}
@@ -113,6 +125,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to revert coin output %s: %v", id.String(), err))
 				}
+				// only revert total coin count if output was part of a coin creation txs,
+				// we assume that a genesis block can never revert, as that would change the entire identity of a blockchain
+				if isCoinCreationTransaction {
+					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(co.Value))
+				}
+				// always count locked coins
 				if state == CoinOutputStateLocked {
 					explorer.stats.LockedCointOutputCount--
 					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(types.AsCurrency(co.Value))
@@ -160,11 +178,11 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			explorer.stats.CointOutputCount++
 			var description string
 			if i == 0 {
-				// only the first miner payout is newly created money
 				explorer.stats.MinerPayoutCount++
-				explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(mp.Value))
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(types.AsCurrency(mp.Value))
 				description = "block creator reward"
+				// block rewards are always freshly created money
+				explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(mp.Value))
 			} else {
 				explorer.stats.TransactionFeeCount++
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(types.AsCurrency(mp.Value))
@@ -188,7 +206,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		}
 		// apply txs
 		for _, tx := range block.Transactions {
+			isCoinCreationTransaction := isGenesisBlock
+			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
+				explorer.stats.CoinCreationTransactionCount++
+				isCoinCreationTransaction = true
+				// sub miner fees if it was a coin created tx,
+				// as fees are created from new coins in a coin creation tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(fee))
+				}
+			}
 			explorer.stats.TransactionCount++
+
 			if len(tx.CoinInputs) > 0 || len(tx.BlockStakeOutputs) > 1 {
 				explorer.stats.ValueTransactionCount++
 			}
@@ -210,9 +239,8 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to add coin output %s from %s: %v",
 						id, co.Condition.UnlockHash().String(), err))
 				}
-				// only count coins of outputs for genesis block,
-				// as it is currently the only place coins can be created
-				if isGenesisBlock {
+				// only count coins of outputs for genesis block txs or coin creation txs
+				if isCoinCreationTransaction {
 					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(co.Value))
 				}
 				// if it is locked, we'll always add it to the locked output
