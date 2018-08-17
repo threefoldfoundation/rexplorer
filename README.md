@@ -4,7 +4,7 @@
 [![GoDoc](https://godoc.org/github.com/threefoldfoundation/rexplorer?status.svg)](https://godoc.org/github.com/threefoldfoundation/rexplorer)
 [![Go Report Card](https://goreportcard.com/badge/github.com/threefoldfoundation/rexplorer)](https://goreportcard.com/report/github.com/threefoldfoundation/rexplorer)
 
-rexplorer is a small explorer binary, that can aid in exploring a [tfchain][tfchain] network.
+`rexplorer` is a small explorer binary, that can aid in exploring a [tfchain][tfchain] network.
 It applies/reverts data —received from an embedded consensus module— into a Redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.
 
@@ -21,9 +21,11 @@ GOOS         darwin
 GOARCH       amd64
 ```
 
+> `rexplorer` supports Go 1.9 and above. Older versions of Golang may work but aren't supported.
+
 ## Usage
 
-To start a rexplorer instance for the standard network,
+To start a `rexplorer` instance for the standard network,
 storing all persistent non-redis data into a sub directory of the current root directory,
 you can do so as simple as:
 
@@ -328,10 +330,44 @@ $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2f
 
 ## Testing
 
+The quality and correctness of `rexplorer` is tested using
+both [unit tests](#unit-tests) and [integration tests](#integration-tests).
+
 ### Unit Tests
 
-This project has no unit tests yet, and is mostly tested using manual testing
-as well as by using [automated integration tests](#integration-tests).
+You can run all unit tests in one command as follows:
+
+```
+$ make unit-tests
+go test -race -tags "debug testing" . ./pkg/types ./pkg/encoding
+ok      github.com/threefoldfoundation/rexplorer        1.066s
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.046s
+?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
+```
+
+Even better is if you run the `test` Make target instead, as that will also detects ineffectual assignments:
+
+```
+$ make test
+ineffassign . ./pkg/types ./pkg/encoding
+go test -race -tags "debug testing" . ./pkg/types ./pkg/encoding
+ok      github.com/threefoldfoundation/rexplorer        1.066s
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.046s
+?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
+```
+
+> the Make `test` target (and thus also its depending Make `ineffassign` target)
+> does require you to install _ineffassign_, which can be done using the following command:
+> `go get -u github.com/gordonklaus/ineffassign`
+
+Should you want to run the unit tests without having to use Make, you can do so as follows:
+
+```
+$ go test -race -tags "debug testing" . $(go list ./pkg/...)
+ok      github.com/threefoldfoundation/rexplorer        1.033s
+?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.025s
+```
 
 ### Integration Tests
 

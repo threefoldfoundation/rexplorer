@@ -5,7 +5,7 @@ TESTNET_REDIS_ADDR ?= :6379
 TESTNET_REDIS_DB ?= 1
 TESTNET_ENCODING_TYPE ?= msgp
 
-version = $(shell git describe | cut -d '-' -f 1)
+version = $(shell git describe --abbrev=0)
 commit = $(shell git rev-parse --short HEAD)
 ifeq ($(commit), $(shell git rev-list -n 1 $(version) | cut -c1-7))
 fullversion = $(version)
@@ -24,7 +24,9 @@ install-std: test
 install: test
 	go build -race -tags "debug dev" -ldflags "$(ldflagsversion)" -o $(stdbindir)/rexplorer .
 
-test: ineffassign
+test: ineffassign unit-tests
+
+unit-tests:
 	go test -race -tags "debug testing" $(testpkgs)
 
 ineffassign:
