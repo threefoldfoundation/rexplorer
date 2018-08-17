@@ -148,9 +148,9 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	// wait for server to be killed or the process to be done
 	select {
 	case <-sigChan:
-		log.Println("\r\nCaught stop signal, quitting...")
-	case <-context.Background().Done():
-		log.Println("\r\ncontext is done, quitting...")
+		log.Println("Caught stop signal, quitting...")
+	case <-ctx.Done():
+		log.Println("context is done, quitting...")
 	}
 
 	cancel()
