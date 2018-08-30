@@ -101,7 +101,7 @@
     "sync",
     "types"
   ]
-  revision = "dc01271bdf27edab31b104ee9bbfe36b48cb301d"
+  revision = "e97af67533f234d229a4a0b7b7641b39e715ef90"
 
 [[projects]]
   name = "github.com/rivine/smux"
@@ -129,7 +129,7 @@
     "pkg/persist",
     "pkg/types"
   ]
-  revision = "0904d793e5e0c71632f0924241fb3cb07f3d27b8"
+  revision = "5137e49ddb729ec1f1d1b38e9683338f8f3639d5"
 
 [[projects]]
   name = "github.com/tinylib/msgp"
