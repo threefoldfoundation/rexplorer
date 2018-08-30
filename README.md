@@ -301,25 +301,26 @@ and you can run it yourself as follows:
 ```
 $ go run ./examples/getstats/main.go --db-slot 1
 tfchain network has:
-  * a total of 100953020.1 TFT, of which 100944484.8 TFT is liquid,
-    8535.3 TFT is locked, 943020 TFT is paid out as miner payouts
-    and 34.800000071 TFT is paid out as tx fees
-  * 99.99155% liquid coins of a total of 100953020.1 TFT coins
-  * 00.00845% locked coins of a total of 100953020.1 TFT coins
-  * a total of 94638 transactions, of which 337 value transactions,
-    1 coin creation transactions and 94300 are pure block creation transactions
-  * a block height of 94302, with the time of the highest block
-    being 2018-08-17 19:14:16 +0200 CEST (1534526056)
-  * a total of 94303 blocks, 337 value transactions and 1871 coin inputs
-  * a total of 95201 coin outputs, of which 94464 are liquid, 737 are locked,
-    606 transfer value, 94302 are miner payouts and 293 are tx fees
-  * a total of 503 unique addresses that have been used
-  * an average of 01.79822% value coin outputs per value transaction
-  * an average of 00.00357% value transactions per block
-  * 99.22585% liquid outputs of a total of 95201 coin outputs
-  * 00.77415% locked outputs of a total of 95201 coin outputs
-  * 00.35609% value transactions of a total of 94638 transactions
-  * 00.00106% coin creation transactions of a total of 94638 transactions
+  * a total of 101034870.1 TFT, of which 101026825.1 TFT is liquid,
+    8045 TFT is locked, 1024870 TFT is paid out as miner payouts
+    and 35.900000071 TFT is paid out as tx fees
+  * 99.99204% liquid coins of a total of 101034870.1 TFT coins
+  * 00.00796% locked coins of a total of 101034870.1 TFT coins
+  * a total of 102834 transactions, of which 348 value transactions,
+    1 coin creation transactions, 0 coin creator definition transactions
+    and 102485 are pure block creation transactions
+  * a block height of 102487, with the time of the highest block
+    being 2018-08-30 09:56:35 +0200 CEST (1535615795)
+  * a total of 102488 blocks, 348 value transactions and 1884 coin inputs
+  * a total of 103417 coin outputs, of which 102683 are liquid, 734 are locked,
+    626 transfer value, 102487 are miner payouts and 304 are tx fees
+  * a total of 516 unique addresses that have been used
+  * an average of 01.79885% value coin outputs per value transaction
+  * an average of 00.00340% value transactions per block
+  * 99.29025% liquid outputs of a total of 103417 coin outputs
+  * 00.70975% locked outputs of a total of 103417 coin outputs
+  * 00.33841% value transactions of a total of 102834 transactions
+  * 00.00097% coin creation transactions of a total of 102834 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
