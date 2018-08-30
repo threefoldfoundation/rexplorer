@@ -12,11 +12,11 @@ such that the tfchain network data can be consumed/used in a meaningful way.
 
 ```
 $ go get -u github.com/threefoldfoundation/rexplorer && rexplorer version
-Tool version            v0.1.1
-TFChain Daemon version  v1.0.7
+Tool version            v0.1.2-4d10881
+TFChain Daemon version  v1.1.0-rc-1
 Rivine protocol version v1.0.7
 
-Go Version   v1.10.3
+Go Version   v1.11
 GOOS         darwin
 GOARCH       amd64
 ```
