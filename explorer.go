@@ -331,7 +331,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 func (explorer *Explorer) setMintCondition(condition rivinetypes.UnlockConditionProxy) error {
 conditionSwitch:
 	switch ct := condition.ConditionType(); ct {
-	case rivinetypes.ConditionTypeNil:
+	case rivinetypes.ConditionTypeUnlockHash:
 		return explorer.db.SetCoinCreators([]types.UnlockHash{types.AsUnlockHash(condition.UnlockHash())})
 
 	case rivinetypes.ConditionTypeMultiSignature:

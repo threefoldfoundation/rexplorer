@@ -77,8 +77,9 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetStandardnetGenesis()
 		cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+
 	case config.NetworkNameTest:
-		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.RootPersistentDir, config.GetTestnetGenesisMintCondition())
+		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetTestnetGenesisMintCondition())
 		if cmdErr != nil {
 			return fmt.Errorf("failed to create tfchain transaction DB for tfchain testnet: %v", cmdErr)
 		}
@@ -90,6 +91,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetTestnetGenesis()
 		cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+
 	default:
 		return fmt.Errorf(
 			"%q is an invalid network name, has to be one of {standard,testnet}",
