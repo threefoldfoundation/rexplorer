@@ -4,10 +4,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/rivine/rivine/crypto"
+	"github.com/rivine/rivine/encoding"
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/types"
 
@@ -399,6 +401,22 @@ func (lv *LockValue) LoadString(str string) error {
 		return err
 	}
 	*lv = LockValue(v)
+	return nil
+}
+
+// MarshalSia implements rivine/encoding.MarshalSia
+func (lv LockValue) MarshalSia(w io.Writer) error {
+	return encoding.NewEncoder(w).Encode(uint64(lv))
+}
+
+// UnmarshalSia implements rivine/encoding.UnmarshalSia
+func (lv *LockValue) UnmarshalSia(r io.Reader) error {
+	var raw uint64
+	err := encoding.NewDecoder(r).Decode(&raw)
+	if err != nil {
+		return err
+	}
+	*lv = LockValue(raw)
 	return nil
 }
 

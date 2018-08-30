@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
+	"github.com/rivine/rivine/crypto"
+	rivineencoding "github.com/rivine/rivine/encoding"
 	rivinetypes "github.com/rivine/rivine/types"
 
 	"github.com/gomodule/redigo/redis"
@@ -171,9 +175,9 @@ type (
 	}
 	// DatabaseCoinOutput is used to store all spent/unspent coin outputs in the custom CSV format (used internally only)
 	DatabaseCoinOutput struct {
+		State       CoinOutputState
 		UnlockHash  types.UnlockHash
 		CoinValue   types.Currency
-		State       CoinOutputState
 		LockType    LockType
 		LockValue   types.LockValue
 		Description string
@@ -208,6 +212,41 @@ func (co *DatabaseCoinOutput) LoadString(str string) error {
 	return ParseStringLoaders(str, csvSeperator, &co.State, &co.UnlockHash, &co.CoinValue, &co.LockType, &co.LockValue, &co.Description)
 }
 
+// Bytes returns a binary representation of a DatabaseCoinOutput,
+// using Rivine's binary encoding package (github.com/rivine/rivine/encoding).
+func (co DatabaseCoinOutput) Bytes() []byte {
+	buf := bytes.NewBuffer(nil)
+	encoder := rivineencoding.NewEncoder(buf)
+	encoder.EncodeAll(
+		co.State,
+		co.UnlockHash,
+		co.CoinValue,
+		co.LockType,
+		co.LockValue,
+		co.Description,
+	)
+	return buf.Bytes()
+}
+
+// LoadBytes decodes the given bytes using the binary representation of a DatabaseCoinOutput,
+// making use of Rivine's binary encoding package (github.com/rivine/rivine/encoding) to decode,
+// the previously encoded DatabaseCoinOutput.
+func (co *DatabaseCoinOutput) LoadBytes(b []byte) error {
+	decoder := rivineencoding.NewDecoder(bytes.NewReader(b))
+	err := decoder.DecodeAll(
+		&co.State,
+		&co.UnlockHash,
+		&co.CoinValue,
+		&co.LockType,
+		&co.LockValue,
+		&co.Description,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to decode DatabaseCoinOutput: %v", err)
+	}
+	return nil
+}
+
 // String implements Stringer.String
 func (col DatabaseCoinOutputLock) String() string {
 	return FormatStringers(csvSeperator, col.CoinOutputID, col.LockValue)
@@ -218,14 +257,31 @@ func (col *DatabaseCoinOutputLock) LoadString(str string) error {
 	return ParseStringLoaders(str, csvSeperator, &col.CoinOutputID, &col.LockValue)
 }
 
-// String implements Stringer.String
-func (cor DatabaseCoinOutputResult) String() string {
-	return FormatStringers(csvSeperator, cor.CoinOutputID, cor.UnlockHash, cor.CoinValue, cor.LockType, cor.LockValue, cor.Description)
-}
+// LoadBytes implements BytesLoader.LoadBytes
+func (cor *DatabaseCoinOutputResult) LoadBytes(b []byte) error {
+	// load prefixed coin output ID
+	const coinOutputIDStringSize = crypto.HashSize * 2
+	if len(b) < coinOutputIDStringSize+1 {
+		return fmt.Errorf("failed to load Prefixed CoinOutputID in DatabaseCoinOutputResult from given byte slice: %v", io.EOF)
+	}
+	err := cor.CoinOutputID.LoadString(string(b[:coinOutputIDStringSize]))
+	if err != nil {
+		return fmt.Errorf("failed to load Prefixed CoinOutputID in DatabaseCoinOutputResult from given byte slice: %v", err)
+	}
 
-// LoadString implements StringLoader.LoadString
-func (cor *DatabaseCoinOutputResult) LoadString(str string) error {
-	return ParseStringLoaders(str, csvSeperator, &cor.CoinOutputID, &cor.UnlockHash, &cor.CoinValue, &cor.LockType, &cor.LockValue, &cor.Description)
+	// load returned DatabaseCoinOutput values
+	decoder := rivineencoding.NewDecoder(bytes.NewReader(b[coinOutputIDStringSize:]))
+	err = decoder.DecodeAll(
+		&cor.UnlockHash,
+		&cor.CoinValue,
+		&cor.LockType,
+		&cor.LockValue,
+		&cor.Description,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to decode DatabaseCoinOutput: %v", err)
+	}
+	return nil
 }
 
 const (
@@ -314,26 +370,26 @@ func (rdb *RedisDatabase) createAndLoadScripts() (err error) {
 
 	rdb.unlockByHeightScript, err = rdb.createAndLoadScript(
 		updateHeightLocksScriptSource,
-		CoinOutputStateLocked.String(), CoinOutputStateLiquid.String())
+		CoinOutputStateLocked.Byte(), CoinOutputStateLiquid.Byte())
 	if err != nil {
 		return
 	}
 	rdb.lockByHeightScript, err = rdb.createAndLoadScript(
 		updateHeightLocksScriptSource,
-		CoinOutputStateLiquid.String(), CoinOutputStateLocked.String())
+		CoinOutputStateLiquid.Byte(), CoinOutputStateLocked.Byte())
 	if err != nil {
 		return
 	}
 
 	rdb.spendCoinOutputScript, err = rdb.createAndLoadScript(
 		updateCoinOutputScriptSource,
-		CoinOutputStateLiquid.String(), CoinOutputStateSpent.String())
+		CoinOutputStateLiquid.Byte(), CoinOutputStateSpent.Byte())
 	if err != nil {
 		return
 	}
 	rdb.unspendCoinOutputScript, err = rdb.createAndLoadScript(
 		updateCoinOutputScriptSource,
-		CoinOutputStateSpent.String(), CoinOutputStateLiquid.String())
+		CoinOutputStateSpent.Byte(), CoinOutputStateLiquid.Byte())
 	if err != nil {
 		return
 	}
@@ -367,8 +423,8 @@ for i = 1 , #outputsToUpdate do
 	local key = 'c:' .. outputID:sub(1,4)
 	local field = outputID:sub(5)
 	local output = redis.call("HGET", key, field)
-	if output:sub(1,1) == "%[1]s" then
-		output = "%[2]s" .. output:sub(2)
+	if output:byte(1) == %[1]v then
+		output = string.char(%[2]v) .. output:sub(2)
 		redis.call("HSET", key, field, output)
 		results[#results+1] = outputID .. output:sub(2)
 	end
@@ -404,10 +460,10 @@ local key = 'c:' .. coinOutputID:sub(1,4)
 local field = coinOutputID:sub(5)
 
 local output = redis.call("HGET", key, field)
-if output:sub(1,1) ~= "%[1]s" then
+if output:byte(1) ~= %[1]v then
 	return nil
 end
-output = "%[2]s" .. output:sub(2)
+output = string.char(%[2]v) .. output:sub(2)
 redis.call("HSET", key, field, output)
 return coinOutputID .. output:sub(2)
 `
@@ -540,7 +596,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 		LockType:    LockTypeNone,
 		LockValue:   0,
 		Description: co.Description,
-	}.String())
+	}.Bytes())
 	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 3))
@@ -597,7 +653,7 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 		LockType:    lt,
 		LockValue:   lockValue,
 		Description: co.Description,
-	}.String())
+	}.Bytes())
 	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 4))
@@ -610,7 +666,7 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 // SpendCoinOutput implements Database.SpendCoinOutput
 func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	var result DatabaseCoinOutputResult
-	err := RedisStringLoader(&result)(rdb.spendCoinOutputScript.Do(rdb.conn, id.String()))
+	err := RedisBytesLoader(&result)(rdb.spendCoinOutputScript.Do(rdb.conn, id.String()))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to spend coin output: cannot update coin output %s: %v",
@@ -640,7 +696,7 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 // more or less a reverse process of SpendCoinOutput
 func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 	var result DatabaseCoinOutputResult
-	err := RedisStringLoader(&result)(rdb.unspendCoinOutputScript.Do(rdb.conn, id.String()))
+	err := RedisBytesLoader(&result)(rdb.unspendCoinOutputScript.Do(rdb.conn, id.String()))
 	if err != nil {
 		return fmt.Errorf(
 			"redis: failed to revert coin input: cannot update coin output %s: %v",
@@ -669,7 +725,7 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 // RevertCoinOutput implements Database.RevertCoinOutput
 func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputState, error) {
 	var co DatabaseCoinOutput
-	err := RedisStringLoader(&co)(rdb.coinOutputDropScript.Do(rdb.conn, id.String()))
+	err := RedisBytesLoader(&co)(rdb.coinOutputDropScript.Do(rdb.conn, id.String()))
 	if err != nil {
 		return CoinOutputStateNil, fmt.Errorf(
 			"redis: failed to revert coin output: cannot drop coin output %s: %v",
@@ -1003,16 +1059,28 @@ func RedisStringLoader(sl StringLoader) func(interface{}, error) error {
 	}
 }
 
+// RedisBytesLoader creates a function that can be used to unmarshal a slice byte value
+// as a (custom) BytesLoader value into the given (reference) value (v).
+func RedisBytesLoader(bl BytesLoader) func(interface{}, error) error {
+	return func(reply interface{}, err error) error {
+		b, err := redis.Bytes(reply, err)
+		if err != nil {
+			return err
+		}
+		return bl.LoadBytes(b)
+	}
+}
+
 // RedisCoinOutputResults returns all CoinOutputResults found for a given []string redis reply,
 // only used in combination with `(*RedisDatabase).UpdateLockedCoinOutputs`, see that method for more information.
 func RedisCoinOutputResults(reply interface{}, err error) ([]DatabaseCoinOutputResult, error) {
-	strings, err := redis.Strings(reply, err)
+	slices, err := redis.ByteSlices(reply, err)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]DatabaseCoinOutputResult, len(strings))
-	for i, str := range strings {
-		err = results[i].LoadString(str)
+	results := make([]DatabaseCoinOutputResult, len(slices))
+	for i, slice := range slices {
+		err = results[i].LoadBytes(slice)
 		if err != nil {
 			return nil, err
 		}

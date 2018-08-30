@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -63,9 +64,35 @@ func (lt *LockType) LoadString(str string) error {
 	return nil
 }
 
+// MarshalSia implements rivine/encoding.MarshalSia
+func (lt LockType) MarshalSia(w io.Writer) error {
+	_, err := w.Write([]byte{byte(lt)})
+	return err
+}
+
+// UnmarshalSia implements rivine/encoding.UnmarshalSia
+func (lt *LockType) UnmarshalSia(r io.Reader) error {
+	var b [1]byte
+	_, err := r.Read(b[:])
+	if err != nil {
+		return err
+	}
+	nlt := LockType(b[0])
+	if nlt > LockTypeTime {
+		return fmt.Errorf("invalid lock type %d", nlt)
+	}
+	*lt = nlt
+	return nil
+}
+
 // StringLoader loads a string and uses it as the (parsed) value.
 type StringLoader interface {
 	LoadString(string) error
+}
+
+// BytesLoader loads a byte slice and uses it as the (parsed) value.
+type BytesLoader interface {
+	LoadBytes([]byte) error
 }
 
 // FormatStringers formats the given stringers into one string using the given separator
@@ -123,6 +150,11 @@ const (
 	CoinOutputStateSpent
 )
 
+// Byte returns this CoinOutputState as a byte
+func (cos CoinOutputState) Byte() byte {
+	return byte(cos)
+}
+
 // String implements Stringer.String
 func (cos CoinOutputState) String() string {
 	return strconv.FormatUint(uint64(cos), 10)
@@ -135,6 +167,27 @@ func (cos *CoinOutputState) LoadString(str string) error {
 		return err
 	}
 	ncos := CoinOutputState(v)
+	if ncos == CoinOutputStateNil || ncos > CoinOutputStateSpent {
+		return fmt.Errorf("invalid coin output state %d", ncos)
+	}
+	*cos = ncos
+	return nil
+}
+
+// MarshalSia implements rivine/encoding.MarshalSia
+func (cos CoinOutputState) MarshalSia(w io.Writer) error {
+	_, err := w.Write([]byte{cos.Byte()})
+	return err
+}
+
+// UnmarshalSia implements rivine/encoding.UnmarshalSia
+func (cos *CoinOutputState) UnmarshalSia(r io.Reader) error {
+	var b [1]byte
+	_, err := r.Read(b[:])
+	if err != nil {
+		return err
+	}
+	ncos := CoinOutputState(b[0])
 	if ncos == CoinOutputStateNil || ncos > CoinOutputStateSpent {
 		return fmt.Errorf("invalid coin output state %d", ncos)
 	}
