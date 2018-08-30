@@ -1,0 +1,51 @@
+syntax = "proto2";
+
+package types;
+
+// NetworkStats collects the global statistics for the blockchain.
+message PBNetworkStats {
+	required uint64 timestamp = 1;
+    required uint64 blockheight = 2;
+    required uint64 tx_count = 3;
+    required uint64 coin_creation_tx_count = 4;
+    required uint64 coin_creator_def_tx_count = 5;
+    required uint64 value_tx_count = 6;
+    required uint64 coin_output_count = 7;
+    required uint64 locked_coin_output_count = 8;
+    required uint64 coin_input_count = 9;
+    required uint64 miner_payout_count = 10;
+    required uint64 tx_fee_count = 11;
+	required bytes miner_payouts = 12;
+	required bytes tx_fees = 13;
+	required bytes coins = 14;
+	required bytes locked_coins = 15;
+}
+
+
+// Wallet collects all data for an address in a simple format,
+// focussing on its balance and multisign properties.
+message PBWallet {
+    required bytes balance_unlocked = 1;
+    optional PBWalletLockedBalance balance_locked = 2;
+    repeated bytes multisign_addresses = 3;
+    optional PBWalletMultiSignData multisign_data = 4;
+}
+
+// WalletBalance contains the unlocked and/or locked balance of a wallet.
+message PBWalletLockedBalance {
+    required bytes total = 1;
+    map<string, PBWalletLockedOutput> outputs = 2;
+}
+
+// WalletLockedOutput defines a locked output targeted at a wallet.
+message PBWalletLockedOutput {
+    required bytes amount = 1;
+    required uint64 locked_until = 2;
+    optional string description = 3;
+}
+
+// WalletMultiSignData defines the extra data defined for a MultiSignWallet.
+message PBWalletMultiSignData {
+    required uint64 signatures_required = 1;
+    repeated bytes owners = 2;
+}

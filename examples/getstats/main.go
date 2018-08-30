@@ -74,11 +74,11 @@ func main() {
 	fmt.Printf("  * a block height of %d, with the time of the highest block\n    being %s (%d)\n",
 		stats.BlockHeight.BlockHeight, stats.Timestamp.String(), stats.Timestamp.Timestamp)
 	fmt.Printf("  * a total of %d blocks, %d value transactions and %d coin inputs\n",
-		stats.BlockHeight.BlockHeight+1, stats.ValueTransactionCount, stats.CointInputCount)
-	liquidCoinOutputCount := stats.CointOutputCount - stats.LockedCointOutputCount
-	valueCoinOutputs := stats.CointOutputCount - stats.MinerPayoutCount - stats.TransactionFeeCount
+		stats.BlockHeight.BlockHeight+1, stats.ValueTransactionCount, stats.CoinInputCount)
+	liquidCoinOutputCount := stats.CoinOutputCount - stats.LockedCoinOutputCount
+	valueCoinOutputs := stats.CoinOutputCount - stats.MinerPayoutCount - stats.TransactionFeeCount
 	fmt.Printf("  * a total of %d coin outputs, of which %d are liquid, %d are locked,\n    %d transfer value, %d are miner payouts and %d are tx fees\n",
-		stats.CointOutputCount, liquidCoinOutputCount, stats.LockedCointOutputCount,
+		stats.CoinOutputCount, liquidCoinOutputCount, stats.LockedCoinOutputCount,
 		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount)
 	fmt.Printf("  * a total of %d unique addresses that have been used\n", uniqueAddressCount)
 	fmt.Printf("  * an average of %08.5f%% value coin outputs per value transaction\n",
@@ -87,11 +87,11 @@ func main() {
 		float64(stats.ValueTransactionCount)/float64(stats.BlockHeight.BlockHeight+1))
 	if liquidCoinOutputCount > 0 {
 		fmt.Printf("  * %08.5f%% liquid outputs of a total of %d coin outputs\n",
-			float64(liquidCoinOutputCount)/float64(stats.CointOutputCount)*100, stats.CointOutputCount)
+			float64(liquidCoinOutputCount)/float64(stats.CoinOutputCount)*100, stats.CoinOutputCount)
 	}
-	if stats.LockedCointOutputCount > 0 {
+	if stats.LockedCoinOutputCount > 0 {
 		fmt.Printf("  * %08.5f%% locked outputs of a total of %d coin outputs\n",
-			float64(stats.LockedCointOutputCount)/float64(stats.CointOutputCount)*100, stats.CointOutputCount)
+			float64(stats.LockedCoinOutputCount)/float64(stats.CoinOutputCount)*100, stats.CoinOutputCount)
 	}
 	if stats.ValueTransactionCount > 0 {
 		fmt.Printf("  * %08.5f%% value transactions of a total of %d transactions\n",
@@ -100,6 +100,10 @@ func main() {
 	if stats.CoinCreationTransactionCount > 0 {
 		fmt.Printf("  * %08.5f%% coin creation transactions of a total of %d transactions\n",
 			float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100, stats.TransactionCount)
+	}
+	if stats.CoinCreatorDefinitionTransactionCount > 0 {
+		fmt.Printf("  * %08.5f%% coin creator definition transactions of a total of %d transactions\n",
+			float64(stats.CoinCreatorDefinitionTransactionCount)/float64(stats.TransactionCount)*100, stats.TransactionCount)
 	}
 }
 
@@ -113,5 +117,5 @@ func init() {
 	flag.StringVar(&dbAddress, "db-address", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "db-slot", 0, "slot/index of the redis db")
 	flag.Var(&encodingType, "encoding",
-		"which encoding protocol to use, one of {json,msgp} (default: "+encodingType.String()+")")
+		"which encoding protocol to use, one of {json,msgp,protobuf} (default: "+encodingType.String()+")")
 }

@@ -24,7 +24,6 @@
 #   go-tests = true
 #   unused-packages = true
 
-
 [[constraint]]
   branch = "master"
   name = "github.com/rivine/rivine"
@@ -37,6 +36,17 @@
   branch = "master"
   name = "github.com/threefoldfoundation/tfchain"
 
+[[constraint]]
+  name = "github.com/gogo/protobuf"
+  version = "1.1.1"
+
 [prune]
+  non-go = true
   go-tests = true
   unused-packages = true
+
+  [[prune.project]]
+    name = "github.com/gogo/protobuf"
+    non-go = false
+    go-tests = false
+    unused-packages = false

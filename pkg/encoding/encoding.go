@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -15,13 +16,15 @@ type Type uint8
 // the Type enumeration values
 const (
 	TypeMessagePack Type = iota
+	TypeProtocolBuffer
 	TypeJSON
 )
 
 // string versions of the Type enumeration values
 const (
-	TypeMessagePackStr = "msgp"
-	TypeJSONStr        = "json"
+	TypeMessagePackStr    = "msgp"
+	TypeProtocolBufferStr = "protobuf"
+	TypeJSONStr           = "json"
 )
 
 // String implements flag.Value.String and fmt.Stringer.String
@@ -29,6 +32,8 @@ func (et Type) String() string {
 	switch et {
 	case TypeMessagePack:
 		return TypeMessagePackStr
+	case TypeProtocolBuffer:
+		return TypeProtocolBufferStr
 	case TypeJSON:
 		return TypeJSONStr
 	default:
@@ -41,17 +46,19 @@ func (et *Type) Set(str string) error {
 	switch str {
 	case TypeMessagePackStr:
 		*et = TypeMessagePack
+	case TypeProtocolBufferStr:
+		*et = TypeProtocolBuffer
 	case TypeJSONStr:
 		*et = TypeJSON
 	default:
-		return fmt.Errorf("unknown Typee string: %s", str)
+		return fmt.Errorf("unknown Type string: %s", str)
 	}
 	return nil
 }
 
 // Type implements pflag.Value.Type
 func (et Type) Type() string {
-	return "EncdodingType"
+	return "EncodingType"
 }
 
 // LoadString implements StringLoader.LoadString,
@@ -73,6 +80,8 @@ func NewEncoder(et Type) (Encoder, error) {
 	switch et {
 	case TypeMessagePack:
 		return NewMessagePackEncoder(), nil
+	case TypeProtocolBuffer:
+		return NewProtocolBufferEncoder(), nil
 	case TypeJSON:
 		return NewJSONEncoder(), nil
 	default:
@@ -90,12 +99,47 @@ type (
 		r  *msgp.Reader
 		br *bytes.Reader
 	}
+	// ProtocolBufferEncoder defines the standard implementation for the
+	// ProtocolBuffer Encoding Type, using a single proto.Buffer for all marshal calls,
+	// of the github.com/gogo/protobuf/proto internally.
+	ProtocolBufferEncoder struct {
+		buffer *proto.Buffer
+	}
 	// JSONEncoder defines the standard implementation for the
 	// JSON Encoding Type, using a single bytes.Buffer for all marshal calls,
 	// and using the Encoder type of the std encoding/json pkg internally.
 	JSONEncoder struct {
 		e  *json.Encoder
 		wb *bytes.Buffer
+	}
+)
+
+// custom ProtocolBuffer interfaces,
+// as to allow our high level structures to implement these,
+// such that they can automatically play nice with ProtocolBuffer as well,
+// without having to change any of the non-encoding logic.
+type (
+	// ProtocolBufferWriter is used by ProtocolBufferMarshaler implementations
+	// to marshal (=write) themselves as a ProtocolBuffer Message.
+	ProtocolBufferWriter interface {
+		Marshal(pb proto.Message) error
+	}
+	// ProtocolBufferReader is used by ProtocolBufferUnmarshaler implementations
+	// to unmarshal (=read) their encoded form as a given ProtocolBuffer Message
+	ProtocolBufferReader interface {
+		Unmarshal(pb proto.Message) error
+	}
+	// ProtocolBufferMarshaler is the interface implemented
+	// by types that know how to write themselves
+	// as ProtocolBuffer Messages into a given ProtocolBufferWriter.
+	ProtocolBufferMarshaler interface {
+		ProtocolBufferMarshal(ProtocolBufferWriter) error
+	}
+	// ProtocolBufferUnmarshaler is the interface implemented
+	// by types that know how to read themselves
+	// as ProtocolBuffer Messages from a given ProtocolBufferReader.
+	ProtocolBufferUnmarshaler interface {
+		ProtocolBufferUnmarshal(ProtocolBufferReader) error
 	}
 )
 
@@ -179,4 +223,46 @@ func (encoder JSONEncoder) Marshal(v interface{}) ([]byte, error) {
 // Unmarshal implements encoder.Unmarshal
 func (encoder JSONEncoder) Unmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
+}
+
+// NewProtocolBufferEncoder creates a new ProtocolBufferEncoder,
+// allocating a new proto buffer used for marshaling.
+//
+// See ProtocolBufferEncoder for more information.
+func NewProtocolBufferEncoder() *ProtocolBufferEncoder {
+	return &ProtocolBufferEncoder{
+		buffer: proto.NewBuffer(nil),
+	}
+}
+
+// Marshal implements Encoder.Marshal
+func (encoder *ProtocolBufferEncoder) Marshal(v interface{}) ([]byte, error) {
+	switch tv := v.(type) {
+	case ProtocolBufferMarshaler:
+		encoder.buffer.Reset()
+		err := tv.ProtocolBufferMarshal(encoder.buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal value as protocol buffer message: %v", err)
+		}
+		return encoder.buffer.Bytes(), nil
+
+	default:
+		return nil, fmt.Errorf("cannot marshal unexpected value %[1]v (%[1]T) "+
+			"as a protocol buffer message", v)
+	}
+}
+
+// Unmarshal implements encoder.Unmarshal
+func (encoder *ProtocolBufferEncoder) Unmarshal(data []byte, v interface{}) error {
+	switch tv := v.(type) {
+	case ProtocolBufferUnmarshaler:
+		err := tv.ProtocolBufferUnmarshal(proto.NewBuffer(data))
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal protocol buffer message: %v", err)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("cannot unmarshal protocol buffer message as value %[1]v (%[1]T)", v)
+	}
 }

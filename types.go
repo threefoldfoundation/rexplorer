@@ -6,12 +6,20 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
+	rivineencoding "github.com/rivine/rivine/encoding"
 	"github.com/rivine/rivine/modules"
 )
 
+// message pack
 //go:generate msgp -marshal=false -io=true
+
+// protobuf (using gogo/protobuf)
+//   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and
+// gogofaster (go get -u github.com/gogo/protobuf/proto github.com/gogo/protobuf/gogoproto github.com/gogo/protobuf/protoc-gen-gogofaster)
+//go:generate protoc -I=. -I=$GOPATH/src -I=vendor/github.com/gogo/protobuf/protobuf --gogofaster_out=. types.proto
 
 // private types
 type (
@@ -28,11 +36,72 @@ type (
 	}
 )
 
+// as to ensure we implement the interfaces we think we implement
+var (
+	_ encoding.ProtocolBufferMarshaler   = ExplorerState{}
+	_ encoding.ProtocolBufferUnmarshaler = (*ExplorerState)(nil)
+
+	_ encoding.ProtocolBufferMarshaler   = NetworkInfo{}
+	_ encoding.ProtocolBufferUnmarshaler = (*NetworkInfo)(nil)
+)
+
 // NewExplorerState creates a nil (fresh) explorer state.
 func NewExplorerState() ExplorerState {
 	return ExplorerState{
 		CurrentChangeID: types.AsConsensusChangeID(modules.ConsensusChangeBeginning),
 	}
+}
+
+// ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
+// using the generated code based on the PBExplorerState Message defined in ./types.proto
+func (state ExplorerState) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
+	err := w.Marshal(&PBExplorerState{
+		CurrentConsensusChangeId: rivineencoding.Marshal(state.CurrentChangeID),
+	})
+	if err != nil {
+		return fmt.Errorf("ExplorerState: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferUnmarshal implements encoding.ProtocolBufferUnmarshaler.ProtocolBufferUnmarshal
+// using the generated code based on the PBExplorerState Message defined in ./types.proto
+func (state *ExplorerState) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) error {
+	var pb PBExplorerState
+	err := r.Unmarshal(&pb)
+	if err != nil {
+		return fmt.Errorf("ExplorerState: %v", err)
+	}
+	err = rivineencoding.Unmarshal(pb.CurrentConsensusChangeId, &state.CurrentChangeID)
+	if err != nil {
+		return fmt.Errorf("ExplorerState: CurrentChangeID: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
+// using the generated code based on the PBExplorerState Message defined in ./types.proto
+func (info NetworkInfo) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
+	err := w.Marshal(&PBNetworkInfo{
+		ChainName:   info.ChainName,
+		NetworkName: info.NetworkName,
+	})
+	if err != nil {
+		return fmt.Errorf("NetworkInfo: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferUnmarshal implements encoding.ProtocolBufferUnmarshaler.ProtocolBufferUnmarshal
+// using the generated code based on the PBExplorerState Message defined in ./types.proto
+func (info *NetworkInfo) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) error {
+	var pb PBNetworkInfo
+	err := r.Unmarshal(&pb)
+	if err != nil {
+		return fmt.Errorf("NetworkInfo: %v", err)
+	}
+	info.ChainName, info.NetworkName = pb.ChainName, pb.NetworkName
+	return nil
 }
 
 // LockType represents the type of a lock, used to lock a (coin) output.

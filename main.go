@@ -67,7 +67,7 @@ func main() {
 	cmdRoot.Flags().VarP(
 		&cmd.EncodingType,
 		"encoding", "e",
-		"which encoding protocol to use, one of {json,msgp}",
+		"which encoding protocol to use, one of {json,msgp,protobuf}",
 	)
 	cmdRoot.Flags().StringVarP(
 		&cmd.BlockchainInfo.NetworkName,

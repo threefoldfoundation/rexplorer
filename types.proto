@@ -1,0 +1,15 @@
+syntax = "proto2";
+
+package main;
+
+// ExplorerState collects the (internal) state for the explorer.
+message PBExplorerState {
+    required bytes current_consensus_change_id = 1;
+}
+
+// NetworkInfo defines the info of the chain network data is dumped from,
+// used as to prevent name colissions.
+message PBNetworkInfo {
+    required string chain_name = 1;
+    required string network_name = 2;
+}

@@ -2,9 +2,19 @@ package types
 
 import (
 	"fmt"
+
+	rivineencoding "github.com/rivine/rivine/encoding"
+	"github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 )
 
+// message pack
 //go:generate msgp -marshal=false -io=true
+
+// protobuf (using gogo/protobuf)
+//   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and
+// gogofaster (go get -u github.com/gogo/protobuf/proto github.com/gogo/protobuf/gogoproto github.com/gogo/protobuf/protoc-gen-gogofaster)
+//go:generate protoc -I=. -I=$GOPATH/src -I=../../vendor/github.com/gogo/protobuf/protobuf --gogofaster_out=. types.proto
 
 // public types
 type (
@@ -16,9 +26,9 @@ type (
 		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"coinCreationTxCount"`
 		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"coinCreatorDefinitionTxCount"`
 		ValueTransactionCount                 uint64      `json:"valueTxCount" msg:"valueTxCount"`
-		CointOutputCount                      uint64      `json:"coinOutputCount" msg:"coinOutputCount"`
-		LockedCointOutputCount                uint64      `json:"lockedCoinOutputCount" msg:"lockedCoinOutputCount"`
-		CointInputCount                       uint64      `json:"coinInputCount" msg:"coinInputCount"`
+		CoinOutputCount                       uint64      `json:"coinOutputCount" msg:"coinOutputCount"`
+		LockedCoinOutputCount                 uint64      `json:"lockedCoinOutputCount" msg:"lockedCoinOutputCount"`
+		CoinInputCount                        uint64      `json:"coinInputCount" msg:"coinInputCount"`
 		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"minerPayoutCount"`
 		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txFeeCount"`
 		MinerPayouts                          Currency    `json:"minerPayouts" msg:"minerPayouts"`
@@ -72,6 +82,202 @@ type (
 	}
 )
 
+var (
+	_ encoding.ProtocolBufferMarshaler   = (*NetworkStats)(nil)
+	_ encoding.ProtocolBufferUnmarshaler = (*NetworkStats)(nil)
+
+	_ encoding.ProtocolBufferMarshaler   = (*Wallet)(nil)
+	_ encoding.ProtocolBufferUnmarshaler = (*Wallet)(nil)
+)
+
+// ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
+// using the generated code based on the PBNetworkStats Message defined in ./types.proto
+func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
+	err := w.Marshal(&PBNetworkStats{
+		Timestamp:             uint64(stats.Timestamp.Timestamp),
+		Blockheight:           uint64(stats.BlockHeight.BlockHeight),
+		TxCount:               stats.TransactionCount,
+		CoinCreationTxCount:   stats.CoinCreationTransactionCount,
+		CoinCreatorDefTxCount: stats.CoinCreatorDefinitionTransactionCount,
+		ValueTxCount:          stats.ValueTransactionCount,
+		CoinOutputCount:       stats.CoinOutputCount,
+		LockedCoinOutputCount: stats.LockedCoinOutputCount,
+		CoinInputCount:        stats.CoinInputCount,
+		MinerPayoutCount:      stats.MinerPayoutCount,
+		TxFeeCount:            stats.TransactionFeeCount,
+		MinerPayouts:          rivineencoding.Marshal(stats.MinerPayouts),
+		TxFees:                rivineencoding.Marshal(stats.TransactionFees),
+		Coins:                 rivineencoding.Marshal(stats.Coins),
+		LockedCoins:           rivineencoding.Marshal(stats.LockedCoins),
+	})
+	if err != nil {
+		return fmt.Errorf("NetworkStats: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferUnmarshal implements encoding.ProtocolBufferUnmarshaler.ProtocolBufferUnmarshal
+// using the generated code based on the PBNetworkStats Message defined in ./types.proto
+func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) error {
+	// unmarshal entire protocol buffer message as a whole
+	var pb PBNetworkStats
+	err := r.Unmarshal(&pb)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: %v", err)
+	}
+
+	// assign all required uint64 values
+	stats.Timestamp = AsTimestamp(types.Timestamp(pb.Timestamp))
+	stats.BlockHeight = AsBlockHeight(types.BlockHeight(pb.Blockheight))
+	stats.TransactionCount = pb.TxCount
+	stats.CoinCreationTransactionCount = pb.CoinCreationTxCount
+	stats.CoinCreatorDefinitionTransactionCount = pb.CoinCreatorDefTxCount
+	stats.ValueTransactionCount = pb.ValueTxCount
+	stats.CoinOutputCount = pb.CoinOutputCount
+	stats.LockedCoinOutputCount = pb.LockedCoinOutputCount
+	stats.CoinInputCount = pb.CoinInputCount
+	stats.MinerPayoutCount = pb.MinerPayoutCount
+	stats.TransactionFeeCount = pb.TxFeeCount
+
+	// unmarshal all required Currency values
+	err = rivineencoding.Unmarshal(pb.MinerPayouts, &stats.MinerPayouts)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: MinerPayouts: %v", err)
+	}
+	err = rivineencoding.Unmarshal(pb.TxFees, &stats.TransactionFees)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: TransactionFees: %v", err)
+	}
+	err = rivineencoding.Unmarshal(pb.LockedCoins, &stats.LockedCoins)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: LockedCoins: %v", err)
+	}
+	err = rivineencoding.Unmarshal(pb.Coins, &stats.Coins)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: Coins: %v", err)
+	}
+
+	// all was unmarshaled, return nil (= no error)
+	return nil
+}
+
+// ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
+// using the generated code based on the PBWallet Message defined in ./types.proto
+func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
+	pb := &PBWallet{
+		BalanceUnlocked: rivineencoding.Marshal(wallet.Balance.Unlocked),
+	}
+	// add optional LockedBalance only if available
+	if !wallet.Balance.Locked.Total.IsZero() {
+		lb := &PBWalletLockedBalance{
+			Total:   rivineencoding.Marshal(wallet.Balance.Locked.Total),
+			Outputs: make(map[string]*PBWalletLockedOutput, len(wallet.Balance.Locked.Outputs)),
+		}
+		pb.BalanceLocked = lb
+		for id, output := range wallet.Balance.Locked.Outputs {
+			lo := &PBWalletLockedOutput{
+				Amount:      rivineencoding.Marshal(output.Amount),
+				LockedUntil: uint64(output.LockedUntil),
+			}
+			// add optional Description only if available
+			lo.Description = output.Description
+			lb.Outputs[id] = lo
+		}
+	}
+	// add optional MultiSignAddresses only if available
+	if n := len(wallet.MultiSignAddresses); n > 0 {
+		pb.MultisignAddresses = make([][]byte, n)
+		for idx, uh := range wallet.MultiSignAddresses {
+			pb.MultisignAddresses[idx] = rivineencoding.Marshal(uh)
+		}
+	}
+	// add optional MultiSignData only if available
+	if wallet.MultiSignData.SignaturesRequired > 0 {
+		pb.MultisignData = &PBWalletMultiSignData{
+			SignaturesRequired: wallet.MultiSignData.SignaturesRequired,
+			Owners:             make([][]byte, len(wallet.MultiSignData.Owners)),
+		}
+		for idx, uh := range wallet.MultiSignData.Owners {
+			pb.MultisignData.Owners[idx] = rivineencoding.Marshal(uh)
+		}
+	}
+	// Marshal the entire wallet into the given ProtocolBufferWriter
+	err := w.Marshal(pb)
+	if err != nil {
+		return fmt.Errorf("Wallet: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferUnmarshal implements encoding.ProtocolBufferUnmarshaler.ProtocolBufferUnmarshal
+// using the generated code based on the PBWallet Message defined in ./types.proto
+func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) error {
+	// unmarshal entire protocol buffer message as a whole
+	var pb PBWallet
+	err := r.Unmarshal(&pb)
+	if err != nil {
+		return fmt.Errorf("Wallet: %v", err)
+	}
+	// unmarshal required unlocked balance
+	err = rivineencoding.Unmarshal(pb.BalanceUnlocked, &wallet.Balance.Unlocked)
+	if err != nil {
+		return fmt.Errorf("Wallet: Unlocked Balance: %v", err)
+	}
+	// only unmarshal locked balance if it is available, otherwise reset it
+	if pb.BalanceLocked == nil {
+		wallet.Balance.Locked = WalletLockedBalance{}
+	} else {
+		err = rivineencoding.Unmarshal(pb.BalanceLocked.Total, &wallet.Balance.Locked.Total)
+		if err != nil {
+			return fmt.Errorf("Wallet: Unlocked Balance: Total: %v", err)
+		}
+		// unmarshal all outputs
+		wallet.Balance.Locked.Outputs = make(WalletLockedOutputMap, len(pb.BalanceLocked.Outputs))
+		for id, output := range pb.BalanceLocked.Outputs {
+			var lockedOutput WalletLockedOutput
+			// unmarshal amount
+			err = rivineencoding.Unmarshal(output.Amount, &lockedOutput.Amount)
+			if err != nil {
+				return fmt.Errorf("Wallet: Unlocked Balance: Output %s: Amount: %v", id, err)
+			}
+			// assign dereferenced lock value
+			lockedOutput.LockedUntil = LockValue(output.LockedUntil)
+			// assign optional description
+			lockedOutput.Description = output.Description
+			// assign locked output using its id
+			wallet.Balance.Locked.Outputs[id] = lockedOutput
+		}
+	}
+	// unmarshal optional multisign addresses if available
+	if n := len(pb.MultisignAddresses); n > 0 {
+		wallet.MultiSignAddresses = make([]UnlockHash, n)
+		for i, b := range pb.MultisignAddresses {
+			err = rivineencoding.Unmarshal(b, &wallet.MultiSignAddresses[i])
+			if err != nil {
+				return fmt.Errorf("Wallet: MultiSignAddresses: address #%d: %v", i, err)
+			}
+		}
+	} else { // reset it otherwise
+		wallet.MultiSignAddresses = nil
+	}
+	// unmarshal optional multisign data if available, reset otherwise
+	if pb.MultisignData == nil {
+		wallet.MultiSignData = WalletMultiSignData{}
+	} else {
+		// assign required signatures required
+		wallet.MultiSignData.SignaturesRequired = pb.MultisignData.SignaturesRequired
+		// assign all owners
+		wallet.MultiSignData.Owners = make([]UnlockHash, len(pb.MultisignData.Owners))
+		for i, b := range pb.MultisignData.Owners {
+			err = rivineencoding.Unmarshal(b, &wallet.MultiSignData.Owners[i])
+			if err != nil {
+				return fmt.Errorf("Wallet: MultiSignData: owner #%d: %v", i, err)
+			}
+		}
+	}
+	return nil
+}
+
 // IsZero returns true if this wallet is Zero
 func (wb *WalletBalance) IsZero() bool {
 	return wb.Unlocked.IsZero() && wb.Locked.Total.IsZero()
@@ -110,12 +316,12 @@ func (wlb *WalletLockedBalance) SubLockedCoinOutput(id CoinOutputID) error {
 // AddUniqueMultisignAddress adds the given multisign address to the wallet's list of
 // multisign addresses which reference this wallet's address.
 // It only adds it however if the given multisign address is not known yet.
-func (w *Wallet) AddUniqueMultisignAddress(address UnlockHash) bool {
-	for _, uh := range w.MultiSignAddresses {
+func (wallet *Wallet) AddUniqueMultisignAddress(address UnlockHash) bool {
+	for _, uh := range wallet.MultiSignAddresses {
 		if uh.Cmp(address.UnlockHash) == 0 {
 			return false // nothing to do
 		}
 	}
-	w.MultiSignAddresses = append(w.MultiSignAddresses, address)
+	wallet.MultiSignAddresses = append(wallet.MultiSignAddresses, address)
 	return true
 }

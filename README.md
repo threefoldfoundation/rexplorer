@@ -12,7 +12,7 @@ such that the tfchain network data can be consumed/used in a meaningful way.
 
 ```
 $ go get -u github.com/threefoldfoundation/rexplorer && rexplorer version
-Tool version            v0.1.2-4d10881
+Tool version            v0.1.2-f48bcb7
 TFChain Daemon version  v1.1.0-rc-1
 Rivine protocol version v1.0.7
 
@@ -31,10 +31,12 @@ you can do so as simple as:
 
 ```
 $ rexplorer
-2018/08/07 23:58:48 starting rexplorer v0.1.1...
-2018/08/07 23:58:48 loading rivine gateway module (1/3)...
-2018/08/07 23:58:48 loading rivine consensus module (2/3)...
-2018/08/07 23:58:48 loading internal explorer module (3/3)...
+2018/08/30 22:07:02 starting rexplorer v0.1.2-c7471a3...
+2018/08/30 22:07:02 loading network config, registering types and loading rivine transaction db (0/3)...
+2018/08/30 22:07:02 loading rivine gateway module (1/3)...
+2018/08/30 22:07:02 loading rivine consensus module (2/3)...
+2018/08/30 22:07:02 loading internal explorer module (3/3)...
+2018/08/30 22:10:36 rexplorer is up and running...
 ```
 
 The persistent dir (used for some local BoltDB consensus/gateway data) can be changed
@@ -44,25 +46,32 @@ Should you want to explore `testnet` instead of the `standard` net you can use t
 
 By default [MessagePack](https://msgpack.org) is used to encode all public data in the Redis Database,
 should you want to use [JSON](http://json.org) instead you can use the `--encoding json` flag.
+[Protocol Buffers](https://developers.google.com/protocol-buffers/) is available as well and can be used using the `--encoding protobuf` flag.
 
 For more information use the `--help` flag:
 
 ```
 $ rexplorer --help
 start the rexplorer daemon
+
 Usage:
   rexplorer [flags]
   rexplorer [command]
+
 Available Commands:
   help        Help about any command
   version     show versions of this tool
+
 Flags:
+  -e, --encoding EncodingType         which encoding protocol to use, one of {json,msgp,protobuf} (default msgp)
   -h, --help                          help for rexplorer
   -n, --network string                the name of the network to which the daemon connects, one of {standard,testnet} (default "standard")
   -d, --persistent-directory string   location of the root diretory used to store persistent data of the daemon of tfchain
+      --profile-addr string           enables profiling of this rexplorer instance as an http service
       --redis-addr string             which (tcp) address the redis server listens on (default ":6379")
       --redis-db int                  which redis database slot to use
       --rpc-addr string               which port the gateway listens on (default ":23112")
+
 Use "rexplorer [command] --help" for more information about a command.
 ```
 
@@ -208,6 +217,10 @@ JSON formats of value types defined by this module:
 > and the values are encoded in the exact same way, except that the resulting values
 > follow the [MessagePack spec][msgp-spec].
 
+> When using ProtocolBuffer (an optional encoding type, less widely supported but faster),
+> you'll have to decode using the `types.proto` Protocol Buffer scheme of public types found at
+> [./pkg/types/types.proto](./pkg/types/types.proto).
+
 ## Examples
 
 These examples assume you have a `rexplorer` instance running (and synced!!!),
@@ -301,26 +314,27 @@ and you can run it yourself as follows:
 ```
 $ go run ./examples/getstats/main.go --db-slot 1
 tfchain network has:
-  * a total of 101034870.1 TFT, of which 101026825.1 TFT is liquid,
-    8045 TFT is locked, 1024870 TFT is paid out as miner payouts
-    and 35.900000071 TFT is paid out as tx fees
-  * 99.99204% liquid coins of a total of 101034870.1 TFT coins
-  * 00.00796% locked coins of a total of 101034870.1 TFT coins
-  * a total of 102834 transactions, of which 348 value transactions,
-    1 coin creation transactions, 0 coin creator definition transactions
-    and 102485 are pure block creation transactions
-  * a block height of 102487, with the time of the highest block
-    being 2018-08-30 09:56:35 +0200 CEST (1535615795)
-  * a total of 102488 blocks, 348 value transactions and 1884 coin inputs
-  * a total of 103417 coin outputs, of which 102683 are liquid, 734 are locked,
-    626 transfer value, 102487 are miner payouts and 304 are tx fees
-  * a total of 516 unique addresses that have been used
-  * an average of 01.79885% value coin outputs per value transaction
-  * an average of 00.00340% value transactions per block
-  * 99.29025% liquid outputs of a total of 103417 coin outputs
-  * 00.70975% locked outputs of a total of 103417 coin outputs
-  * 00.33841% value transactions of a total of 102834 transactions
-  * 00.00097% coin creation transactions of a total of 102834 transactions
+  * a total of 101054600.3 TFT, of which 101046555.1 TFT is liquid,
+    8045.2 TFT is locked, 1034600 TFT is paid out as miner payouts
+    and 36.100000071 TFT is paid out as tx fees
+  * 99.99204% liquid coins of a total of 101054600.3 TFT coins
+  * 00.00796% locked coins of a total of 101054600.3 TFT coins
+  * a total of 103809 transactions, of which 348 value transactions,
+    2 coin creation transactions, 1 coin creator definition transactions
+    and 103458 are pure block creation transactions
+  * a block height of 103460, with the time of the highest block
+    being 2018-08-30 22:12:44 +0200 CEST (1535659964)
+  * a total of 103461 blocks, 348 value transactions and 1884 coin inputs
+  * a total of 104393 coin outputs, of which 103657 are liquid, 736 are locked,
+    627 transfer value, 103460 are miner payouts and 306 are tx fees
+  * a total of 517 unique addresses that have been used
+  * an average of 01.80172% value coin outputs per value transaction
+  * an average of 00.00336% value transactions per block
+  * 99.29497% liquid outputs of a total of 104393 coin outputs
+  * 00.70503% locked outputs of a total of 104393 coin outputs
+  * 00.33523% value transactions of a total of 103809 transactions
+  * 00.00193% coin creation transactions of a total of 103809 transactions
+  * 00.00096% coin creator definition transactions of a total of 103809 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:

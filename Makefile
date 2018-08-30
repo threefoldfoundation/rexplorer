@@ -42,6 +42,6 @@ integration-test-sumcoins:
 		--db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
-generate-messagepack:
+generate-types:
 	go generate pkg/types/types.go
 	go generate types.go

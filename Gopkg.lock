@@ -3,24 +3,31 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:f4f4077f3c79fe58a4ce98aa2f8875e6f861ad8f1fc635d2230cfba985751567"
   name = "github.com/NebulousLabs/demotemutex"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "235395f71c4073ee8e71eb51476e7989043b9809"
 
 [[projects]]
   branch = "master"
+  digest = "1:5443140d92c50eebc158f3ca649e05cf29a42345e8893de9a97a1892c56999ff"
   name = "github.com/NebulousLabs/errors"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "7ead97ef90b8efe5e824efdf129a60498291632a"
 
 [[projects]]
   branch = "master"
+  digest = "1:dccce8b1f85879d1cd8be6e21a4bd97901339d7571a18ad77ac398fe9bdf5a9b"
   name = "github.com/NebulousLabs/fastrand"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "3cf7173006a0b7d2371fa1a220da7f9d48c7827c"
 
 [[projects]]
   branch = "master"
+  digest = "1:b5005db868cc60244a715d5df4e27466e103931a113818eddcfba591802db599"
   name = "github.com/NebulousLabs/go-upnp"
   packages = [
     ".",
@@ -29,63 +36,97 @@
     "goupnp/httpu",
     "goupnp/scpd",
     "goupnp/soap",
-    "goupnp/ssdp"
+    "goupnp/ssdp",
   ]
+  pruneopts = "NUT"
   revision = "29b680b06c82d044ebea91bf3069038eb562df2a"
 
 [[projects]]
   branch = "master"
+  digest = "1:27214b8888187bf560df935ff09f2664f9ab63219f1cbb5801c52efd4d4b8d68"
   name = "github.com/NebulousLabs/merkletree"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "1db44fa75fb1036c6d7be59a5793be4b1fb8a5ab"
 
 [[projects]]
+  branch = "master"
+  digest = "1:aef384a4c419ec6504905842b9c70c6a800d95db9eb7543f54c061f4e3aee23b"
   name = "github.com/bgentry/speakeasy"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "4aabc24848ce5fd31929f7d1e4ea74d3709c14cd"
-  version = "v0.1.0"
 
 [[projects]]
+  digest = "1:6e73003ecd35f4487a5e88270d3ca0a81bc80dc88053ac7e4dcfec5fba30d918"
+  name = "github.com/gogo/protobuf"
+  packages = ["proto"]
+  pruneopts = ""
+  revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
+  version = "v1.1.1"
+
+[[projects]]
+  digest = "1:97df918963298c287643883209a2c3f642e6593379f97ab400c2a2e219ab647d"
+  name = "github.com/golang/protobuf"
+  packages = ["proto"]
+  pruneopts = "NUT"
+  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
+  version = "v1.2.0"
+
+[[projects]]
+  digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
   name = "github.com/gomodule/redigo"
   packages = [
     "internal",
-    "redis"
+    "redis",
   ]
+  pruneopts = "NUT"
   revision = "9c11da706d9b7902c6da69c592f75637793fe121"
   version = "v2.0.0"
 
 [[projects]]
+  digest = "1:406338ad39ab2e37b7f4452906442a3dbf0eb3379dd1f06aafb5c07e769a5fbb"
   name = "github.com/inconshreveable/mousetrap"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
   version = "v1.0"
 
 [[projects]]
+  digest = "1:65c75e07f060f0f8c66b2a0377ea2b1c130b5aeed3e77f1e74b94dab0f3d51de"
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
   version = "v1.1"
 
 [[projects]]
+  digest = "1:44c66ad69563dbe3f8e76d7d6cad21a03626e53f1875b5ab163ded419e01ca7a"
   name = "github.com/philhofer/fwd"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "bb6d471dc95d4fe11e432687f8b70ff496cf3136"
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:5cf3f025cbee5951a4ee961de067c8a89fc95a5adabead774f82822efabab121"
   name = "github.com/pkg/errors"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
   version = "v0.8.0"
 
 [[projects]]
   branch = "master"
+  digest = "1:aa0472a5641dc4216eff61d3a53ab6e81eda86587cc46bf1e8dffb47035d48e7"
   name = "github.com/rivine/bbolt"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "19c3af6fd3cefb5dc9c05dfc84122e8f74f92927"
 
 [[projects]]
   branch = "master"
+  digest = "1:5a23363a333dcab9cc469881fd8f9c5f7ea202f49be7d0cb53df75f46a9a8ef5"
   name = "github.com/rivine/rivine"
   packages = [
     "build",
@@ -99,85 +140,105 @@
     "pkg/cli",
     "pkg/client",
     "sync",
-    "types"
+    "types",
   ]
+  pruneopts = "NUT"
   revision = "e97af67533f234d229a4a0b7b7641b39e715ef90"
 
 [[projects]]
+  digest = "1:3186aade954ad7beb5a94a678d9d108de9f7ac7127de34255f3feed64cfca525"
   name = "github.com/rivine/smux"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "e28719eede1ac5714cf0b06ba2f403125864ebe0"
   version = "v1.0.7"
 
 [[projects]]
+  digest = "1:343d44e06621142ab09ae0c76c1799104cdfddd3ffb445d78b1adf8dc3ffaf3d"
   name = "github.com/spf13/cobra"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "ef82de70bb3f60c65fb8eebacbb2d122ef517385"
   version = "v0.0.3"
 
 [[projects]]
+  digest = "1:e3707aeaccd2adc89eba6c062fec72116fe1fc1ba71097da85b4d8ae1668a675"
   name = "github.com/spf13/pflag"
   packages = ["."]
+  pruneopts = "NUT"
   revision = "9a97c102cda95a86cec2345a6f09f55a939babf5"
   version = "v1.0.2"
 
 [[projects]]
   branch = "master"
+  digest = "1:1bee914e4c1f27fab48b44c746a477dd30f5fbaaa3b5a7b67dfcf1581144b0a1"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
     "pkg/persist",
-    "pkg/types"
+    "pkg/types",
   ]
+  pruneopts = "NUT"
   revision = "5137e49ddb729ec1f1d1b38e9683338f8f3639d5"
 
 [[projects]]
+  digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
   name = "github.com/tinylib/msgp"
   packages = ["msgp"]
+  pruneopts = "NUT"
   revision = "b2b6a672cf1e5b90748f79b8b81fc8c5cf0571a1"
   version = "1.0.2"
 
 [[projects]]
   branch = "master"
+  digest = "1:150a80af5603fe5beeaf180b975964f2d2878fca0c9615d8bd3bc0220ba52742"
   name = "github.com/tyler-smith/go-bip39"
   packages = [
     ".",
-    "wordlists"
+    "wordlists",
   ]
+  pruneopts = "NUT"
   revision = "95c66720ed7ac2f4b78ddb31d940d59193894f49"
 
 [[projects]]
   branch = "master"
+  digest = "1:061c9b45118e3b17608b3d8996d57ca917e6dd8be2ecc887f558b213fdffefaf"
   name = "golang.org/x/crypto"
   packages = [
     "blake2b",
     "ed25519",
     "ed25519/internal/edwards25519",
     "pbkdf2",
-    "twofish"
+    "twofish",
   ]
+  pruneopts = "NUT"
   revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
 
 [[projects]]
   branch = "master"
+  digest = "1:fd35bc6003cfae47dd6041db172fb971f3e08991ecdf2971bd03dcabedef3b0b"
   name = "golang.org/x/net"
   packages = [
     "html",
     "html/atom",
-    "html/charset"
+    "html/charset",
   ]
+  pruneopts = "NUT"
   revision = "8a410e7b638dca158bf9e766925842f6651ff828"
 
 [[projects]]
   branch = "master"
+  digest = "1:cb7ca2b9dc6503f0f55cf60262efb693ff5e0cbb4a1128e45a81a6e42df73bad"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
-    "unix"
+    "unix",
   ]
+  pruneopts = "NUT"
   revision = "d99a578cf41bfccdeaf48b0845c823a4b8b0ad5e"
 
 [[projects]]
+  digest = "1:7c61a813b250ba8bb02bebb0382e6c3d00e04da2b577dc58985b86312fb89ffd"
   name = "golang.org/x/text"
   packages = [
     "encoding",
@@ -196,14 +257,32 @@
     "language",
     "runes",
     "transform",
-    "unicode/cldr"
+    "unicode/cldr",
   ]
+  pruneopts = "NUT"
   revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
   version = "v0.3.0"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "559d2c709a37dded4b108d33349ea79f34209ec9becfb334f8b61184b276e1dd"
+  input-imports = [
+    "github.com/gogo/protobuf/proto",
+    "github.com/golang/protobuf/proto",
+    "github.com/gomodule/redigo/redis",
+    "github.com/rivine/rivine/build",
+    "github.com/rivine/rivine/crypto",
+    "github.com/rivine/rivine/encoding",
+    "github.com/rivine/rivine/modules",
+    "github.com/rivine/rivine/modules/consensus",
+    "github.com/rivine/rivine/modules/gateway",
+    "github.com/rivine/rivine/pkg/client",
+    "github.com/rivine/rivine/types",
+    "github.com/spf13/cobra",
+    "github.com/threefoldfoundation/tfchain/pkg/config",
+    "github.com/threefoldfoundation/tfchain/pkg/persist",
+    "github.com/threefoldfoundation/tfchain/pkg/types",
+    "github.com/tinylib/msgp/msgp",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1
