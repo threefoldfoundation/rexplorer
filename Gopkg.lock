@@ -88,7 +88,6 @@
   branch = "master"
   name = "github.com/rivine/rivine"
   packages = [
-    "api",
     "build",
     "crypto",
     "encoding",
@@ -96,12 +95,13 @@
     "modules/consensus",
     "modules/gateway",
     "persist",
+    "pkg/api",
     "pkg/cli",
     "pkg/client",
     "sync",
     "types"
   ]
-  revision = "48935ecc1371ca2af837bd12e77aeacdf828318b"
+  revision = "dc01271bdf27edab31b104ee9bbfe36b48cb301d"
 
 [[projects]]
   name = "github.com/rivine/smux"
@@ -128,7 +128,7 @@
     "pkg/config",
     "pkg/types"
   ]
-  revision = "227e7d4419d3f0693a3f016bb95fb4de1ce15d41"
+  revision = "0904d793e5e0c71632f0924241fb3cb07f3d27b8"
 
 [[projects]]
   name = "github.com/tinylib/msgp"
@@ -155,7 +155,7 @@
     "pbkdf2",
     "twofish"
   ]
-  revision = "aabede6cba87e37f413b3e60ebfc214f8eeca1b0"
+  revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
 
 [[projects]]
   branch = "master"
@@ -165,7 +165,7 @@
     "html/atom",
     "html/charset"
   ]
-  revision = "aaf60122140d3fcf75376d319f0554393160eb50"
+  revision = "8a410e7b638dca158bf9e766925842f6651ff828"
 
 [[projects]]
   branch = "master"
@@ -174,7 +174,7 @@
     "cpu",
     "unix"
   ]
-  revision = "1c9583448a9c3aa0f9a6a5241bf73c0bd8aafded"
+  revision = "d99a578cf41bfccdeaf48b0845c823a4b8b0ad5e"
 
 [[projects]]
   name = "golang.org/x/text"
