@@ -13,11 +13,15 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/tfchain/pkg/config"
+	"github.com/threefoldfoundation/tfchain/pkg/persist"
+	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
+
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/modules/consensus"
 	"github.com/rivine/rivine/modules/gateway"
 	"github.com/rivine/rivine/types"
-	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 
 	"github.com/spf13/cobra"
 )
@@ -46,12 +50,51 @@ type Commands struct {
 	// the parent directory where the individual module
 	// directories will be created
 	RootPersistentDir string
+
+	// TransactionDB manages extra info for the tfchain,
+	// which Rivine does not keep track off
+	transactionDB *persist.TransactionDB
 }
 
 // Root represents the root (`rexplorer`) command,
 // starting a rexplorer daemon instance, running until the user intervenes.
 func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	log.Println("starting rexplorer v" + version.String() + "...")
+
+	log.Println("loading network config, registering types and loading rivine transaction db (0/3)...")
+	switch cmd.BlockchainInfo.NetworkName {
+	case config.NetworkNameStandard:
+		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetStandardnetGenesisMintCondition())
+		if cmdErr != nil {
+			return fmt.Errorf("failed to create tfchain transaction DB for tfchain standard: %v", cmdErr)
+		}
+		// Register the transaction controllers for all transaction versions
+		// supported on the standard network
+		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB)
+		// Forbid the usage of MultiSignatureCondition (and thus the multisig feature),
+		// until the blockchain reached a height of 42000 blocks.
+		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
+		// get chain constants and bootstrap peers
+		cmd.ChainConstants = config.GetStandardnetGenesis()
+		cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+	case config.NetworkNameTest:
+		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.RootPersistentDir, config.GetTestnetGenesisMintCondition())
+		if cmdErr != nil {
+			return fmt.Errorf("failed to create tfchain transaction DB for tfchain testnet: %v", cmdErr)
+		}
+		// Register the transaction controllers for all transaction versions
+		// supported on the test network
+		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB)
+		// Use our custom MultiSignatureCondition, just for testing purposes
+		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		// get chain constants and bootstrap peers
+		cmd.ChainConstants = config.GetTestnetGenesis()
+		cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+	default:
+		return fmt.Errorf(
+			"%q is an invalid network name, has to be one of {standard,testnet}",
+			cmd.BlockchainInfo.NetworkName)
+	}
 
 	// optionally enable profiling and expose it over a HTTP interface
 	if len(cmd.ProfilingAddr) > 0 {
@@ -119,7 +162,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 
 		log.Println("loading internal explorer module (3/3)...")
 		explorer, err := NewExplorer(
-			db, cs, cmd.BlockchainInfo, cmd.ChainConstants, ctx.Done())
+			db, cs, cmd.transactionDB, cmd.BlockchainInfo, cmd.ChainConstants, ctx.Done())
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create explorer module: %v", err)
 			log.Println("[ERROR] ", cmdErr)
@@ -160,11 +203,14 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	return
 }
 
-func (cmd *Commands) perDir(module string) string {
+func (cmd *Commands) rootPerDir() string {
 	return path.Join(
 		cmd.RootPersistentDir,
-		cmd.BlockchainInfo.Name, cmd.BlockchainInfo.NetworkName,
-		module)
+		cmd.BlockchainInfo.Name, cmd.BlockchainInfo.NetworkName)
+}
+
+func (cmd *Commands) perDir(module string) string {
+	return path.Join(cmd.rootPerDir(), module)
 }
 
 // Version represents the version (`rexplorer version`) command,

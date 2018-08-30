@@ -8,6 +8,7 @@ import (
 
 	"github.com/rivine/rivine/modules"
 	rivinetypes "github.com/rivine/rivine/types"
+	"github.com/threefoldfoundation/tfchain/pkg/persist"
 	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
 )
 
@@ -18,7 +19,8 @@ type Explorer struct {
 	state ExplorerState
 	stats types.NetworkStats
 
-	cs modules.ConsensusSet
+	cs   modules.ConsensusSet
+	txdb *persist.TransactionDB
 
 	bcInfo   rivinetypes.BlockchainInfo
 	chainCts rivinetypes.ChainConstants
@@ -28,7 +30,7 @@ type Explorer struct {
 
 // NewExplorer creates a new custom intenral explorer module.
 // See Explorer for more information.
-func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, cancel <-chan struct{}) (*Explorer, error) {
+func NewExplorer(db Database, cs modules.ConsensusSet, txdb *persist.TransactionDB, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, cancel <-chan struct{}) (*Explorer, error) {
 	state, err := db.GetExplorerState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get explorer state from db: %v", err)
@@ -42,6 +44,7 @@ func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo rivinetypes.Blockc
 		state:    state,
 		stats:    stats,
 		cs:       cs,
+		txdb:     txdb,
 		bcInfo:   bcInfo,
 		chainCts: chainCts,
 	}
@@ -95,6 +98,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		// revert txs
 		for _, tx := range block.Transactions {
 			var isCoinCreationTransaction bool
+
 			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
 				explorer.stats.CoinCreationTransactionCount--
 				isCoinCreationTransaction = true
@@ -103,7 +107,29 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				for _, fee := range tx.MinerFees {
 					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(fee))
 				}
+			} else if tx.Version == tfchaintypes.TransactionVersionMinterDefinition {
+				// decrease coin creator tx count
+				explorer.stats.CoinCreatorDefinitionTransactionCount--
+
+				// set the previous mint condition as the current coin creators
+				previousMintConditionHeight := explorer.stats.BlockHeight.BlockHeight - 1
+				genesisMintCondition, err := explorer.txdb.GetMintConditionAt(previousMintConditionHeight)
+				if err != nil {
+					panic(fmt.Sprintf("failed to get mint condition for height %d: %v", previousMintConditionHeight, err))
+				}
+				// set previous coin creators
+				err = explorer.setMintCondition(genesisMintCondition)
+				if err != nil {
+					panic(fmt.Sprintf("failed to set mint condition in the explorer db: %v", err))
+				}
+
+				// sub miner fees if it was a minter definition tx,
+				// as fees are created from new coins in a minter definition tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(fee))
+				}
 			}
+
 			explorer.stats.TransactionCount--
 
 			if len(tx.CoinInputs) > 0 || len(tx.BlockStakeOutputs) > 1 {
@@ -160,6 +186,19 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		isGenesisBlock := block.ParentID == (rivinetypes.BlockID{})
 		if !isGenesisBlock {
 			explorer.stats.BlockHeight.Increase()
+		} else {
+			// no need to increase coin creator tx count, as this is not a coin creator tx
+
+			// get genesis mint condition
+			genesisMintCondition, err := explorer.txdb.GetMintConditionAt(0)
+			if err != nil {
+				panic(fmt.Sprintf("failed to get genesis mint condition: %v", err))
+			}
+			// set initial coin creators
+			err = explorer.setMintCondition(genesisMintCondition)
+			if err != nil {
+				panic(fmt.Sprintf("failed to set genesis mint condition in the explorer db: %v", err))
+			}
 		}
 		explorer.stats.Timestamp = types.AsTimestamp(block.Timestamp)
 		// returns the total amount of coins that have been unlocked
@@ -207,15 +246,38 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		// apply txs
 		for _, tx := range block.Transactions {
 			isCoinCreationTransaction := isGenesisBlock
+
 			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
 				explorer.stats.CoinCreationTransactionCount++
 				isCoinCreationTransaction = true
-				// sub miner fees if it was a coin created tx,
+				// add miner fees if it was a coin created tx,
 				// as fees are created from new coins in a coin creation tx as well
 				for _, fee := range tx.MinerFees {
 					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(fee))
 				}
+			} else if tx.Version == tfchaintypes.TransactionVersionMinterDefinition {
+				// decrease coin creator tx count
+				explorer.stats.CoinCreatorDefinitionTransactionCount++
+
+				// get the mint condition from the tx's extension data
+				mdtx, err := tfchaintypes.MinterDefinitionTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v128 tx as a MinterDefinitionTransaction: %v", err))
+				}
+
+				// set current coin creators
+				err = explorer.setMintCondition(mdtx.MintCondition)
+				if err != nil {
+					panic(fmt.Sprintf("failed to set mint condition in the explorer db: %v", err))
+				}
+
+				// add miner fees if it was a minter definition tx,
+				// as fees are created from new coins in a minter definition tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(fee))
+				}
 			}
+
 			explorer.stats.TransactionCount++
 
 			if len(tx.CoinInputs) > 0 || len(tx.BlockStakeOutputs) > 1 {
@@ -263,6 +325,38 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 	err = explorer.db.SetNetworkStats(explorer.stats)
 	if err != nil {
 		panic("failed to store network stats in db: " + err.Error())
+	}
+}
+
+func (explorer *Explorer) setMintCondition(condition rivinetypes.UnlockConditionProxy) error {
+conditionSwitch:
+	switch ct := condition.ConditionType(); ct {
+	case rivinetypes.ConditionTypeNil:
+		return explorer.db.SetCoinCreators([]types.UnlockHash{types.AsUnlockHash(condition.UnlockHash())})
+
+	case rivinetypes.ConditionTypeMultiSignature:
+		uhsg, ok := condition.Condition.(rivinetypes.UnlockHashSliceGetter)
+		if !ok {
+			return fmt.Errorf("unexpected Go-type for MultiSignatureCondition: %T", condition.Condition)
+		}
+		ruhs := uhsg.UnlockHashSlice()
+		uhs := make([]types.UnlockHash, 0, len(ruhs))
+		for _, ruh := range ruhs {
+			uhs = append(uhs, types.AsUnlockHash(ruh))
+		}
+		return explorer.db.SetCoinCreators(uhs)
+
+	case rivinetypes.ConditionTypeTimeLock:
+		// time lock conditions are allowed as long as the internal condition is allowed
+		cg, ok := condition.Condition.(rivinetypes.MarshalableUnlockConditionGetter)
+		if !ok {
+			return fmt.Errorf("unexpected Go-type for TimeLockCondition: %T", condition.Condition)
+		}
+		condition = rivinetypes.NewCondition(cg.GetMarshalableUnlockCondition())
+		goto conditionSwitch
+
+	default:
+		return fmt.Errorf("unexpected condition type %d as mint condition", ct)
 	}
 }
 

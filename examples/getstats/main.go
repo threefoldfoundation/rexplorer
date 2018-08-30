@@ -68,9 +68,9 @@ func main() {
 		lcp, _ := lcpb.Float64()
 		fmt.Printf("  * %08.5f%% locked coins of a total of %s coins\n", lcp, cc.ToCoinStringWithUnit(stats.Coins.Currency))
 	}
-	fmt.Printf("  * a total of %d transactions, of which %d value transactions,\n    %d coin creation transactions and %d are pure block creation transactions\n",
-		stats.TransactionCount, stats.ValueTransactionCount, stats.CoinCreationTransactionCount,
-		stats.TransactionCount-stats.ValueTransactionCount-stats.CoinCreationTransactionCount)
+	fmt.Printf("  * a total of %d transactions, of which %d value transactions,\n    %d coin creation transactions, %d coin creator definition transactions\n    and %d are pure block creation transactions\n",
+		stats.TransactionCount, stats.ValueTransactionCount, stats.CoinCreationTransactionCount, stats.CoinCreatorDefinitionTransactionCount,
+		stats.TransactionCount-stats.ValueTransactionCount-stats.CoinCreationTransactionCount-stats.CoinCreatorDefinitionTransactionCount)
 	fmt.Printf("  * a block height of %d, with the time of the highest block\n    being %s (%d)\n",
 		stats.BlockHeight.BlockHeight, stats.Timestamp.String(), stats.Timestamp.Timestamp)
 	fmt.Printf("  * a total of %d blocks, %d value transactions and %d coin inputs\n",

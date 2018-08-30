@@ -101,11 +101,12 @@ Following _public_ keys are reserved:
 * `stats`:
     * used for global network statistics
     * format value: JSON/MessagePack
-    * example key: `stats`
+* `coincreators`:
+    * used to store the unique wallet addresses of the current coin creators
+    * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
 * `addresses`:
     * set of unique wallet addresses used (even if reverted) in the network
     * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
-    * example key: `addresses`
 * `a:01<4_random_hex_chars>`:
     * used by all wallet addresses, contains unlocked balance, locked balance and coin outputs as well as all multisig wallets jointly owned by this wallet
     * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
@@ -136,6 +137,8 @@ JSON formats of value types defined by this module:
 	"timestamp": 1533795799,
 	"blockHeight": 77892,
 	"txCount": 78209,
+	"coinCreationTxCount": 0,
+	"coinCreatorDefinitionTxCount": 0,
 	"valueTxCount": 318,
 	"coinOutputCount": 79368,
 	"lockedCoinOutputCount": 742,
@@ -210,7 +213,7 @@ JSON formats of value types defined by this module:
 These examples assume you have a `rexplorer` instance running (and synced!!!),
 using the default redis address (`:6379`) and default db slot (`0`).
 
-### Get Coins
+### Get coins
 
 There is a Go example that you can checkout at [/examples/getcoins/main.go](/examples/getcoins/main.go),
 and you can run it yourself as follows:
@@ -233,7 +236,7 @@ $ redis-cli HGET a:013302 1d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f04
 As you can see for yourself, the balance of an address is stored as a JSON object,
 and the total balance is something which you have to compute yourself.
 
-### Get All Unique Addresses Used
+### Get all unique addresses used
 
 Get all the unique addresses used within a network.
 Even if an address is only used in a reverted block, it is still tracked and kept:
@@ -264,7 +267,33 @@ $ redis-cli scard addresses
 (integer) 635
 ```
 
-### Get Global Statistics
+### Get the unique wallet addresses of the current Coin Creators
+
+Get all the unique wallet addresses of the current coin creators.
+There is a Go example that you can checkout at [/examples/getcoincreators/main.go](/examples/getcoincreators/main.go),
+and you can run it yourself as follows:
+
+```
+$ go run ./examples/getcoincreators/main.go
+1) 01434535fd01243c02c277cd58d71423163767a575a8ae44e15807bf545e4a8456a5c4afabad51
+2) 0149a5496fea27315b7db6251e5dfda23bc9d4bf677c5a5c2d70f1382c44357197d8453d9dfa32
+3) 01334cf68f312026ff9df84fc023558db8624bedd717adcc9edc6900488cf6df54ac8e3d1c89a8
+```
+
+You can run the same example directly from the shell —using `redis-cli`— as well:
+
+```
+$ redis-cli SMEMBERS coincreators
+1) "01434535fd01243c02c277cd58d71423163767a575a8ae44e15807bf545e4a8456a5c4afabad51"
+2) "0149a5496fea27315b7db6251e5dfda23bc9d4bf677c5a5c2d70f1382c44357197d8453d9dfa32"
+3) "01334cf68f312026ff9df84fc023558db8624bedd717adcc9edc6900488cf6df54ac8e3d1c89a8"
+```
+
+As you can see for yourself, the unique wallet addresses are stored in a Redis Set,
+in a hex-encoded string format, so getting each coin creator is pretty easy.
+For each coin creator you can than also gather information such as the wallet of each coin creator.
+
+### Get global statistics
 
 There is a Go example that you can checkout at [/examples/getstats/main.go](/examples/getstats/main.go),
 and you can run it yourself as follows:
@@ -304,7 +333,7 @@ As you can see for yourself, the balance of an address is stored as a JSON objec
 In the Golang example we added some extra logic to showcase some examples of
 some statistics you can compute based on the tracked global statistical values.
 
-### Get MultiSig Addresses
+### Get multi-signature Addresses
 
 There is a Go example that you can checkout at [/examples/getmultisigaddresses/main.go](/examples/getmultisigaddresses/main.go),
 and you can run it yourself as follows:

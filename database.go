@@ -31,6 +31,7 @@ type Database interface {
 	RevertCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error)
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash, signaturesRequired uint64) error
+	SetCoinCreators(creators []types.UnlockHash) error
 
 	Close() error
 }
@@ -68,6 +69,7 @@ type (
 	//
 	//	  public keys:
 	//	  stats																			(JSON/MsgPack) used for global network statistics
+	//    coincreators																	(SET) set of unique wallet addresses of the coin creator(s)
 	//	  addresses																		(SET) set of unique wallet addresses used (even if reverted) in the network
 	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack) used by all contract and wallet addresses, storing all content of the wallet/contract
 	//
@@ -235,6 +237,8 @@ const (
 	statsKey = "stats"
 
 	addressesKey = "addresses"
+
+	coinCreatorsKey = "coincreators"
 
 	lockedByHeightOutputsKey    = "lcos.height"
 	lockedByTimestampOutputsKey = "lcos.time"
@@ -882,6 +886,19 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 			return fmt.Errorf(
 				"redis: failed to set wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
 		}
+	}
+	return nil
+}
+
+// SetCoinCreators implements Database.SetCoinCreators
+func (rdb *RedisDatabase) SetCoinCreators(creators []types.UnlockHash) error {
+	rdb.conn.Send("DEL", coinCreatorsKey)
+	for _, creator := range creators {
+		rdb.conn.Send("SADD", coinCreatorsKey, creator.String())
+	}
+	_, err := RedisFlushAndReceive(rdb.conn, 1+len(creators))
+	if err != nil {
+		return fmt.Errorf("failed to set coin creators: %v", err)
 	}
 	return nil
 }

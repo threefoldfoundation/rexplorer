@@ -126,6 +126,7 @@
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
+    "pkg/persist",
     "pkg/types"
   ]
   revision = "0904d793e5e0c71632f0924241fb3cb07f3d27b8"
@@ -203,6 +204,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8d4cc1a23c229a7fa49685bb680f45911736f2d3505f4df5b2b0dce586e65e54"
+  inputs-digest = "559d2c709a37dded4b108d33349ea79f34209ec9becfb334f8b61184b276e1dd"
   solver-name = "gps-cdcl"
   solver-version = 1

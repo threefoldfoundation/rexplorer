@@ -10,20 +10,21 @@ import (
 type (
 	// NetworkStats collects the global statistics for the blockchain.
 	NetworkStats struct {
-		Timestamp                    Timestamp   `json:"timestamp" msg:"timestamp"`
-		BlockHeight                  BlockHeight `json:"blockHeight" msg:"blockHeight"`
-		TransactionCount             uint64      `json:"txCount" msg:"txCount"`
-		CoinCreationTransactionCount uint64      `json:"coinCreationTxCount" msg:"coinCreationTxCount"`
-		ValueTransactionCount        uint64      `json:"valueTxCount" msg:"valueTxCount"`
-		CointOutputCount             uint64      `json:"coinOutputCount" msg:"coinOutputCount"`
-		LockedCointOutputCount       uint64      `json:"lockedCoinOutputCount" msg:"lockedCoinOutputCount"`
-		CointInputCount              uint64      `json:"coinInputCount" msg:"coinInputCount"`
-		MinerPayoutCount             uint64      `json:"minerPayoutCount" msg:"minerPayoutCount"`
-		TransactionFeeCount          uint64      `json:"txFeeCount" msg:"txFeeCount"`
-		MinerPayouts                 Currency    `json:"minerPayouts" msg:"minerPayouts"`
-		TransactionFees              Currency    `json:"txFees" msg:"txFees"`
-		Coins                        Currency    `json:"coins" msg:"coins"`
-		LockedCoins                  Currency    `json:"lockedCoins" msg:"lockedCoins"`
+		Timestamp                             Timestamp   `json:"timestamp" msg:"timestamp"`
+		BlockHeight                           BlockHeight `json:"blockHeight" msg:"blockHeight"`
+		TransactionCount                      uint64      `json:"txCount" msg:"txCount"`
+		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"coinCreationTxCount"`
+		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"coinCreatorDefinitionTxCount"`
+		ValueTransactionCount                 uint64      `json:"valueTxCount" msg:"valueTxCount"`
+		CointOutputCount                      uint64      `json:"coinOutputCount" msg:"coinOutputCount"`
+		LockedCointOutputCount                uint64      `json:"lockedCoinOutputCount" msg:"lockedCoinOutputCount"`
+		CointInputCount                       uint64      `json:"coinInputCount" msg:"coinInputCount"`
+		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"minerPayoutCount"`
+		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txFeeCount"`
+		MinerPayouts                          Currency    `json:"minerPayouts" msg:"minerPayouts"`
+		TransactionFees                       Currency    `json:"txFees" msg:"txFees"`
+		Coins                                 Currency    `json:"coins" msg:"coins"`
+		LockedCoins                           Currency    `json:"lockedCoins" msg:"lockedCoins"`
 	}
 )
 
