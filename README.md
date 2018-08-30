@@ -143,21 +143,21 @@ JSON formats of value types defined by this module:
 
 ```json
 {
-	"timestamp": 1533795799,
-	"blockHeight": 77892,
-	"txCount": 78209,
-	"coinCreationTxCount": 0,
-	"coinCreatorDefinitionTxCount": 0,
-	"valueTxCount": 318,
-	"coinOutputCount": 79368,
-	"lockedCoinOutputCount": 742,
-	"coinInputCount": 357,
-	"minerPayoutCount": 77892,
-	"txFeeCount": 240,
-	"minerPayouts": "77892000000000",
-	"txFees": "31600000001",
-	"coins": "695176892000000000",
-	"lockedCoins": "4852167650000000"
+	"timestamp": 1535661244,
+	"blockHeight": 103481,
+	"txCount": 103830,
+	"coinCreationTxCount": 2,
+	"coinCreatorDefinitionTxCount": 1,
+	"valueTxCount": 348,
+	"coinOutputCount": 104414,
+	"lockedCoinOutputCount": 736,
+	"coinInputCount": 1884,
+	"minerPayoutCount": 103481,
+	"txFeeCount": 306,
+	"minerPayouts": "1034810000000000",
+	"txFees": "36100000071",
+	"coins": "101054810300000000",
+	"lockedCoins": "8045200000000"
 }
 ```
 
@@ -242,12 +242,17 @@ total: 24791.36 TFT
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli HGET a:013302 1d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8
-"{\"balance\":{\"locked\":\"24691360000000\"}}"
+$ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
+"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"24691360000000\",\"outputs\":null}},\"multisignAddresses\":null,\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
 ```
 
-As you can see for yourself, the balance of an address is stored as a JSON object,
+As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).,
 and the total balance is something which you have to compute yourself.
+
+> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
+> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> If so, you'll first have to decode prior to being able to consume it as human reader.
+> The Golang example does this automatically for you.
 
 ### Get all unique addresses used
 
@@ -277,7 +282,7 @@ Following this example we can see how to get the amount of unique addresses used
 
 ```
 $ redis-cli scard addresses
-(integer) 635
+(integer) 517
 ```
 
 ### Get the unique wallet addresses of the current Coin Creators
@@ -341,12 +346,17 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli get stats
-"{\"timestamp\":1533795799,\"blockHeight\":77892,\"txCount\":78209,\"valueTxCount\":318,\"coinOutputCount\":79368,\"lockedCoinOutputCount\":742,\"coinInputCount\":357,\"minerPayoutCount\":77892,\"txFeeCount\":240,\"minerPayouts\":\"77892000000000\",\"txFees\":\"31600000001\",\"coins\":\"695176892000000000\",\"lockedCoins\":\"4852167650000000\"}"
+"{\"timestamp\":1535661244,\"blockHeight\":103481,\"txCount\":103830,\"coinCreationTxCount\":2,\"coinCreatorDefinitionTxCount\":1,\"valueTxCount\":348,\"coinOutputCount\":104414,\"lockedCoinOutputCount\":736,\"coinInputCount\":1884,\"minerPayoutCount\":103481,\"txFeeCount\":306,\"minerPayouts\":\"1034810000000000\",\"txFees\":\"36100000071\",\"coins\":\"101054810300000000\",\"lockedCoins\":\"8045200000000\"}\n"
 ```
 
-As you can see for yourself, the balance of an address is stored as a JSON object.
+As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).
 In the Golang example we added some extra logic to showcase some examples of
 some statistics you can compute based on the tracked global statistical values.
+
+> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
+> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> If so, you'll first have to decode prior to being able to consume it as human reader.
+> The Golang example does this automatically for you.
 
 ### Get multi-signature Addresses
 
@@ -354,7 +364,7 @@ There is a Go example that you can checkout at [/examples/getmultisigaddresses/m
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getmultisigaddresses/main.go --db-slot 101b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
+$ go run ./examples/getmultisigaddresses/main.go --db-slot 1 01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
 * 0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
 ```
 
@@ -362,15 +372,20 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-"{\"multisignaddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"]}"
+"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
 ```
 
 This example also works in the opposite direction, where the multisig address will return all owner addresses:
 
 ```
 $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
-"{\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":1}}"
+"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":2}}\n"
 ```
+
+> Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
+> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> If so, you'll first have to decode prior to being able to consume it as human reader.
+> The Golang example does this automatically for you.
 
 ## Testing
 
