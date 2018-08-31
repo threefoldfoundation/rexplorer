@@ -8,6 +8,16 @@
 It applies/reverts data —received from an embedded consensus module— into a Redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.
 
+## Index
+
+* [Install](#install): how to install `rexplorer`;
+* [Usage](#usage): how to use `rexplorer`;
+* [Reserved Redis Keys](#reserved-redis-keys): explains which keys are used to store values in a Redis Database by a `rexplorer` instance;
+* [Encoding](#encoding): explains about the different encoding protocols supported by `rexplorer` (make sure to also read the last part of the [Reserved Redis Keys](#reserved-redis-keys) chapter as it explains the structure of the encoded values);
+  * [Statistics](#statistics): statistics to put the characteristics of the supported encoding protocols into context (explains also how these statistics are gathered);
+* [Examples](#examples): shows some example use cases of `rexplorer` using Go as well as directly with the official `redis-cli` tool;
+* [Testing](#testing): explains how the `rexplorer` codebase and tool is tested, as well as how you can run these tests yourself.
+
 ## Install
 
 ```
@@ -220,6 +230,161 @@ JSON formats of value types defined by this module:
 > When using ProtocolBuffer (an optional encoding type, less widely supported but faster),
 > you'll have to decode using the `types.proto` Protocol Buffer scheme of public types found at
 > [./pkg/types/types.proto](./pkg/types/types.proto).
+
+## Encoding
+
+The default encoding protocol for rexplorer is [MessagePack](https://msgpack.org), used for all public structured values,
+more specifically wallets and network statistics, as well as some internal structured values. [JSON](http://json.org) are
+and [Protocol Buffers](https://developers.google.com/protocol-buffers/) are supported as well however.
+
+> The `rexplorer` tool as well as most Go examples allow you to specify the encoding protocol used
+> using the `--encoding (msgp|protobuf|json)` flag:
+>
+> * `--encoding msgp` to use [MessagePack](https://msgpack.org);
+> * `--encoding json` to use [JSON](http://json.org);
+> * `--encoding protobuf` to use [Protocol Buffers](https://developers.google.com/protocol-buffers/).
+
+As a single Redis database is to be reserved for a single (tfchain) network,
+you can also only use one encoding protocol per Redis database as a consequence.
+Should you for example try to start `rexplorer` using the `--encoding json` flag,
+when it was previously always started on that Redis Database with the `--encoding msgp` (default) flag,
+it will immediately exit with an error complaining about the fact that you are trying to mix encoding protocols.
+
+### Statistics
+
+The default encoding protocol for rexplorer is [MessagePack](https://msgpack.org),
+it is chosen  as the default protocol for following reasons:
+
+* it is a format which is well supported across (programming) languages and environments;
+* it is reasonably fast;
+* it is much more compact than for example `JSON`;
+
+You might however have other preferences. [JSON](http://json.org) is even more widely supported
+and has the advantage that it can be read by humans without need to decode it prior to consumption.
+[Protocol Buffers](https://developers.google.com/protocol-buffers/) is —in the current implementation—
+slower than our [MessagePack](https://msgpack.org) implementation but is much more compact in terms of byte size.
+
+Here are some numbers to put the available encoding protocols into context.
+
+||[MessagePack](https://msgpack.org)|[JSON](http://json.org)|[Protocol Buffers](https://developers.google.com/protocol-buffers/)|
+|---|---|---|---|
+|time to sync from disk (ms/block)|1.89646|5.26325|2.45775|
+|byte size of global `stats` value|313|373|104|}
+|byte size of individual wallets
+|minimum|105|116|10|
+|maximum|40 836|46 568|33 426|
+|average|296|335|165|
+|byte size of multi-signature wallets|||
+|minimum|265|275|84|
+|maximum|425|437|155|
+|average|314|326|106|
+
+#### Information about the last statistics update
+
+blockchain information:
+* network: [tfchain testnet](http://explorer.testnet.threefoldtoken.com);
+* block height: `103 492`
+* network time: `22:45:15 +0200 CEST`
+
+`rexplorer` version:
+```
+$ rexplorer version
+Tool version            v0.1.2-1e02b3b
+TFChain Daemon version  v1.1.0-rc-1
+Rivine protocol version v1.0.7
+
+Go Version   v1.11
+GOOS         darwin
+GOARCH       amd64
+```
+
+Hardware Information:
+```
+$ system_profiler SPHardwareDataType | grep -v UUID | grep -v SerialHardware:
+
+    Hardware Overview:
+
+      Model Name: MacBook Pro
+      Model Identifier: MacBookPro14,2
+      Processor Name: Intel Core i5
+      Processor Speed: 3,1 GHz
+      Number of Processors: 1
+      Total Number of Cores: 2
+      L2 Cache (per Core): 256 KB
+      L3 Cache: 4 MB
+      Memory: 16 GB
+      Boot ROM Version: MBP142.0178.B00
+      SMC Version (system): 2.44f1
+```
+
+#### How are these statistics gathered
+
+First of all you should apply the following diff
+to the `rexplorer` codebase (using `git apply` or manually):
+
+```diff
+diff --git a/commands.go b/commands.go
+index 46d245f..38cb282 100644
+--- a/commands.go
++++ b/commands.go
+@@ -183,7 +183,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
+ 		log.Println("rexplorer is up and running...")
+ 
+ 		// wait until done
+-		<-ctx.Done()
++		//<-ctx.Done()
++		cancel()
+ 	}()
+ 
+ 	// stop the server if a kill signal is caught
+@@ -199,7 +200,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
+ 	}
+ 
+ 	cancel()
+-	wg.Wait()
++	//wg.Wait()
+ 
+ 	log.Println("Goodbye!")
+ 	return
+```
+
+This diff will make sure that `rexplorer` exists as soon the
+`Explorer` internal module is done syncing blocks from disk,
+as received from the `Consensus` module.
+
+> Prior to doing all this, make sure that you already
+> have a reasonable amount of blocks on disk, gathered using
+> an unmodified `rexplorer` version.
+>
+> The more blocks, the more useful the statistics will be in general.
+
+Make sure to flush all the Redis databases that you'll use,
+using `redis-cli -n <N> flushdb` or `redis-cli flushall`.
+
+Once you met all these pre-conditions you can populate your redis databases, one by one, ideally in an isolated environment:
+
+* `time rexplorer --redis-db 1 --network testnet --encoding msgp`;
+* `time rexplorer --redis-db 2 --network testnet --encoding json`;
+* `time rexplorer --redis-db 3 --network testnet --encoding protobuf`.
+
+This will give you the total time it took to execute these commands, dividing the total time by the block height should give you the average time it took to process and store a block. These commands will also have populated your Redis databases, allowing you to automatically gather the other statistics as well.
+
+Using [./tools/statsbytesize](./tools/statsbytesize) you can gather the byte size of the global `stats` value for a given Redis database (no decoding is required for this tool):
+
+```
+$ go run ./tools/statsbytesize/main.go --db-slot 3
+byte size of stats value:  104
+```
+
+Using [./tools/walletbytesize](./tools/walletbytesize) you can gather the minimum, maximum and average byte size of individual and multi-signature wallets for a given Redis database (make sure to specify the correct `--encoding` flag for each Redis database slot):
+
+```
+$ go run ./tools/walletbytesize/main.go --db-slot 3 --encoding protobuf
+2018/08/31 11:06:15 scanned wallet addresses in 51 SSCAN cycles
+                       average       min          max
+Individual Wallets     165           10           33426
+MultiSig Wallets       106           84           155
+```
 
 ## Examples
 
