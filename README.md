@@ -54,9 +54,9 @@ using the `-d`/`--persistent-directory` flag.
 
 Should you want to explore `testnet` instead of the `standard` net you can use the `--network testnet` flag.
 
-By default [MessagePack](https://msgpack.org) is used to encode all public data in the Redis Database,
-should you want to use [JSON](http://json.org) instead you can use the `--encoding json` flag.
-[Protocol Buffers](https://developers.google.com/protocol-buffers/) is available as well and can be used using the `--encoding protobuf` flag.
+By default [MessagePack][encoding-msgp] is used to encode all public data in the Redis Database,
+should you want to use [JSON][encoding-json] instead you can use the `--encoding json` flag.
+[Protocol Buffers][encoding-pb] is available as well and can be used using the `--encoding protobuf` flag.
 
 For more information use the `--help` flag:
 
@@ -111,7 +111,7 @@ Following _internal_ keys are reserved:
     * format value: custom
     * example key: `lcos.height:42`
 * `lcos.time:<timestamp-(timestamp%7200)>`:
-    * all locked coin outputs for a given timestmap range
+    * all locked coin outputs for a given timestamp range
     * format value: custom
     * example key: `lcos.time:1526335200`
 
@@ -233,16 +233,16 @@ JSON formats of value types defined by this module:
 
 ## Encoding
 
-The default encoding protocol for rexplorer is [MessagePack](https://msgpack.org), used for all public structured values,
-more specifically wallets and network statistics, as well as some internal structured values. [JSON](http://json.org) are
-and [Protocol Buffers](https://developers.google.com/protocol-buffers/) are supported as well however.
+The default encoding protocol for rexplorer is [MessagePack][encoding-msgp], used for all public structured values,
+more specifically wallets and network statistics, as well as some internal structured values. [JSON][encoding-json] are
+and [Protocol Buffers][encoding-pb] are supported as well however.
 
 > The `rexplorer` tool as well as most Go examples allow you to specify the encoding protocol used
 > using the `--encoding (msgp|protobuf|json)` flag:
 >
-> * `--encoding msgp` to use [MessagePack](https://msgpack.org);
-> * `--encoding json` to use [JSON](http://json.org);
-> * `--encoding protobuf` to use [Protocol Buffers](https://developers.google.com/protocol-buffers/).
+> * `--encoding msgp` to use [MessagePack][encoding-msgp];
+> * `--encoding json` to use [JSON][encoding-json];
+> * `--encoding protobuf` to use [Protocol Buffers][encoding-pb].
 
 As a single Redis database is to be reserved for a single (tfchain) network,
 you can also only use one encoding protocol per Redis database as a consequence.
@@ -252,21 +252,21 @@ it will immediately exit with an error complaining about the fact that you are t
 
 ### Statistics
 
-The default encoding protocol for rexplorer is [MessagePack](https://msgpack.org),
+The default encoding protocol for rexplorer is [MessagePack][encoding-msgp],
 it is chosen  as the default protocol for following reasons:
 
 * it is a format which is well supported across (programming) languages and environments;
 * it is reasonably fast;
 * it is much more compact than for example `JSON`;
 
-You might however have other preferences. [JSON](http://json.org) is even more widely supported
+You might however have other preferences. [JSON][encoding-json] is even more widely supported
 and has the advantage that it can be read by humans without need to decode it prior to consumption.
-[Protocol Buffers](https://developers.google.com/protocol-buffers/) is —in the current implementation—
-slower than our [MessagePack](https://msgpack.org) implementation but is much more compact in terms of byte size.
+[Protocol Buffers][encoding-pb] is —in the current implementation—
+slower than our [MessagePack][encoding-msgp] implementation but is much more compact in terms of byte size.
 
 Here are some numbers to put the available encoding protocols into context.
 
-||[MessagePack](https://msgpack.org)|[JSON](http://json.org)|[Protocol Buffers](https://developers.google.com/protocol-buffers/)|
+||[MessagePack][encoding-msgp]|[JSON][encoding-json]|[Protocol Buffers][encoding-pb]|
 |---|---|---|---|
 |time to sync from disk (ms/block)|1.89646|5.26325|2.45775|
 |byte size of global `stats` value|313|373|104|}
@@ -414,8 +414,8 @@ $ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).,
 and the total balance is something which you have to compute yourself.
 
-> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
-> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
+> or [Protocol Buffers][encoding-pb] as the encoding type of your rexplorer.
 > If so, you'll first have to decode prior to being able to consume it as human reader.
 > The Golang example does this automatically for you.
 
@@ -518,8 +518,8 @@ As you can see for yourself, the balance of an address is stored as a JSON objec
 In the Golang example we added some extra logic to showcase some examples of
 some statistics you can compute based on the tracked global statistical values.
 
-> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
-> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
+> or [Protocol Buffers][encoding-pb] as the encoding type of your rexplorer.
 > If so, you'll first have to decode prior to being able to consume it as human reader.
 > The Golang example does this automatically for you.
 
@@ -547,8 +547,8 @@ $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2f
 "{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":2}}\n"
 ```
 
-> Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack](https://msgpack.org)
-> or [Protocol Buffers](https://developers.google.com/protocol-buffers/) as the encoding type of your rexplorer.
+> Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
+> or [Protocol Buffers][encoding-pb] as the encoding type of your rexplorer.
 > If so, you'll first have to decode prior to being able to consume it as human reader.
 > The Golang example does this automatically for you.
 
@@ -620,3 +620,7 @@ sumcoins test —using encoding msgp— on block height 81082 passed :)
 [rivine]: https://github.com/rivine/rivine
 [redistypes]: https://redis.io/topics/data-types
 [msgp-spec]: https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family
+
+[encoding-msgp]: https://msgpack.org
+[encoding-json]: https://json.org
+[encoding-pb]: https://developers.google.com/protocol-buffers/
