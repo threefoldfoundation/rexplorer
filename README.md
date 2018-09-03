@@ -274,10 +274,12 @@ Here are some numbers to put the available encoding protocols into context.
 |minimum|105|116|10|
 |maximum|40 836|46 568|33 426|
 |average|296|335|165|
+|total|150 367|170 229|83 814|
 |byte size of multi-signature wallets|||
 |minimum|265|275|84|
 |maximum|425|437|155|
 |average|314|326|106|
+|total|3147|3265|1060|
 
 #### Information about the last statistics update
 

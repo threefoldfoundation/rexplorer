@@ -75,11 +75,11 @@ func main() {
 		}
 	}
 
-	fmt.Println("                       average       min          max")
-	avg, min, max := individualWalletStats.Stats()
-	fmt.Printf("Individual Wallets     %-10d    %-10d   %-10d\r\n", avg, min, max)
-	avg, min, max = multisigWalletStats.Stats()
-	fmt.Printf("MultiSig Wallets       %-10d    %-10d   %-10d\r\n", avg, min, max)
+	fmt.Println("                       average       min          max          total")
+	avg, min, max, total := individualWalletStats.Stats()
+	fmt.Printf("Individual Wallets     %-10d    %-10d   %-10d   %-10d\r\n", avg, min, max, total)
+	avg, min, max, total = multisigWalletStats.Stats()
+	fmt.Printf("MultiSig Wallets       %-10d    %-10d   %-10d   %-10d\r\n", avg, min, max, total)
 }
 
 type sizeStatCollector struct {
@@ -108,12 +108,12 @@ func (sc *sizeStatCollector) Track(size int64) {
 	sc.total.Add(sc.total, big.NewInt(size))
 }
 
-func (sc *sizeStatCollector) Stats() (int64, int64, int64) {
+func (sc *sizeStatCollector) Stats() (int64, int64, int64, int64) {
 	if sc.count == 0 {
-		return 0, 0, 0
+		return 0, 0, 0, 0
 	}
 	avg, _ := new(big.Float).Quo(new(big.Float).SetInt(sc.total), new(big.Float).SetInt64(sc.count)).Int64()
-	return avg, sc.min, sc.max
+	return avg, sc.min, sc.max, sc.total.Int64()
 }
 
 func getAddressKeyAndField(addr string) (key, field string) {
