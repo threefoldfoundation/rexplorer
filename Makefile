@@ -44,13 +44,26 @@ integration-test-sumcoins:
 		--db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
-integration-test-sumcoins-python:
+
+generate-python-proto-pkg:
+	test -d tests/integration/sumcoins/build || mkdir tests/integration/sumcoins/build
+	protoc -I=./pkg/types/  --python_out=tests/integration/sumcoins/build ./pkg/types/types.proto
+
+
+integration-test-sumcoins-python: generate-python-proto-pkg
+
+	python tests/integration/sumcoins/main.py \
+		--db-port "$(TESTNET_REDIS_PORT)" --db-slot "$(STANDARD_REDIS_DB)" \
+		--encoding protobuf
+
 	python tests/integration/sumcoins/main.py \
 		--db-port "$(TESTNET_REDIS_PORT)" --db-slot "$(TESTNET_REDIS_DB)" \
 		--encoding "$(TESTNET_ENCODING_TYPE)"
 	python tests/integration/sumcoins/main.py \
 		--db-port "$(STANDARD_REDIS_PORT)" --db-slot "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
+
+
 
 generate-types:
 	go generate pkg/types/types.go
