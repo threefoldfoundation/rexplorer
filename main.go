@@ -20,9 +20,9 @@ func main() {
 		Short: "start the rexplorer daemon",
 		Long: `start the rexplorer daemon
 		
-(*) The following kind of glob expressions can
-be made for the optional description filters:
-
+(*) Extra Information for the '-f/--filter' flag:
+  The following kind of glob expressions can
+  be made for the optional description filters:
   - Multiple Characters Wildcard: *
 	example: 'bar:*' // matches 'bar:', 'bar: foo', 'bar:ok', ...
 

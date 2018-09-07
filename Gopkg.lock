@@ -160,7 +160,7 @@
     "types",
   ]
   pruneopts = "NUT"
-  revision = "e97af67533f234d229a4a0b7b7641b39e715ef90"
+  revision = "45e533fb8e588094e2f0ec84d7cf778e382480cc"
 
 [[projects]]
   digest = "1:3186aade954ad7beb5a94a678d9d108de9f7ac7127de34255f3feed64cfca525"
@@ -196,7 +196,7 @@
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "5137e49ddb729ec1f1d1b38e9683338f8f3639d5"
+  revision = "68ae6b09ea9c90fff8ca554b5ac23587ce9ad76b"
 
 [[projects]]
   branch = "master"
@@ -221,11 +221,11 @@
     "twofish",
   ]
   pruneopts = "NUT"
-  revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
+  revision = "0709b304e793a5edb4a2c0145f281ecdc20838a4"
 
 [[projects]]
   branch = "master"
-  digest = "1:fd35bc6003cfae47dd6041db172fb971f3e08991ecdf2971bd03dcabedef3b0b"
+  digest = "1:8bc7ff3c61fb32fe0bf7dfe7158b434608a562f891bf9b4ff1f1c2fa8cfe48e2"
   name = "golang.org/x/net"
   packages = [
     "html",
@@ -233,18 +233,18 @@
     "html/charset",
   ]
   pruneopts = "NUT"
-  revision = "8a410e7b638dca158bf9e766925842f6651ff828"
+  revision = "161cd47e91fd58ac17490ef4d742dc98bb4cf60e"
 
 [[projects]]
   branch = "master"
-  digest = "1:cb7ca2b9dc6503f0f55cf60262efb693ff5e0cbb4a1128e45a81a6e42df73bad"
+  digest = "1:8b1b7d3aee8dfeca377705729353a1a75d6ba9675f0d845bb73d96c052742290"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
     "unix",
   ]
   pruneopts = "NUT"
-  revision = "d99a578cf41bfccdeaf48b0845c823a4b8b0ad5e"
+  revision = "8cf3aee429924738c56c34bb819c4ea8273fc434"
 
 [[projects]]
   digest = "1:7c61a813b250ba8bb02bebb0382e6c3d00e04da2b577dc58985b86312fb89ffd"

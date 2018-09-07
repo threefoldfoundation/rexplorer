@@ -22,7 +22,7 @@ such that the tfchain network data can be consumed/used in a meaningful way.
 
 ```
 $ go get -u github.com/threefoldfoundation/rexplorer && rexplorer version
-Tool version            v0.1.2-f48bcb7
+Tool version            v0.2.0
 TFChain Daemon version  v1.1.0-rc-1
 Rivine protocol version v1.0.7
 
@@ -64,6 +64,29 @@ For more information use the `--help` flag:
 $ rexplorer --help
 start the rexplorer daemon
 
+(*) Extra Information for the '-f/--filter' flag:
+  The following kind of glob expressions can
+  be made for the optional description filters:
+  - Multiple Characters Wildcard: *
+        example: 'bar:*' // matches 'bar:', 'bar: foo', 'bar:ok', ...
+
+  - Single Character Wildcard: ?
+        example: 'h?' // matches 'ho', 'ha', 'hi', 'hh', ...
+
+  - Allow any character from a given character list: [xy]
+        example: 'b[aoi]t' // matches 'bot', 'bit', 'bat'
+
+  - Allow any character from a given character range: [x-y]
+        example: 'a[a-c]a' // matches 'aaa', 'aba', 'aca'
+
+  - Allow any character except a given character list: [!xy]
+        example: 'a[!ac]ba' // does not match 'acba',
+                            // but does match 'abba', 'adba', ...
+
+  - Allow any character except a character within a given character range: [!x-y]
+        example: '[!a-f]oo' // does not match 'foo', 'boo', ...
+                            // but does match 'woo', 'zoo', 5oo, ...
+
 Usage:
   rexplorer [flags]
   rexplorer [command]
@@ -73,14 +96,15 @@ Available Commands:
   version     show versions of this tool
 
 Flags:
-  -e, --encoding EncodingType         which encoding protocol to use, one of {json,msgp,protobuf} (default msgp)
-  -h, --help                          help for rexplorer
-  -n, --network string                the name of the network to which the daemon connects, one of {standard,testnet} (default "standard")
-  -d, --persistent-directory string   location of the root diretory used to store persistent data of the daemon of tfchain
-      --profile-addr string           enables profiling of this rexplorer instance as an http service
-      --redis-addr string             which (tcp) address the redis server listens on (default ":6379")
-      --redis-db int                  which redis database slot to use
-      --rpc-addr string               which port the gateway listens on (default ":23112")
+  -e, --encoding EncodingType             which encoding protocol to use, one of {json,msgp,protobuf} (default msgp)
+  -f, --filter DescriptionFilterSetFlag   list unlocked outputs in wallets if the description of output matches any of the unique glob (*) filters
+  -h, --help                              help for rexplorer
+  -n, --network string                    the name of the network to which the daemon connects, one of {standard,testnet} (default "standard")
+  -d, --persistent-directory string       location of the root diretory used to store persistent data of the daemon of tfchain
+      --profile-addr string               enables profiling of this rexplorer instance as an http service
+      --redis-addr string                 which (tcp) address the redis server listens on (default ":6379")
+      --redis-db int                      which redis database slot to use
+      --rpc-addr string                   which port the gateway listens on (default ":23112")
 
 Use "rexplorer [command] --help" for more information about a command.
 ```
@@ -371,30 +395,30 @@ Here are some numbers to put the available encoding protocols into context.
 
 ||[MessagePack][encoding-msgp]|[JSON][encoding-json]|[Protocol Buffers][encoding-pb]|
 |---|---|---|---|
-|time to sync from disk (ms/block)|1.89646|5.26325|2.45775|
-|byte size of global `stats` value|313|373|104|}
+|time to sync from disk (ms/block)|3.60092|6.61503|2.39282|
+|byte size of global `stats` value|187|373|104|}
 |byte size of individual wallets
-|minimum|105|116|10|
-|maximum|40 836|46 568|33 426|
-|average|296|335|165|
-|total|150 367|170 229|83 814|
+|minimum|19|3|0|
+|maximum|39 887|46 527|33 428|
+|average|235|238|161|
+|total|119 240|121 104|81 639|
 |byte size of multi-signature wallets|||
-|minimum|265|275|84|
-|maximum|425|437|155|
-|average|314|326|106|
-|total|3147|3265|1060|
+|minimum|211|212|74|
+|maximum|371|374|145|
+|average|272|269|98|
+|total|2725|2697|984|
 
 #### Information about the last statistics update
 
 blockchain information:
 * network: [tfchain testnet](http://explorer.testnet.threefoldtoken.com);
 * block height: `103 492`
-* network time: `22:45:15 +0200 CEST`
+* network time: `22:48:15 +0200 CEST`
 
 `rexplorer` version:
 ```
 $ rexplorer version
-Tool version            v0.1.2-1e02b3b
+Tool version            v0.1.2-d1af62c
 TFChain Daemon version  v1.1.0-rc-1
 Rivine protocol version v1.0.7
 
