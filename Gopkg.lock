@@ -188,7 +188,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1bee914e4c1f27fab48b44c746a477dd30f5fbaaa3b5a7b67dfcf1581144b0a1"
+  digest = "1:51d06b842edde76ae0578665ef3e73e6fc46a246b6aa111d5d797961a164a0e5"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
@@ -196,7 +196,7 @@
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "68ae6b09ea9c90fff8ca554b5ac23587ce9ad76b"
+  revision = "2f950a1676ee811fd54fd756619d15afa4b8623f"
 
 [[projects]]
   branch = "master"
