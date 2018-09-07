@@ -271,155 +271,53 @@ func (z *Wallet) DecodeMsg(dc *msgp.Reader) (err error) {
 		}
 		switch msgp.UnsafeString(field) {
 		case "balance":
-			var zb0002 uint32
-			zb0002, err = dc.ReadMapHeader()
+			err = z.Balance.DecodeMsg(dc)
 			if err != nil {
 				return
-			}
-			for zb0002 > 0 {
-				zb0002--
-				field, err = dc.ReadMapKeyPtr()
-				if err != nil {
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "unlocked":
-					err = z.Balance.Unlocked.DecodeMsg(dc)
-					if err != nil {
-						return
-					}
-				case "locked":
-					var zb0003 uint32
-					zb0003, err = dc.ReadMapHeader()
-					if err != nil {
-						return
-					}
-					for zb0003 > 0 {
-						zb0003--
-						field, err = dc.ReadMapKeyPtr()
-						if err != nil {
-							return
-						}
-						switch msgp.UnsafeString(field) {
-						case "total":
-							err = z.Balance.Locked.Total.DecodeMsg(dc)
-							if err != nil {
-								return
-							}
-						case "outputs":
-							var zb0004 uint32
-							zb0004, err = dc.ReadMapHeader()
-							if err != nil {
-								return
-							}
-							if z.Balance.Locked.Outputs == nil {
-								z.Balance.Locked.Outputs = make(WalletLockedOutputMap, zb0004)
-							} else if len(z.Balance.Locked.Outputs) > 0 {
-								for key := range z.Balance.Locked.Outputs {
-									delete(z.Balance.Locked.Outputs, key)
-								}
-							}
-							for zb0004 > 0 {
-								zb0004--
-								var za0001 string
-								var za0002 WalletLockedOutput
-								za0001, err = dc.ReadString()
-								if err != nil {
-									return
-								}
-								var zb0005 uint32
-								zb0005, err = dc.ReadMapHeader()
-								if err != nil {
-									return
-								}
-								for zb0005 > 0 {
-									zb0005--
-									field, err = dc.ReadMapKeyPtr()
-									if err != nil {
-										return
-									}
-									switch msgp.UnsafeString(field) {
-									case "amount":
-										err = za0002.Amount.DecodeMsg(dc)
-										if err != nil {
-											return
-										}
-									case "lockedUntil":
-										err = za0002.LockedUntil.DecodeMsg(dc)
-										if err != nil {
-											return
-										}
-									case "description":
-										za0002.Description, err = dc.ReadString()
-										if err != nil {
-											return
-										}
-									default:
-										err = dc.Skip()
-										if err != nil {
-											return
-										}
-									}
-								}
-								z.Balance.Locked.Outputs[za0001] = za0002
-							}
-						default:
-							err = dc.Skip()
-							if err != nil {
-								return
-							}
-						}
-					}
-				default:
-					err = dc.Skip()
-					if err != nil {
-						return
-					}
-				}
 			}
 		case "multisignAddresses":
-			var zb0006 uint32
-			zb0006, err = dc.ReadArrayHeader()
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
 			if err != nil {
 				return
 			}
-			if cap(z.MultiSignAddresses) >= int(zb0006) {
-				z.MultiSignAddresses = (z.MultiSignAddresses)[:zb0006]
+			if cap(z.MultiSignAddresses) >= int(zb0002) {
+				z.MultiSignAddresses = (z.MultiSignAddresses)[:zb0002]
 			} else {
-				z.MultiSignAddresses = make([]UnlockHash, zb0006)
+				z.MultiSignAddresses = make([]UnlockHash, zb0002)
 			}
-			for za0003 := range z.MultiSignAddresses {
-				err = z.MultiSignAddresses[za0003].DecodeMsg(dc)
+			for za0001 := range z.MultiSignAddresses {
+				err = z.MultiSignAddresses[za0001].DecodeMsg(dc)
 				if err != nil {
 					return
 				}
 			}
 		case "multisign":
-			var zb0007 uint32
-			zb0007, err = dc.ReadMapHeader()
+			var zb0003 uint32
+			zb0003, err = dc.ReadMapHeader()
 			if err != nil {
 				return
 			}
-			for zb0007 > 0 {
-				zb0007--
+			for zb0003 > 0 {
+				zb0003--
 				field, err = dc.ReadMapKeyPtr()
 				if err != nil {
 					return
 				}
 				switch msgp.UnsafeString(field) {
 				case "owners":
-					var zb0008 uint32
-					zb0008, err = dc.ReadArrayHeader()
+					var zb0004 uint32
+					zb0004, err = dc.ReadArrayHeader()
 					if err != nil {
 						return
 					}
-					if cap(z.MultiSignData.Owners) >= int(zb0008) {
-						z.MultiSignData.Owners = (z.MultiSignData.Owners)[:zb0008]
+					if cap(z.MultiSignData.Owners) >= int(zb0004) {
+						z.MultiSignData.Owners = (z.MultiSignData.Owners)[:zb0004]
 					} else {
-						z.MultiSignData.Owners = make([]UnlockHash, zb0008)
+						z.MultiSignData.Owners = make([]UnlockHash, zb0004)
 					}
-					for za0004 := range z.MultiSignData.Owners {
-						err = z.MultiSignData.Owners[za0004].DecodeMsg(dc)
+					for za0002 := range z.MultiSignData.Owners {
+						err = z.MultiSignData.Owners[za0002].DecodeMsg(dc)
 						if err != nil {
 							return
 						}
@@ -450,69 +348,13 @@ func (z *Wallet) DecodeMsg(dc *msgp.Reader) (err error) {
 func (z *Wallet) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 3
 	// write "balance"
-	// map header, size 2
-	// write "unlocked"
-	err = en.Append(0x83, 0xa7, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x82, 0xa8, 0x75, 0x6e, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64)
+	err = en.Append(0x83, 0xa7, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65)
 	if err != nil {
 		return
 	}
-	err = z.Balance.Unlocked.EncodeMsg(en)
+	err = z.Balance.EncodeMsg(en)
 	if err != nil {
 		return
-	}
-	// write "locked"
-	// map header, size 2
-	// write "total"
-	err = en.Append(0xa6, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x82, 0xa5, 0x74, 0x6f, 0x74, 0x61, 0x6c)
-	if err != nil {
-		return
-	}
-	err = z.Balance.Locked.Total.EncodeMsg(en)
-	if err != nil {
-		return
-	}
-	// write "outputs"
-	err = en.Append(0xa7, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteMapHeader(uint32(len(z.Balance.Locked.Outputs)))
-	if err != nil {
-		return
-	}
-	for za0001, za0002 := range z.Balance.Locked.Outputs {
-		err = en.WriteString(za0001)
-		if err != nil {
-			return
-		}
-		// map header, size 3
-		// write "amount"
-		err = en.Append(0x83, 0xa6, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74)
-		if err != nil {
-			return
-		}
-		err = za0002.Amount.EncodeMsg(en)
-		if err != nil {
-			return
-		}
-		// write "lockedUntil"
-		err = en.Append(0xab, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x55, 0x6e, 0x74, 0x69, 0x6c)
-		if err != nil {
-			return
-		}
-		err = za0002.LockedUntil.EncodeMsg(en)
-		if err != nil {
-			return
-		}
-		// write "description"
-		err = en.Append(0xab, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e)
-		if err != nil {
-			return
-		}
-		err = en.WriteString(za0002.Description)
-		if err != nil {
-			return
-		}
 	}
 	// write "multisignAddresses"
 	err = en.Append(0xb2, 0x6d, 0x75, 0x6c, 0x74, 0x69, 0x73, 0x69, 0x67, 0x6e, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73)
@@ -523,8 +365,8 @@ func (z *Wallet) EncodeMsg(en *msgp.Writer) (err error) {
 	if err != nil {
 		return
 	}
-	for za0003 := range z.MultiSignAddresses {
-		err = z.MultiSignAddresses[za0003].EncodeMsg(en)
+	for za0001 := range z.MultiSignAddresses {
+		err = z.MultiSignAddresses[za0001].EncodeMsg(en)
 		if err != nil {
 			return
 		}
@@ -540,8 +382,8 @@ func (z *Wallet) EncodeMsg(en *msgp.Writer) (err error) {
 	if err != nil {
 		return
 	}
-	for za0004 := range z.MultiSignData.Owners {
-		err = z.MultiSignData.Owners[za0004].EncodeMsg(en)
+	for za0002 := range z.MultiSignData.Owners {
+		err = z.MultiSignData.Owners[za0002].EncodeMsg(en)
 		if err != nil {
 			return
 		}
@@ -560,20 +402,13 @@ func (z *Wallet) EncodeMsg(en *msgp.Writer) (err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *Wallet) Msgsize() (s int) {
-	s = 1 + 8 + 1 + 9 + z.Balance.Unlocked.Msgsize() + 7 + 1 + 6 + z.Balance.Locked.Total.Msgsize() + 8 + msgp.MapHeaderSize
-	if z.Balance.Locked.Outputs != nil {
-		for za0001, za0002 := range z.Balance.Locked.Outputs {
-			_ = za0002
-			s += msgp.StringPrefixSize + len(za0001) + 1 + 7 + za0002.Amount.Msgsize() + 12 + za0002.LockedUntil.Msgsize() + 12 + msgp.StringPrefixSize + len(za0002.Description)
-		}
-	}
-	s += 19 + msgp.ArrayHeaderSize
-	for za0003 := range z.MultiSignAddresses {
-		s += z.MultiSignAddresses[za0003].Msgsize()
+	s = 1 + 8 + z.Balance.Msgsize() + 19 + msgp.ArrayHeaderSize
+	for za0001 := range z.MultiSignAddresses {
+		s += z.MultiSignAddresses[za0001].Msgsize()
 	}
 	s += 10 + 1 + 7 + msgp.ArrayHeaderSize
-	for za0004 := range z.MultiSignData.Owners {
-		s += z.MultiSignData.Owners[za0004].Msgsize()
+	for za0002 := range z.MultiSignData.Owners {
+		s += z.MultiSignData.Owners[za0002].Msgsize()
 	}
 	s += 19 + msgp.Uint64Size
 	return
@@ -596,11 +431,6 @@ func (z *WalletBalance) DecodeMsg(dc *msgp.Reader) (err error) {
 		}
 		switch msgp.UnsafeString(field) {
 		case "unlocked":
-			err = z.Unlocked.DecodeMsg(dc)
-			if err != nil {
-				return
-			}
-		case "locked":
 			var zb0002 uint32
 			zb0002, err = dc.ReadMapHeader()
 			if err != nil {
@@ -614,38 +444,68 @@ func (z *WalletBalance) DecodeMsg(dc *msgp.Reader) (err error) {
 				}
 				switch msgp.UnsafeString(field) {
 				case "total":
+					err = z.Unlocked.Total.DecodeMsg(dc)
+					if err != nil {
+						return
+					}
+				case "outputs":
+					err = z.Unlocked.Outputs.DecodeMsg(dc)
+					if err != nil {
+						return
+					}
+				default:
+					err = dc.Skip()
+					if err != nil {
+						return
+					}
+				}
+			}
+		case "locked":
+			var zb0003 uint32
+			zb0003, err = dc.ReadMapHeader()
+			if err != nil {
+				return
+			}
+			for zb0003 > 0 {
+				zb0003--
+				field, err = dc.ReadMapKeyPtr()
+				if err != nil {
+					return
+				}
+				switch msgp.UnsafeString(field) {
+				case "total":
 					err = z.Locked.Total.DecodeMsg(dc)
 					if err != nil {
 						return
 					}
 				case "outputs":
-					var zb0003 uint32
-					zb0003, err = dc.ReadMapHeader()
+					var zb0004 uint32
+					zb0004, err = dc.ReadMapHeader()
 					if err != nil {
 						return
 					}
 					if z.Locked.Outputs == nil {
-						z.Locked.Outputs = make(WalletLockedOutputMap, zb0003)
+						z.Locked.Outputs = make(WalletLockedOutputMap, zb0004)
 					} else if len(z.Locked.Outputs) > 0 {
 						for key := range z.Locked.Outputs {
 							delete(z.Locked.Outputs, key)
 						}
 					}
-					for zb0003 > 0 {
-						zb0003--
+					for zb0004 > 0 {
+						zb0004--
 						var za0001 string
 						var za0002 WalletLockedOutput
 						za0001, err = dc.ReadString()
 						if err != nil {
 							return
 						}
-						var zb0004 uint32
-						zb0004, err = dc.ReadMapHeader()
+						var zb0005 uint32
+						zb0005, err = dc.ReadMapHeader()
 						if err != nil {
 							return
 						}
-						for zb0004 > 0 {
-							zb0004--
+						for zb0005 > 0 {
+							zb0005--
 							field, err = dc.ReadMapKeyPtr()
 							if err != nil {
 								return
@@ -696,11 +556,22 @@ func (z *WalletBalance) DecodeMsg(dc *msgp.Reader) (err error) {
 func (z *WalletBalance) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 2
 	// write "unlocked"
-	err = en.Append(0x82, 0xa8, 0x75, 0x6e, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64)
+	// map header, size 2
+	// write "total"
+	err = en.Append(0x82, 0xa8, 0x75, 0x6e, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x82, 0xa5, 0x74, 0x6f, 0x74, 0x61, 0x6c)
 	if err != nil {
 		return
 	}
-	err = z.Unlocked.EncodeMsg(en)
+	err = z.Unlocked.Total.EncodeMsg(en)
+	if err != nil {
+		return
+	}
+	// write "outputs"
+	err = en.Append(0xa7, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = z.Unlocked.Outputs.EncodeMsg(en)
 	if err != nil {
 		return
 	}
@@ -763,7 +634,7 @@ func (z *WalletBalance) EncodeMsg(en *msgp.Writer) (err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *WalletBalance) Msgsize() (s int) {
-	s = 1 + 9 + z.Unlocked.Msgsize() + 7 + 1 + 6 + z.Locked.Total.Msgsize() + 8 + msgp.MapHeaderSize
+	s = 1 + 9 + 1 + 6 + z.Unlocked.Total.Msgsize() + 8 + z.Unlocked.Outputs.Msgsize() + 7 + 1 + 6 + z.Locked.Total.Msgsize() + 8 + msgp.MapHeaderSize
 	if z.Locked.Outputs != nil {
 		for za0001, za0002 := range z.Locked.Outputs {
 			_ = za0002
@@ -1214,5 +1085,241 @@ func (z *WalletMultiSignData) Msgsize() (s int) {
 		s += z.Owners[za0001].Msgsize()
 	}
 	s += 19 + msgp.Uint64Size
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *WalletUnlockedBalance) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "total":
+			err = z.Total.DecodeMsg(dc)
+			if err != nil {
+				return
+			}
+		case "outputs":
+			err = z.Outputs.DecodeMsg(dc)
+			if err != nil {
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *WalletUnlockedBalance) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 2
+	// write "total"
+	err = en.Append(0x82, 0xa5, 0x74, 0x6f, 0x74, 0x61, 0x6c)
+	if err != nil {
+		return
+	}
+	err = z.Total.EncodeMsg(en)
+	if err != nil {
+		return
+	}
+	// write "outputs"
+	err = en.Append(0xa7, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = z.Outputs.EncodeMsg(en)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *WalletUnlockedBalance) Msgsize() (s int) {
+	s = 1 + 6 + z.Total.Msgsize() + 8 + z.Outputs.Msgsize()
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *WalletUnlockedOutput) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "amount":
+			err = z.Amount.DecodeMsg(dc)
+			if err != nil {
+				return
+			}
+		case "description":
+			z.Description, err = dc.ReadString()
+			if err != nil {
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *WalletUnlockedOutput) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 2
+	// write "amount"
+	err = en.Append(0x82, 0xa6, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74)
+	if err != nil {
+		return
+	}
+	err = z.Amount.EncodeMsg(en)
+	if err != nil {
+		return
+	}
+	// write "description"
+	err = en.Append(0xab, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e)
+	if err != nil {
+		return
+	}
+	err = en.WriteString(z.Description)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *WalletUnlockedOutput) Msgsize() (s int) {
+	s = 1 + 7 + z.Amount.Msgsize() + 12 + msgp.StringPrefixSize + len(z.Description)
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *WalletUnlockedOutputMap) DecodeMsg(dc *msgp.Reader) (err error) {
+	var zb0003 uint32
+	zb0003, err = dc.ReadMapHeader()
+	if err != nil {
+		return
+	}
+	if (*z) == nil {
+		(*z) = make(WalletUnlockedOutputMap, zb0003)
+	} else if len((*z)) > 0 {
+		for key := range *z {
+			delete((*z), key)
+		}
+	}
+	for zb0003 > 0 {
+		zb0003--
+		var zb0001 string
+		var zb0002 WalletUnlockedOutput
+		zb0001, err = dc.ReadString()
+		if err != nil {
+			return
+		}
+		var field []byte
+		_ = field
+		var zb0004 uint32
+		zb0004, err = dc.ReadMapHeader()
+		if err != nil {
+			return
+		}
+		for zb0004 > 0 {
+			zb0004--
+			field, err = dc.ReadMapKeyPtr()
+			if err != nil {
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "amount":
+				err = zb0002.Amount.DecodeMsg(dc)
+				if err != nil {
+					return
+				}
+			case "description":
+				zb0002.Description, err = dc.ReadString()
+				if err != nil {
+					return
+				}
+			default:
+				err = dc.Skip()
+				if err != nil {
+					return
+				}
+			}
+		}
+		(*z)[zb0001] = zb0002
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z WalletUnlockedOutputMap) EncodeMsg(en *msgp.Writer) (err error) {
+	err = en.WriteMapHeader(uint32(len(z)))
+	if err != nil {
+		return
+	}
+	for zb0005, zb0006 := range z {
+		err = en.WriteString(zb0005)
+		if err != nil {
+			return
+		}
+		// map header, size 2
+		// write "amount"
+		err = en.Append(0x82, 0xa6, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74)
+		if err != nil {
+			return
+		}
+		err = zb0006.Amount.EncodeMsg(en)
+		if err != nil {
+			return
+		}
+		// write "description"
+		err = en.Append(0xab, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(zb0006.Description)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z WalletUnlockedOutputMap) Msgsize() (s int) {
+	s = msgp.MapHeaderSize
+	if z != nil {
+		for zb0005, zb0006 := range z {
+			_ = zb0006
+			s += msgp.StringPrefixSize + len(zb0005) + 1 + 7 + zb0006.Amount.Msgsize() + 12 + msgp.StringPrefixSize + len(zb0006.Description)
+		}
+	}
 	return
 }

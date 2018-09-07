@@ -177,11 +177,29 @@ JSON formats of value types defined by this module:
 
 * example of a wallet (stored under a:01<4_random_hex_chars>):
 
-```json
+```javascript
 {
     "balance": {
-        "unlocked": "10000000",
+        "unlocked": {
+            // NOTE that the total unlocked balance does not have to
+            // match the sum of the listed unlocked outputs, due to the fact
+            // that unlocked outputs are only shown if their description
+            // matches any of the (CLI) specified description filters
+            "total": "10005000",
+            "outputs": [
+                {
+                    "amount": "9999999",
+                    "description": "for:you"
+                },
+                {
+                    "amount": "1",
+                    "description": "Surprise!"
+                }
+            ],
+        },
         "locked": {
+            // the total locked balance will always match the sum
+            // of all listed locked outputs
             "total": "5000",
             "outputs": [
                 {
@@ -189,7 +207,7 @@ JSON formats of value types defined by this module:
                     "lockedUntil": 1534105468
                 },
                 {
-                    "amount": "100",
+                    "amount": "3000",
                     "lockedUntil": 1534105468,
                     "description": "SGVsbG8=",
                 }
@@ -211,7 +229,9 @@ JSON formats of value types defined by this module:
 ```json
 {
     "balance": {
-        "unlocked": "10000000"
+        "unlocked": {
+            "total": "10000000"
+        }
     },
     "multisign": {
         "owners": [
@@ -326,10 +346,10 @@ to the `rexplorer` codebase (using `git apply` or manually):
 
 ```diff
 diff --git a/commands.go b/commands.go
-index 46d245f..38cb282 100644
+index 4498f38..b85d24b 100644
 --- a/commands.go
 +++ b/commands.go
-@@ -183,7 +183,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
+@@ -189,7 +189,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
  		log.Println("rexplorer is up and running...")
  
  		// wait until done
@@ -339,7 +359,7 @@ index 46d245f..38cb282 100644
  	}()
  
  	// stop the server if a kill signal is caught
-@@ -199,7 +200,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
+@@ -205,7 +206,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
  	}
  
  	cancel()
@@ -348,6 +368,7 @@ index 46d245f..38cb282 100644
  
  	log.Println("Goodbye!")
  	return
+
 ```
 
 This diff will make sure that `rexplorer` exists as soon the

@@ -14,6 +14,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/threefoldfoundation/rexplorer/pkg/types"
+
 	"github.com/threefoldfoundation/tfchain/pkg/config"
 	"github.com/threefoldfoundation/tfchain/pkg/persist"
 	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
@@ -21,7 +23,7 @@ import (
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/modules/consensus"
 	"github.com/rivine/rivine/modules/gateway"
-	"github.com/rivine/rivine/types"
+	rivinetypes "github.com/rivine/rivine/types"
 
 	"github.com/spf13/cobra"
 )
@@ -29,8 +31,8 @@ import (
 // Commands is the stateful object used as the central method-owning object
 // for all Cobra (CLI) commands.
 type Commands struct {
-	BlockchainInfo types.BlockchainInfo
-	ChainConstants types.ChainConstants
+	BlockchainInfo rivinetypes.BlockchainInfo
+	ChainConstants rivinetypes.ChainConstants
 	BootstrapPeers []modules.NetAddress
 
 	// the host:port to listen for RPC calls
@@ -46,6 +48,10 @@ type Commands struct {
 
 	// encoding info
 	EncodingType encoding.Type
+
+	// the outputs which description match will be stored
+	// in wallet values, even when unlocked.
+	DescriptionFilterSet types.DescriptionFilterSet
 
 	// the parent directory where the individual module
 	// directories will be created
@@ -110,7 +116,7 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	}
 
 	// create database
-	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants)
+	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants, cmd.DescriptionFilterSet)
 	if err != nil {
 		return fmt.Errorf("failed to create redis db client: %v", err)
 	}

@@ -57,7 +57,7 @@ func main() {
 				panic("failed to json-unmarshal wallet: " + err.Error())
 			}
 		}
-		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked)
+		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked.Total)
 		lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
 	}
 	totalCoins := unlockedCoins.Add(lockedCoins)

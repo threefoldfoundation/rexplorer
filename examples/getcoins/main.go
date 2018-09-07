@@ -57,11 +57,11 @@ func main() {
 
 	cfg := config.GetBlockchainInfo()
 	cc := client.NewCurrencyConvertor(config.GetCurrencyUnits(), cfg.CoinUnit)
-	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(wallet.Balance.Unlocked.Currency))
+	fmt.Println("unlocked: " + cc.ToCoinStringWithUnit(wallet.Balance.Unlocked.Total.Currency))
 	fmt.Println("locked:   " + cc.ToCoinStringWithUnit(wallet.Balance.Locked.Total.Currency))
 	fmt.Println("--------------------")
 	fmt.Println("total: " + cc.ToCoinStringWithUnit(
-		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked).Currency))
+		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked.Total).Currency))
 }
 
 func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {

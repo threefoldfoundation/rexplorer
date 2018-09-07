@@ -58,8 +58,21 @@ type (
 	}
 	// WalletBalance contains the unlocked and/or locked balance of a wallet.
 	WalletBalance struct {
-		Unlocked Currency            `json:"unlocked,omitemtpy" msg:"unlocked,omitemtpy"`
-		Locked   WalletLockedBalance `json:"locked,omitemtpy" msg:"locked,omitemtpy"`
+		Unlocked WalletUnlockedBalance `json:"unlocked,omitemtpy" msg:"unlocked,omitemtpy"`
+		Locked   WalletLockedBalance   `json:"locked,omitemtpy" msg:"locked,omitemtpy"`
+	}
+	// WalletUnlockedBalance contains the unlocked balance of a wallet,
+	// defining the total amount of coins as well as all the outputs that are unlocked.
+	WalletUnlockedBalance struct {
+		Total   Currency                `json:"total" msg:"total"`
+		Outputs WalletUnlockedOutputMap `json:"outputs" msg:"outputs"`
+	}
+	// WalletUnlockedOutputMap defines the mapping between a coin output ID and its walletUnlockedOutput data
+	WalletUnlockedOutputMap map[string]WalletUnlockedOutput
+	// WalletUnlockedOutput defines an unlocked output targeted at a wallet.
+	WalletUnlockedOutput struct {
+		Amount      Currency `json:"amount" msg:"amount"`
+		Description string   `json:"description,omitemtpy" msg:"description,omitemtpy"`
 	}
 	// WalletLockedBalance contains the locked balance of a wallet,
 	// defining the total amount of coins as well as all the outputs that are locked.
@@ -164,8 +177,20 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 // ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
 // using the generated code based on the PBWallet Message defined in ./types.proto
 func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
-	pb := &PBWallet{
-		BalanceUnlocked: rivineencoding.Marshal(wallet.Balance.Unlocked),
+	pb := new(PBWallet)
+	// add optional UnlockedBalance only if available
+	if !wallet.Balance.Unlocked.Total.IsZero() {
+		ub := &PBWalletUnlockedBalance{
+			Total:   rivineencoding.Marshal(wallet.Balance.Unlocked.Total),
+			Outputs: make(map[string]*PBWalletUnlockedOutput, len(wallet.Balance.Unlocked.Outputs)),
+		}
+		pb.BalanceUnlocked = ub
+		for id, output := range wallet.Balance.Unlocked.Outputs {
+			ub.Outputs[id] = &PBWalletUnlockedOutput{
+				Amount:      rivineencoding.Marshal(output.Amount),
+				Description: output.Description,
+			}
+		}
 	}
 	// add optional LockedBalance only if available
 	if !wallet.Balance.Locked.Total.IsZero() {
@@ -175,13 +200,11 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 		}
 		pb.BalanceLocked = lb
 		for id, output := range wallet.Balance.Locked.Outputs {
-			lo := &PBWalletLockedOutput{
+			lb.Outputs[id] = &PBWalletLockedOutput{
 				Amount:      rivineencoding.Marshal(output.Amount),
 				LockedUntil: uint64(output.LockedUntil),
+				Description: output.Description,
 			}
-			// add optional Description only if available
-			lo.Description = output.Description
-			lb.Outputs[id] = lo
 		}
 	}
 	// add optional MultiSignAddresses only if available
@@ -218,10 +241,28 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	if err != nil {
 		return fmt.Errorf("Wallet: %v", err)
 	}
-	// unmarshal required unlocked balance
-	err = rivineencoding.Unmarshal(pb.BalanceUnlocked, &wallet.Balance.Unlocked)
-	if err != nil {
-		return fmt.Errorf("Wallet: Unlocked Balance: %v", err)
+	// only unmarshal unlocked balance if it is available, otherwise reset it
+	if pb.BalanceUnlocked == nil {
+		wallet.Balance.Unlocked = WalletUnlockedBalance{}
+	} else {
+		err = rivineencoding.Unmarshal(pb.BalanceUnlocked.Total, &wallet.Balance.Unlocked.Total)
+		if err != nil {
+			return fmt.Errorf("Wallet: Unlocked Balance: Total: %v", err)
+		}
+		// unmarshal all outputs
+		wallet.Balance.Unlocked.Outputs = make(WalletUnlockedOutputMap, len(pb.BalanceUnlocked.Outputs))
+		for id, output := range pb.BalanceUnlocked.Outputs {
+			var unlockedOutput WalletUnlockedOutput
+			// unmarshal amount
+			err = rivineencoding.Unmarshal(output.Amount, &unlockedOutput.Amount)
+			if err != nil {
+				return fmt.Errorf("Wallet: Unlocked Balance: Output %s: Amount: %v", id, err)
+			}
+			// assign optional description
+			unlockedOutput.Description = output.Description
+			// assign locked output using its id
+			wallet.Balance.Unlocked.Outputs[id] = unlockedOutput
+		}
 	}
 	// only unmarshal locked balance if it is available, otherwise reset it
 	if pb.BalanceLocked == nil {
@@ -229,7 +270,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	} else {
 		err = rivineencoding.Unmarshal(pb.BalanceLocked.Total, &wallet.Balance.Locked.Total)
 		if err != nil {
-			return fmt.Errorf("Wallet: Unlocked Balance: Total: %v", err)
+			return fmt.Errorf("Wallet: Locked Balance: Total: %v", err)
 		}
 		// unmarshal all outputs
 		wallet.Balance.Locked.Outputs = make(WalletLockedOutputMap, len(pb.BalanceLocked.Outputs))
@@ -238,7 +279,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 			// unmarshal amount
 			err = rivineencoding.Unmarshal(output.Amount, &lockedOutput.Amount)
 			if err != nil {
-				return fmt.Errorf("Wallet: Unlocked Balance: Output %s: Amount: %v", id, err)
+				return fmt.Errorf("Wallet: Locked Balance: Output %s: Amount: %v", id, err)
 			}
 			// assign dereferenced lock value
 			lockedOutput.LockedUntil = LockValue(output.LockedUntil)
@@ -280,7 +321,32 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 
 // IsZero returns true if this wallet is Zero
 func (wb *WalletBalance) IsZero() bool {
-	return wb.Unlocked.IsZero() && wb.Locked.Total.IsZero()
+	return wb.Unlocked.Total.IsZero() && wb.Locked.Total.IsZero()
+}
+
+// AddUnlockedCoinOutput adds the unique unlocked coin output to the wallet's map of unlocked outputs
+// as well as adds the coin output's value to the total amount of unlocked coins registered for this wallet.
+func (wub *WalletUnlockedBalance) AddUnlockedCoinOutput(id CoinOutputID, co WalletUnlockedOutput) error {
+	idStr := id.String()
+	if len(wub.Outputs) == 0 {
+		wub.Outputs = make(WalletUnlockedOutputMap)
+	} else if _, exists := wub.Outputs[idStr]; exists {
+		return fmt.Errorf("trying to add existing unlocked coin output %s", id.String())
+	}
+	wub.Outputs[idStr] = co
+	wub.Total = wub.Total.Add(co.Amount)
+	return nil
+}
+
+// SubUnlockedCoinOutput tries to remove the unlocked coin output from the wallet's map of unlocked outputs,
+// try as it might not exist to never having been added. This method does always
+// subtract the coin output's value from the total amount of unlocked coins registered for this wallet.
+func (wub *WalletUnlockedBalance) SubUnlockedCoinOutput(id CoinOutputID, amount Currency) error {
+	if len(wub.Outputs) != 0 {
+		delete(wub.Outputs, id.String())
+	}
+	wub.Total = wub.Total.Sub(amount)
+	return nil
 }
 
 // AddLockedCoinOutput adds the unique locked coin output to the wallet's map of locked outputs

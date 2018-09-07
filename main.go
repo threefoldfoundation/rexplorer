@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/threefoldfoundation/rexplorer/pkg/rflag"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
 )
 
@@ -17,8 +18,33 @@ func main() {
 	cmdRoot := &cobra.Command{
 		Use:   "rexplorer",
 		Short: "start the rexplorer daemon",
-		Args:  cobra.ExactArgs(0),
-		RunE:  cmd.Root,
+		Long: `start the rexplorer daemon
+		
+(*) The following kind of glob expressions can
+be made for the optional description filters:
+
+  - Multiple Characters Wildcard: *
+	example: 'bar:*' // matches 'bar:', 'bar: foo', 'bar:ok', ...
+
+  - Single Character Wildcard: ?
+	example: 'h?' // matches 'ho', 'ha', 'hi', 'hh', ...
+
+  - Allow any character from a given character list: [xy]
+	example: 'b[aoi]t' // matches 'bot', 'bit', 'bat'
+
+  - Allow any character from a given character range: [x-y]
+	example: 'a[a-c]a' // matches 'aaa', 'aba', 'aca'
+
+  - Allow any character except a given character list: [!xy]
+	example: 'a[!ac]ba' // does not match 'acba',
+	                    // but does match 'abba', 'adba', ...
+
+  - Allow any character except a character within a given character range: [!x-y]
+	example: '[!a-f]oo' // does not match 'foo', 'boo', ...
+	                    // but does match 'woo', 'zoo', 5oo, ...
+`,
+		Args: cobra.ExactArgs(0),
+		RunE: cmd.Root,
 	}
 
 	cmdVersion := &cobra.Command{
@@ -68,6 +94,12 @@ func main() {
 		&cmd.EncodingType,
 		"encoding", "e",
 		"which encoding protocol to use, one of {json,msgp,protobuf}",
+	)
+	rflag.DescriptionFilterSetFlagVarP(
+		cmdRoot.Flags(),
+		&cmd.DescriptionFilterSet,
+		"filter", "f",
+		"list unlocked outputs in wallets if the description of output matches any of the unique glob (*) filters",
 	)
 	cmdRoot.Flags().StringVarP(
 		&cmd.BlockchainInfo.NetworkName,

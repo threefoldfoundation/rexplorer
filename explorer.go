@@ -219,13 +219,13 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			if i == 0 {
 				explorer.stats.MinerPayoutCount++
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Add(types.AsCurrency(mp.Value))
-				description = "block reward"
+				description = "reward:block"
 				// block rewards are always freshly created money
 				explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(mp.Value))
 			} else {
 				explorer.stats.TransactionFeeCount++
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(types.AsCurrency(mp.Value))
-				description = "tx fee"
+				description = "reward:tx"
 			}
 			locked, err := explorer.addCoinOutput(types.AsCoinOutputID(block.MinerPayoutID(uint64(i))), rivinetypes.CoinOutput{
 				Value: mp.Value,

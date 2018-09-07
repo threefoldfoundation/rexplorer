@@ -25,13 +25,25 @@ message PBNetworkStats {
 // Wallet collects all data for an address in a simple format,
 // focussing on its balance and multisign properties.
 message PBWallet {
-    required bytes balance_unlocked = 1;
+    optional PBWalletUnlockedBalance balance_unlocked = 1;
     optional PBWalletLockedBalance balance_locked = 2;
     repeated bytes multisign_addresses = 3;
     optional PBWalletMultiSignData multisign_data = 4;
 }
 
-// WalletBalance contains the unlocked and/or locked balance of a wallet.
+// WalletBalance contains the unlocked balance of a wallet.
+message PBWalletUnlockedBalance {
+    required bytes total = 1;
+    map<string, PBWalletUnlockedOutput> outputs = 2;
+}
+
+// PBWalletUnlockedOutput defines an unlocked output targeted at a wallet.
+message PBWalletUnlockedOutput {
+    required bytes amount = 1;
+    optional string description = 2;
+}
+
+// WalletBalance contains the locked balance of a wallet.
 message PBWalletLockedBalance {
     required bytes total = 1;
     map<string, PBWalletLockedOutput> outputs = 2;

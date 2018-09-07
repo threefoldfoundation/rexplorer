@@ -150,6 +150,12 @@ type (
 		// cached chain constants
 		blockFrequency types.LockValue
 
+		// optional description filter set
+		// which is used to know which unlocked outputs to store in a wallet,
+		// as only outputs which have descriptions (that also match any of the filters in the filter set)
+		// will be stored as part of a structured wallet value
+		filters types.DescriptionFilterSet
+
 		// cached version of the chain stats
 		networkBlockHeight types.BlockHeight
 		networkTime        types.Timestamp
@@ -285,10 +291,11 @@ func (cor *DatabaseCoinOutputResult) LoadBytes(b []byte) error {
 }
 
 const (
-	internalKey           = "internal"
-	internalFieldState    = "state"
-	internalFieldNetwork  = "network"
-	internalFieldEncoding = "encoding"
+	internalKey                     = "internal"
+	internalFieldState              = "state"
+	internalFieldNetwork            = "network"
+	internalFieldEncoding           = "encoding"
+	internalFieldDescriptionFilters = "desc.filters"
 
 	statsKey = "stats"
 
@@ -302,7 +309,7 @@ const (
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
 // see RedisDatabase for more information.
-func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants) (*RedisDatabase, error) {
+func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, filters types.DescriptionFilterSet) (*RedisDatabase, error) {
 	// dial a TCP connection
 	conn, err := redis.Dial("tcp", address, redis.DialDatabase(db))
 	if err != nil {
@@ -326,6 +333,11 @@ func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo
 	}
 	// ensure the network info is as expected (or register if this is a fresh db)
 	err = rdb.registerOrValidateNetworkInfo(bcInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+	}
+	// set the description filter set (an empty set is fine too)
+	err = rdb.registerFilterSet(filters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
 	}
@@ -469,6 +481,44 @@ return coinOutputID .. output:sub(2)
 `
 )
 
+// registerFilterSet registers the filter set if it doesn't exist yet,
+// otherwise it ensures that the returned filter set matches the expected filter set.
+func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet) error {
+	rdb.conn.Send("HSETNX", internalKey, internalFieldDescriptionFilters, filters.String())
+	rdb.conn.Send("HGET", internalKey, internalFieldDescriptionFilters)
+	replies, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
+	if err != nil {
+		return fmt.Errorf("failed to register/validate description filter set: %v", err)
+	}
+	if len(replies) != 2 {
+		return errors.New("failed to register/validate description filter set: unexpected amount of replies received")
+	}
+
+	// load previous stored, as to be able to delete out references and add new references
+	var receivedFilters types.DescriptionFilterSet
+	err = RedisStringLoader(&receivedFilters)(replies[1], err)
+	if err != nil {
+		return fmt.Errorf("failed to decode previously stored description filter set: %v", err)
+	}
+
+	// validate returned filter set
+	removedFilters := receivedFilters.Difference(filters)
+	addedFilters := filters.Difference(receivedFilters)
+	if removedFilters.Len() > 0 && addedFilters.Len() > 0 {
+		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
+			"added filters %s and removed filters %s", addedFilters.String(), removedFilters.String())
+	} else if removedFilters.Len() > 0 {
+		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
+			"removed filters %s", removedFilters.String())
+	} else if addedFilters.Len() > 0 {
+		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
+			"added filters %s", addedFilters.String())
+	}
+
+	rdb.filters = receivedFilters
+	return nil
+}
+
 // registerOrValidateEncodingType registers the encoding type if it doesn't exist yet,
 // otherwise it ensures that the returned encoding type matches the expected encoding type.
 func (rdb *RedisDatabase) registerOrValidateEncodingType(encodingType encoding.Type) error {
@@ -580,8 +630,20 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 			"redis: failed to get wallet for %s at %s#%s: %v", uh.String(), addressKey, addressField, err)
 	}
 
-	// increase coin count
-	wallet.Balance.Unlocked = wallet.Balance.Unlocked.Add(co.Value)
+	// increase coin count and optionally add output
+	if rdb.filters.Match(co.Description) {
+		err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(id, types.WalletUnlockedOutput{
+			Amount:      co.Value,
+			Description: co.Description,
+		})
+		if err != nil {
+			return fmt.Errorf(
+				"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
+				id.String(), uh.String(), err)
+		}
+	} else {
+		wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(co.Value)
+	}
 
 	coinOutputKey, coinOutputField := getCoinOutputKeyAndField(id)
 
@@ -681,8 +743,8 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 			"redis: failed to get wallet for %s at %s#%s: %v", result.UnlockHash.String(), addressKey, addressField, err)
 	}
 
-	// update unlocked coins
-	wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(result.CoinValue)
+	// update unlocked coins (and optionally mapped outputs)
+	wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, result.CoinValue)
 
 	// update balance
 	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
@@ -711,8 +773,20 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 			"redis: failed to get wallet for %s at %s#%s: %v", result.UnlockHash.String(), addressKey, addressField, err)
 	}
 
-	// update coin count
-	wallet.Balance.Unlocked = wallet.Balance.Unlocked.Add(result.CoinValue)
+	// increase coin count and optionally add output
+	if rdb.filters.Match(result.Description) {
+		err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(id, types.WalletUnlockedOutput{
+			Amount:      result.CoinValue,
+			Description: result.Description,
+		})
+		if err != nil {
+			return fmt.Errorf(
+				"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
+				id.String(), result.UnlockHash.String(), err)
+		}
+	} else {
+		wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(result.CoinValue)
+	}
 
 	// update balance
 	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
@@ -753,8 +827,8 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 		// update correct balanace
 		switch co.State {
 		case CoinOutputStateLiquid:
-			// update unlocked balance of address wallet
-			wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(co.CoinValue)
+			// update unlocked balance of address wallet (and optionally mapped outputs)
+			wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, co.CoinValue)
 		case CoinOutputStateLocked:
 			// update locked output map and balance of address wallet
 			err = wallet.Balance.Locked.SubLockedCoinOutput(id)
@@ -832,7 +906,19 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 		}
 		coins = coins.Add(lcor.CoinValue)
 		n++
-		wallet.Balance.Unlocked = wallet.Balance.Unlocked.Add(lcor.CoinValue)
+		if rdb.filters.Match(lcor.Description) {
+			err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(lcor.CoinOutputID, types.WalletUnlockedOutput{
+				Amount:      lcor.CoinValue,
+				Description: lcor.Description,
+			})
+			if err != nil {
+				return 0, types.Currency{}, fmt.Errorf(
+					"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
+					lcor.CoinOutputID.String(), lcor.UnlockHash.String(), err)
+			}
+		} else {
+			wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(lcor.CoinValue)
+		}
 		// update balance
 		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 		if err != nil {
@@ -884,8 +970,9 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		}
 		coins = coins.Add(ulcor.CoinValue)
 		n++
-		wallet.Balance.Unlocked = wallet.Balance.Unlocked.Sub(ulcor.CoinValue)
-		// update balance
+		// update unlocked balance (and optionally mapped outputs)
+		wallet.Balance.Unlocked.SubUnlockedCoinOutput(ulcor.CoinOutputID, ulcor.CoinValue)
+		// update wallet value
 		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
