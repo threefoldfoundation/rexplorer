@@ -659,7 +659,8 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 		LockValue:   0,
 		Description: co.Description,
 	}.Bytes())
-	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
+	// store or delete the updated wallet (for now sending it only)
+	rdb.planWalletStorageOrDeletion(wallet, uh)
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 3))
 	if err != nil {
@@ -716,7 +717,8 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 		LockValue:   lockValue,
 		Description: co.Description,
 	}.Bytes())
-	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
+	// store or delete the updated wallet (for now sending it only)
+	rdb.planWalletStorageOrDeletion(wallet, uh)
 	// submit all changes
 	err = RedisError(RedisFlushAndReceive(rdb.conn, 4))
 	if err != nil {
@@ -746,10 +748,12 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	// update unlocked coins (and optionally mapped outputs)
 	wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, result.CoinValue)
 
-	// update balance
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+	// store or delete the updated wallet
+	err = rdb.storeOrDeleteWallet(wallet, result.UnlockHash)
 	if err != nil {
-		return fmt.Errorf("redis: failed to spend coin output: failed to update coinoutput %s: %v", id.String(), err)
+		return fmt.Errorf(
+			"redis: failed to spend coin output: failed to store/delete wallet %s as part of coinoutput %s: %v",
+			result.UnlockHash.String(), id.String(), err)
 	}
 	return nil
 }
@@ -788,10 +792,12 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 		wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(result.CoinValue)
 	}
 
-	// update balance
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+	// store or delete the updated wallet
+	err = rdb.storeOrDeleteWallet(wallet, result.UnlockHash)
 	if err != nil {
-		return fmt.Errorf("redis: failed to revert coin input: failed to update coinoutput %s: %v", id.String(), err)
+		return fmt.Errorf(
+			"redis: failed to revert coin input: failed to store/delete wallet %s as part of coinoutput %s: %v",
+			result.UnlockHash.String(), id.String(), err)
 	}
 	return nil
 }
@@ -839,8 +845,8 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (CoinOutputSta
 			}
 		}
 
-		// update balance
-		rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
+		// store or delete the updated wallet (just sending it for now)
+		rdb.planWalletStorageOrDeletion(wallet, co.UnlockHash)
 	}
 
 	// always remove lock properties if a lock is used, no matter the state
@@ -919,8 +925,8 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 		} else {
 			wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(lcor.CoinValue)
 		}
-		// update balance
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+		// store or delete the updated wallet
+		err = rdb.storeOrDeleteWallet(wallet, lcor.UnlockHash)
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"failed to update balance of %q and update unlocked coin outputs: %v",
@@ -972,8 +978,8 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		n++
 		// update unlocked balance (and optionally mapped outputs)
 		wallet.Balance.Unlocked.SubUnlockedCoinOutput(ulcor.CoinOutputID, ulcor.CoinValue)
-		// update wallet value
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+		// store or delete the updated wallet
+		err = rdb.storeOrDeleteWallet(wallet, ulcor.UnlockHash)
 		if err != nil {
 			return 0, types.Currency{}, fmt.Errorf(
 				"failed to update balance of %q and update locked coin outputs: %v",
@@ -1000,10 +1006,11 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	wallet.MultiSignData.SignaturesRequired = signaturesRequired
 	wallet.MultiSignData.Owners = make([]types.UnlockHash, len(owners))
 	copy(wallet.MultiSignData.Owners[:], owners[:])
-	err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+	// store or delete the updated wallet
+	err = rdb.storeOrDeleteWallet(wallet, address)
 	if err != nil {
 		return fmt.Errorf(
-			"redis: failed to set multisig wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
+			"redis: failed to store/delete multisig wallet %s: %v", address.String(), err)
 	}
 
 	// now get the wallet for all owners, and set the multisig address,
@@ -1024,10 +1031,12 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 				owner.String(), address.String())
 			continue
 		}
-		err = RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+		// store or delete the updated wallet
+		err = rdb.storeOrDeleteWallet(wallet, owner)
 		if err != nil {
 			return fmt.Errorf(
-				"redis: failed to set wallet for %s at %s#%s: %v", address.String(), addressKey, addressField, err)
+				"redis: SetMultisigAddresses %s for owner %s: %v",
+				address.String(), owner.String(), err)
 		}
 	}
 	return nil
@@ -1044,6 +1053,37 @@ func (rdb *RedisDatabase) SetCoinCreators(creators []types.UnlockHash) error {
 		return fmt.Errorf("failed to set coin creators: %v", err)
 	}
 	return nil
+}
+
+func (rdb *RedisDatabase) storeOrDeleteWallet(wallet types.Wallet, uh types.UnlockHash) error {
+	addressKey, addressField := getAddressKeyAndField(uh)
+	// either delete or store the wallet, depending on whether or not still contains content
+	if wallet.IsNil() {
+		// delete the wallet, as it has no content any longer
+		err := RedisError(rdb.conn.Do("HDEL", addressKey, addressField))
+		if err != nil {
+			return fmt.Errorf("failed to delete wallet %s: %v", uh.String(), err)
+		}
+		return nil
+	}
+	// store the updated wallet, which still contains content
+	err := RedisError(rdb.conn.Do("HSET", addressKey, addressField, rdb.marshalData(&wallet)))
+	if err != nil {
+		return fmt.Errorf("failed to store updated wallet %s: %v", uh.String(), err)
+	}
+	return nil
+}
+
+func (rdb *RedisDatabase) planWalletStorageOrDeletion(wallet types.Wallet, uh types.UnlockHash) {
+	addressKey, addressField := getAddressKeyAndField(uh)
+	// either delete or store the wallet, depending on whether or not still contains content
+	if wallet.IsNil() {
+		// delete the wallet, as it has no content any longer
+		rdb.conn.Send("HDEL", addressKey, addressField)
+		return
+	}
+	// store the updated wallet, which still contains content
+	rdb.conn.Send("HSET", addressKey, addressField, rdb.marshalData(&wallet))
 }
 
 func (rdb *RedisDatabase) lockValueAsLockTime(lt LockType, value types.LockValue) types.LockValue {

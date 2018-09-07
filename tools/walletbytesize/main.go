@@ -55,10 +55,14 @@ func main() {
 				continue // filter out nil bytes
 			}
 
+			byteSize := int64(len(b))
+			if byteSize == 0 {
+				panic(fmt.Sprintf("wallet %s has no content stored", addr))
+			}
+
 			err = encoder.Unmarshal(b, &wallet)
 			onError(err)
 
-			byteSize := int64(len(b))
 			if wallet.MultiSignData.SignaturesRequired == 0 {
 				individualWalletStats.Track(byteSize)
 			} else {

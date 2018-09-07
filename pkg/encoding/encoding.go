@@ -217,7 +217,12 @@ func (encoder JSONEncoder) Marshal(v interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode value to shared buffer: %v", err)
 	}
-	return encoder.wb.Bytes(), nil
+	buffer := bytes.NewBuffer(nil)
+	err = json.Compact(buffer, encoder.wb.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to compress json-encoded value: %v", err)
+	}
+	return buffer.Bytes(), nil
 }
 
 // Unmarshal implements encoder.Unmarshal

@@ -383,43 +383,44 @@ The default encoding protocol for rexplorer is [MessagePack][encoding-msgp],
 it is chosen  as the default protocol for following reasons:
 
 * it is a format which is well supported across (programming) languages and environments;
-* it is reasonably fast;
+* it is reasonably fast (even though it gets on the slow side for big values);
 * it is much more compact than for example `JSON`;
 
 You might however have other preferences. [JSON][encoding-json] is even more widely supported
 and has the advantage that it can be read by humans without need to decode it prior to consumption.
 [Protocol Buffers][encoding-pb] is —in the current implementation—
-slower than our [MessagePack][encoding-msgp] implementation but is much more compact in terms of byte size.
+much faster than our [MessagePack][encoding-msgp] implementation and is much more compact in terms of byte size.
+[Protocol Buffers][encoding-pb] has however not as much support across (programming) languages as [MessagePack][encoding-msgp].
 
 Here are some numbers to put the available encoding protocols into context.
 
 ||[MessagePack][encoding-msgp]|[JSON][encoding-json]|[Protocol Buffers][encoding-pb]|
 |---|---|---|---|
-|time to sync from disk (ms/block)|3.60092|6.61503|2.39282|
-|byte size of global `stats` value|187|373|104|}
+|time to sync from disk (ms/block)|6.25810|7.94517|2.31926|
+|byte size of global `stats` value|187|372|104|}
 |byte size of individual wallets
-|minimum|19|3|0|
-|maximum|39 887|46 527|33 428|
-|average|235|238|161|
-|total|119 240|121 104|81 639|
+|minimum|86|46|16|
+|maximum|42 992|50 156|36 037|
+|average|563|487|331|
+|total|115 519|121 296|82 429|
 |byte size of multi-signature wallets|||
-|minimum|211|212|74|
-|maximum|371|374|145|
-|average|272|269|98|
-|total|2725|2697|984|
+|minimum|211|211|74|
+|maximum|371|373|145|
+|average|272|268|98|
+|total|2725|2687|984|
 
 #### Information about the last statistics update
 
 blockchain information:
 * network: [tfchain testnet](http://explorer.testnet.threefoldtoken.com);
-* block height: `103 492`
-* network time: `22:48:15 +0200 CEST`
+* block height: `108 762,`
+* network time: `2018-09-07 17:13:44 +0200 CEST`
 
 `rexplorer` version:
 ```
 $ rexplorer version
-Tool version            v0.1.2-d1af62c
-TFChain Daemon version  v1.1.0-rc-1
+Tool version            v0.1.2-bf101dd
+TFChain Daemon version  v1.1.0
 Rivine protocol version v1.0.7
 
 Go Version   v1.11

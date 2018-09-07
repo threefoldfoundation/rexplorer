@@ -288,6 +288,13 @@ var (
 	_ json.Unmarshaler = (*WalletBalance)(nil)
 )
 
+// IsNil returns true if this wallet is a nil wallet.
+func (wallet *Wallet) IsNil() bool {
+	return wallet.Balance.IsZero() &&
+		len(wallet.MultiSignAddresses) == 0 &&
+		wallet.MultiSignData.SignaturesRequired == 0
+}
+
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 // Encoding a wallet using the EncodableWallet structure.
 func (wallet *Wallet) EncodeMsg(w *msgp.Writer) error {
@@ -575,7 +582,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	return nil
 }
 
-// IsZero returns true if this wallet is Zero
+// IsZero returns true if this wallet's balance is Zero
 func (wb *WalletBalance) IsZero() bool {
 	return wb.Unlocked.Total.IsZero() && wb.Locked.Total.IsZero()
 }
