@@ -272,7 +272,7 @@ except that the keys are different and the values are encoded following the [Mes
 
 Here is how in a JSON Layout the keys are of the different [MessagePack][encoding-msgp] structured values:
 
-```json
+```javascript
 {
 	"cts": 1535661244, // chain timestamp
 	"cbh": 103481, // chain blockheight
@@ -335,7 +335,7 @@ Here is how in a JSON Layout the keys are of the different [MessagePack][encodin
 }
 ```
 
-```json
+```javascript
 {
     "b": { // balance
         "u": { // unlocked
