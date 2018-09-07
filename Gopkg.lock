@@ -58,20 +58,37 @@
   revision = "4aabc24848ce5fd31929f7d1e4ea74d3709c14cd"
 
 [[projects]]
+  digest = "1:4ff2c558425dc5cef2c7135f56905c4adf90d9c387f30709121a6d1eab96b26b"
+  name = "github.com/glycerine/greenpack"
+  packages = ["msgp"]
+  pruneopts = "NUT"
+  revision = "296d36831acc782b89c237c177b5db2500e1e1c0"
+  version = "v5.0.8"
+
+[[projects]]
+  digest = "1:6a7159c5f8f8826207545407a458b43ab6599c1c8a2271465c2e979ecea1dcd4"
+  name = "github.com/gobwas/glob"
+  packages = [
+    ".",
+    "compiler",
+    "match",
+    "syntax",
+    "syntax/ast",
+    "syntax/lexer",
+    "util/runes",
+    "util/strings",
+  ]
+  pruneopts = "NUT"
+  revision = "5ccd90ef52e1e632236f7326478d4faa74f99438"
+  version = "v0.2.3"
+
+[[projects]]
   digest = "1:6e73003ecd35f4487a5e88270d3ca0a81bc80dc88053ac7e4dcfec5fba30d918"
   name = "github.com/gogo/protobuf"
   packages = ["proto"]
   pruneopts = ""
   revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
   version = "v1.1.1"
-
-[[projects]]
-  digest = "1:97df918963298c287643883209a2c3f642e6593379f97ab400c2a2e219ab647d"
-  name = "github.com/golang/protobuf"
-  packages = ["proto"]
-  pruneopts = "NUT"
-  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
-  version = "v1.2.0"
 
 [[projects]]
   digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
@@ -182,14 +199,6 @@
   revision = "5137e49ddb729ec1f1d1b38e9683338f8f3639d5"
 
 [[projects]]
-  digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
-  name = "github.com/tinylib/msgp"
-  packages = ["msgp"]
-  pruneopts = "NUT"
-  revision = "b2b6a672cf1e5b90748f79b8b81fc8c5cf0571a1"
-  version = "1.0.2"
-
-[[projects]]
   branch = "master"
   digest = "1:150a80af5603fe5beeaf180b975964f2d2878fca0c9615d8bd3bc0220ba52742"
   name = "github.com/tyler-smith/go-bip39"
@@ -267,8 +276,9 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/glycerine/greenpack/msgp",
+    "github.com/gobwas/glob",
     "github.com/gogo/protobuf/proto",
-    "github.com/golang/protobuf/proto",
     "github.com/gomodule/redigo/redis",
     "github.com/rivine/rivine/build",
     "github.com/rivine/rivine/crypto",
@@ -279,10 +289,10 @@
     "github.com/rivine/rivine/pkg/client",
     "github.com/rivine/rivine/types",
     "github.com/spf13/cobra",
+    "github.com/spf13/pflag",
     "github.com/threefoldfoundation/tfchain/pkg/config",
     "github.com/threefoldfoundation/tfchain/pkg/persist",
     "github.com/threefoldfoundation/tfchain/pkg/types",
-    "github.com/tinylib/msgp/msgp",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

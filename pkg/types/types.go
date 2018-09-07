@@ -1,15 +1,17 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/glycerine/greenpack/msgp"
 	rivineencoding "github.com/rivine/rivine/encoding"
 	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 )
 
-// message pack
-//go:generate msgp -marshal=false -io=true
+// message pack 2 (using github.com/glycerine/greenpack)
+//go:generate greenpack -msgpack2 -marshal=false -io=true
 
 // protobuf (using gogo/protobuf)
 //   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and
@@ -20,21 +22,21 @@ import (
 type (
 	// NetworkStats collects the global statistics for the blockchain.
 	NetworkStats struct {
-		Timestamp                             Timestamp   `json:"timestamp" msg:"timestamp"`
-		BlockHeight                           BlockHeight `json:"blockHeight" msg:"blockHeight"`
-		TransactionCount                      uint64      `json:"txCount" msg:"txCount"`
-		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"coinCreationTxCount"`
-		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"coinCreatorDefinitionTxCount"`
-		ValueTransactionCount                 uint64      `json:"valueTxCount" msg:"valueTxCount"`
-		CoinOutputCount                       uint64      `json:"coinOutputCount" msg:"coinOutputCount"`
-		LockedCoinOutputCount                 uint64      `json:"lockedCoinOutputCount" msg:"lockedCoinOutputCount"`
-		CoinInputCount                        uint64      `json:"coinInputCount" msg:"coinInputCount"`
-		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"minerPayoutCount"`
-		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txFeeCount"`
-		MinerPayouts                          Currency    `json:"minerPayouts" msg:"minerPayouts"`
-		TransactionFees                       Currency    `json:"txFees" msg:"txFees"`
-		Coins                                 Currency    `json:"coins" msg:"coins"`
-		LockedCoins                           Currency    `json:"lockedCoins" msg:"lockedCoins"`
+		Timestamp                             Timestamp   `json:"timestamp" msg:"cts"`
+		BlockHeight                           BlockHeight `json:"blockHeight" msg:"cbh"`
+		TransactionCount                      uint64      `json:"txCount" msg:"txc"`
+		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"cctxc"`
+		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"ccdtxc"`
+		ValueTransactionCount                 uint64      `json:"valueTxCount" msg:"vtxc"`
+		CoinOutputCount                       uint64      `json:"coinOutputCount" msg:"coc"`
+		LockedCoinOutputCount                 uint64      `json:"lockedCoinOutputCount" msg:"lcoc"`
+		CoinInputCount                        uint64      `json:"coinInputCount" msg:"cic"`
+		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"mpc"`
+		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txfc"`
+		MinerPayouts                          Currency    `json:"minerPayouts" msg:"mpt"`
+		TransactionFees                       Currency    `json:"txFees" msg:"txft"`
+		Coins                                 Currency    `json:"coins" msg:"ct"`
+		LockedCoins                           Currency    `json:"lockedCoins" msg:"lct"`
 	}
 )
 
@@ -47,51 +49,92 @@ func NewNetworkStats() NetworkStats {
 type (
 	// Wallet collects all data for an address in a simple format,
 	// focussing on its balance and multisign properties.
+	//
+	// Wallet supports MessagePack and JSON encoding,
+	// but does so via a custom structure as to ensure
+	// it does not encode null values. See `EncodableWallet` to
+	// see how this structure looks like.
+	//
+	//msgp:ignore Wallet
 	Wallet struct {
 		// Balance is optional and defines the balance the wallet currently has.
-		Balance WalletBalance `json:"balance,omitempty" msg:"balance,omitempty"`
+		Balance WalletBalance
 		// MultiSignAddresses is optional and is only defined if the wallet is part of
 		// one or multiple multisign wallets.
-		MultiSignAddresses []UnlockHash `json:"multisignAddresses,omitempty" msg:"multisignAddresses,omitempty"`
+		MultiSignAddresses []UnlockHash
 		// MultiSignData is optional and is only defined if the wallet is a multisign wallet.
-		MultiSignData WalletMultiSignData `json:"multisign,omitempty" msg:"multisign,omitempty"`
+		MultiSignData WalletMultiSignData
 	}
+	// EncodableWallet is the structure used to encode (and decode) a Wallet.
+	// Golang encoding packages cannot omit empty complex types (maps and structures)
+	// without them being pointers, hence this structure is used.
+	// Pointers on properties for runtime structures makes things however tricky,
+	// so the user will work with the actual Wallet instead, not via this structure.
+	EncodableWallet struct {
+		// Balance is optional and defines the balance the wallet currently has.
+		Balance *EncodableWalletBalance `json:"balance,omitempty" msg:"b,omitempty"`
+		// MultiSignAddresses is optional and is only defined if the wallet is part of
+		// one or multiple multisign wallets.
+		MultiSignAddresses []UnlockHash `json:"multisignAddresses,omitempty" msg:"ma,omitempty"`
+		// MultiSignData is optional and is only defined if the wallet is a multisign wallet.
+		MultiSignData *WalletMultiSignData `json:"multisign,omitempty" msg:"m,omitempty"`
+	}
+
 	// WalletBalance contains the unlocked and/or locked balance of a wallet.
+	//
+	// WalletBalance supports MessagePack and JSON encoding,
+	// but does so via a custom structure as to ensure
+	// it does not encode null values. See `EncodableWalletBalance` to
+	// see how this structure looks like.
+	//
+	//msgp:ignore WalletBalance
 	WalletBalance struct {
-		Unlocked WalletUnlockedBalance `json:"unlocked,omitemtpy" msg:"unlocked,omitemtpy"`
-		Locked   WalletLockedBalance   `json:"locked,omitemtpy" msg:"locked,omitemtpy"`
+		Unlocked WalletUnlockedBalance
+		Locked   WalletLockedBalance
 	}
+	// EncodableWalletBalance is the structure used to encode (and decode) a WalletBalance.
+	// Golang encoding packages cannot omit empty complex types (structures)
+	// without them being pointers, hence this structure is used.
+	// Pointers on properties for runtime structures makes things however tricky,
+	// so the user will work with the actual WalletBalance instead, not via this structure.
+	EncodableWalletBalance struct {
+		Unlocked *WalletUnlockedBalance `json:"unlocked,omitempty" msg:"u,omitempty"`
+		Locked   *WalletLockedBalance   `json:"locked,omitempty" msg:"l,omitempty"`
+	}
+
 	// WalletUnlockedBalance contains the unlocked balance of a wallet,
 	// defining the total amount of coins as well as all the outputs that are unlocked.
 	WalletUnlockedBalance struct {
-		Total   Currency                `json:"total" msg:"total"`
-		Outputs WalletUnlockedOutputMap `json:"outputs" msg:"outputs"`
+		Total   Currency                `json:"total" msg:"t"`
+		Outputs WalletUnlockedOutputMap `json:"outputs,omitempty" msg:"o,omitempty"`
 	}
 	// WalletUnlockedOutputMap defines the mapping between a coin output ID and its walletUnlockedOutput data
 	WalletUnlockedOutputMap map[string]WalletUnlockedOutput
 	// WalletUnlockedOutput defines an unlocked output targeted at a wallet.
 	WalletUnlockedOutput struct {
-		Amount      Currency `json:"amount" msg:"amount"`
-		Description string   `json:"description,omitemtpy" msg:"description,omitemtpy"`
+		Amount      Currency `json:"amount" msg:"a"`
+		Description string   `json:"description,omitempty" msg:"d,omitempty"`
 	}
+
 	// WalletLockedBalance contains the locked balance of a wallet,
 	// defining the total amount of coins as well as all the outputs that are locked.
 	WalletLockedBalance struct {
-		Total   Currency              `json:"total" msg:"total"`
-		Outputs WalletLockedOutputMap `json:"outputs" msg:"outputs"`
+		Total   Currency              `json:"total" msg:"t"`
+		Outputs WalletLockedOutputMap `json:"outputs,omitempty" msg:"o,omitempty"`
 	}
 	// WalletLockedOutputMap defines the mapping between a coin output ID and its walletLockedOutput data
 	WalletLockedOutputMap map[string]WalletLockedOutput
 	// WalletLockedOutput defines a locked output targeted at a wallet.
 	WalletLockedOutput struct {
-		Amount      Currency  `json:"amount" msg:"amount"`
-		LockedUntil LockValue `json:"lockedUntil" msg:"lockedUntil"`
-		Description string    `json:"description,omitemtpy" msg:"description,omitemtpy"`
+		Amount      Currency  `json:"amount" msg:"a"`
+		LockedUntil LockValue `json:"lockedUntil" msg:"lu"`
+		Description string    `json:"description,omitempty" msg:"d,omitempty"`
 	}
+
 	// WalletMultiSignData defines the extra data defined for a MultiSignWallet.
 	WalletMultiSignData struct {
-		Owners             []UnlockHash `json:"owners" msg:"owners"`
-		SignaturesRequired uint64       `json:"signaturesRequired" msg:"signaturesRequired"`
+		Owners             []UnlockHash `json:"owners" msg:"o"`
+		SignaturesRequired uint64       `json:"signaturesRequired" msg:"sr"`
 	}
 )
 
@@ -229,6 +272,219 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	if err != nil {
 		return fmt.Errorf("Wallet: %v", err)
 	}
+	return nil
+}
+
+// ensure custom MessagePack encodable types for our wallet and wallet balance
+var (
+	_ msgp.Encodable   = (*Wallet)(nil)
+	_ msgp.Decodable   = (*Wallet)(nil)
+	_ json.Marshaler   = (*Wallet)(nil)
+	_ json.Unmarshaler = (*Wallet)(nil)
+
+	_ msgp.Encodable   = (*WalletBalance)(nil)
+	_ msgp.Decodable   = (*WalletBalance)(nil)
+	_ json.Marshaler   = (*WalletBalance)(nil)
+	_ json.Unmarshaler = (*WalletBalance)(nil)
+)
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+// Encoding a wallet using the EncodableWallet structure.
+func (wallet *Wallet) EncodeMsg(w *msgp.Writer) error {
+	ew := &EncodableWallet{
+		// already assign multisign addresses,
+		// as this value is taken over directly
+		MultiSignAddresses: wallet.MultiSignAddresses,
+	}
+	// only add unlocked balance if it is defined
+	if !wallet.Balance.Unlocked.Total.IsZero() {
+		ew.Balance = new(EncodableWalletBalance)
+		ew.Balance.Unlocked = &wallet.Balance.Unlocked
+	}
+	// only add locked balance if it is defined
+	if !wallet.Balance.Locked.Total.IsZero() {
+		if ew.Balance == nil {
+			ew.Balance = new(EncodableWalletBalance)
+		}
+		ew.Balance.Locked = &wallet.Balance.Locked
+	}
+	// only add multi sign data for multi sig wallets
+	if wallet.MultiSignData.SignaturesRequired > 0 {
+		ew.MultiSignData = &wallet.MultiSignData
+	}
+	// encode wallet
+	return ew.EncodeMsg(w)
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+// Decoding a wallet using the EncodableWallet structure.
+func (wallet *Wallet) DecodeMsg(r *msgp.Reader) error {
+	var ew EncodableWallet
+	err := ew.DecodeMsg(r)
+	if err != nil {
+		return err
+	}
+	// reset
+	wallet.Balance = WalletBalance{} // reset
+	if ew.Balance != nil {
+		// and assign any values that are given
+		if ew.Balance.Unlocked != nil {
+			wallet.Balance.Unlocked = *ew.Balance.Unlocked
+		}
+		if ew.Balance.Locked != nil {
+			wallet.Balance.Locked = *ew.Balance.Locked
+		}
+	}
+	// always assign multisign addresses, as it is a slice
+	wallet.MultiSignAddresses = ew.MultiSignAddresses
+	// reset or assign MultiSignData
+	if ew.MultiSignData == nil {
+		wallet.MultiSignData = WalletMultiSignData{} // reset
+	} else {
+		wallet.MultiSignData = *ew.MultiSignData // or assign
+	}
+	// success
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+// Encoding a Wallet using the EncodableWallet structure.
+func (wallet Wallet) MarshalJSON() ([]byte, error) {
+	ew := &EncodableWallet{
+		// already assign multisign addresses,
+		// as this value is taken over directly
+		MultiSignAddresses: wallet.MultiSignAddresses,
+	}
+	// only add unlocked balance if it is defined
+	if !wallet.Balance.Unlocked.Total.IsZero() {
+		ew.Balance = new(EncodableWalletBalance)
+		ew.Balance.Unlocked = &wallet.Balance.Unlocked
+	}
+	// only add locked balance if it is defined
+	if !wallet.Balance.Locked.Total.IsZero() {
+		if ew.Balance == nil {
+			ew.Balance = new(EncodableWalletBalance)
+		}
+		ew.Balance.Locked = &wallet.Balance.Locked
+	}
+	// only add multi sign data for multi sig wallets
+	if wallet.MultiSignData.SignaturesRequired > 0 {
+		ew.MultiSignData = &wallet.MultiSignData
+	}
+	// encode wallet
+	return json.Marshal(ew)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.UnmarshalJSON
+// Decoding a Wallet using the EncodableWallet structure.
+func (wallet *Wallet) UnmarshalJSON(data []byte) error {
+	var ew EncodableWallet
+	err := json.Unmarshal(data, &ew)
+	if err != nil {
+		return err
+	}
+	// reset
+	wallet.Balance = WalletBalance{} // reset
+	if ew.Balance != nil {
+		// and assign any values that are given
+		if ew.Balance.Unlocked != nil {
+			wallet.Balance.Unlocked = *ew.Balance.Unlocked
+		}
+		if ew.Balance.Locked != nil {
+			wallet.Balance.Locked = *ew.Balance.Locked
+		}
+	}
+	// always assign multisign addresses, as it is a slice
+	wallet.MultiSignAddresses = ew.MultiSignAddresses
+	// reset or assign MultiSignData
+	if ew.MultiSignData == nil {
+		wallet.MultiSignData = WalletMultiSignData{} // reset
+	} else {
+		wallet.MultiSignData = *ew.MultiSignData // or assign
+	}
+	// success
+	return nil
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+// Encoding a WalletBalance using the EncodableWalletBalance structure.
+func (wb *WalletBalance) EncodeMsg(w *msgp.Writer) error {
+	if wb.IsZero() {
+		return nil // nothing to do
+	}
+	ewb := new(EncodableWalletBalance)
+	if !wb.Unlocked.Total.IsZero() {
+		ewb.Unlocked = &wb.Unlocked
+	}
+	if !wb.Locked.Total.IsZero() {
+		ewb.Locked = &wb.Locked
+	}
+	// encode wallet balance
+	return ewb.EncodeMsg(w)
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+// Decoding a WalletBalance using the EncodableWalletBalance structure.
+func (wb *WalletBalance) DecodeMsg(r *msgp.Reader) error {
+	var ewb EncodableWalletBalance
+	err := ewb.DecodeMsg(r)
+	if err != nil {
+		return err
+	}
+	// reset or assign unlocked balance
+	if ewb.Unlocked == nil {
+		wb.Unlocked = WalletUnlockedBalance{} // reset
+	} else {
+		wb.Unlocked = *ewb.Unlocked // or assign
+	}
+	// reset or assign locked balance
+	if ewb.Locked == nil {
+		wb.Locked = WalletLockedBalance{} // reset
+	} else {
+		wb.Locked = *ewb.Locked // or assign
+	}
+	// success
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+// Encoding a WalletBalance using the EncodableWalletBalance structure.
+func (wb WalletBalance) MarshalJSON() ([]byte, error) {
+	if wb.IsZero() {
+		return []byte("null"), nil // nothing to do
+	}
+	ewb := new(EncodableWalletBalance)
+	if !wb.Unlocked.Total.IsZero() {
+		ewb.Unlocked = &wb.Unlocked
+	}
+	if !wb.Locked.Total.IsZero() {
+		ewb.Locked = &wb.Locked
+	}
+	// encode wallet balance
+	return json.Marshal(ewb)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.UnmarshalJSON
+// Decoding a WalletBalance using the EncodableWalletBalance structure.
+func (wb *WalletBalance) UnmarshalJSON(data []byte) error {
+	var ewb EncodableWalletBalance
+	err := json.Unmarshal(data, &ewb)
+	if err != nil {
+		return err
+	}
+	// reset or assign unlocked balance
+	if ewb.Unlocked == nil {
+		wb.Unlocked = WalletUnlockedBalance{} // reset
+	} else {
+		wb.Unlocked = *ewb.Unlocked // or assign
+	}
+	// reset or assign locked balance
+	if ewb.Locked == nil {
+		wb.Locked = WalletLockedBalance{} // reset
+	} else {
+		wb.Locked = *ewb.Locked // or assign
+	}
+	// success
 	return nil
 }
 

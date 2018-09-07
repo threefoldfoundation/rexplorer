@@ -220,9 +220,7 @@ JSON formats of value types defined by this module:
 }
 ```
 
-> When using MessagePack (the default encoding type), the keys are the same as when encoding as JSON,
-> and the values are encoded in the exact same way, except that the resulting values
-> follow the [MessagePack spec][msgp-spec].
+Null fields will not be encoded in JSON encoding.
 
 * example of a multisig wallet (stored under a:03<4_random_hex_chars>):
 
@@ -243,9 +241,94 @@ JSON formats of value types defined by this module:
 }
 ```
 
-> When using MessagePack (the default encoding type), the keys are the same as when encoding as JSON,
-> and the values are encoded in the exact same way, except that the resulting values
-> follow the [MessagePack spec][msgp-spec].
+[MessagePack][encoding-msgp]:
+
+When using `MessagePack` encoding the Layout is pretty much the same,
+except that the keys are different and the values are encoded following the [MessagePack spec][msgp-spec].
+
+Here is how in a JSON Layout the keys are of the different [MessagePack][encoding-msgp] structured values:
+
+```json
+{
+	"cts": 1535661244, // chain timestamp
+	"cbh": 103481, // chain blockheight
+	"txc": 103830, // transaction count
+	"cctxc": 2, // coin creation transaction count
+	"ccdtxc": 1, // coin creator definition transaction count
+	"vtxc": 348, // value transaction count
+	"coinOutputCount": 104414, // coin output count
+	"lcoc": 736, // locked coin output count
+	"cic": 1884, // coin input count
+	"mpc": 103481, // miner payout count
+	"txfc": 306, // transaction fee count
+	"mpt": "1034810000000000", // miner payouts total
+	"txft": "36100000071", // transaction fees total
+	"ct": "101054810300000000", // coins total
+	"lct": "8045200000000" // locked coins total
+}
+```
+
+```javascript
+{
+    "b": { // balance
+        "u": { // unlocked
+            // NOTE that the total unlocked balance does not have to
+            // match the sum of the listed unlocked outputs, due to the fact
+            // that unlocked outputs are only shown if their description
+            // matches any of the (CLI) specified description filters
+            "t": "10005000", // total
+            "o": [ // outputs
+                {
+                    "a": "9999999", // amount
+                    "d": "for:you" // description
+                },
+                {
+                    "a": "1", // amount
+                    "d": "Surprise!" // description
+                }
+            ],
+        },
+        "l": { // locked
+            // the total locked balance will always match the sum
+            // of all listed locked outputs
+            "t": "5000", // total
+            "o": [ // outputs
+                {
+                    "a": "2000", // amount
+                    "lu": 1534105468 // locked until
+                },
+                {
+                    "a": "3000", // amount
+                    "lu": 1534105468, // locked until
+                    "d": "SGVsbG8=", // description
+                }
+            ]
+        }
+    },
+    "ma": [ // MultiSignAddresses
+        "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"
+    ]
+}
+```
+
+```json
+{
+    "b": { // balance
+        "u": { // unlocked
+            "t": "10000000" // total
+        }
+    },
+    "m": { // multisign
+        "o": [ // owners
+            "01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa",
+            "0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af"
+        ],
+        "sr": 1 // signatures required
+    }
+}
+```
+
+[Protocol Buffers][encoding-pb]:
 
 > When using ProtocolBuffer (an optional encoding type, less widely supported but faster),
 > you'll have to decode using the `types.proto` Protocol Buffer scheme of public types found at

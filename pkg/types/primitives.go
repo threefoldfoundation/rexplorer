@@ -13,7 +13,7 @@ import (
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/types"
 
-	"github.com/tinylib/msgp/msgp"
+	"github.com/glycerine/greenpack/msgp"
 )
 
 // Type overwrites as to be able to define MessagePack (de)serialization methods for them.

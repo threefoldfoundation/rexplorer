@@ -13,8 +13,8 @@ import (
 	"github.com/rivine/rivine/modules"
 )
 
-// message pack
-//go:generate msgp -marshal=false -io=true
+// message pack 2 (using github.com/glycerine/greenpack)
+//go:generate greenpack -msgpack2 -marshal=false -io=true
 
 // protobuf (using gogo/protobuf)
 //   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and
@@ -25,14 +25,14 @@ import (
 type (
 	// ExplorerState collects the (internal) state for the explorer.
 	ExplorerState struct {
-		CurrentChangeID types.ConsensusChangeID `json:"currentchangeid" msg:"currentchangeid"`
+		CurrentChangeID types.ConsensusChangeID `json:"currentchangeid" msg:"ccid"`
 	}
 
 	// NetworkInfo defines the info of the chain network data is dumped from,
 	// used as to prevent name colissions.
 	NetworkInfo struct {
-		ChainName   string `json:"chainName" msg:"chainName"`
-		NetworkName string `json:"networkName" msg:"networkName"`
+		ChainName   string `json:"chainName" msg:"cn"`
+		NetworkName string `json:"networkName" msg:"nn"`
 	}
 )
 
