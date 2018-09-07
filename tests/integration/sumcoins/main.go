@@ -57,8 +57,43 @@ func main() {
 				panic("failed to json-unmarshal wallet: " + err.Error())
 			}
 		}
+		// keep track of total locked coins and unlocked coins
 		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked.Total)
 		lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
+
+		// ensure that the sum of all unlocked outputs is not greater than the total unlocked balance of each wallet
+		if !wallet.Balance.Unlocked.Total.IsZero() {
+			var unlockedSum types.Currency
+			for _, output := range wallet.Balance.Unlocked.Outputs {
+				unlockedSum = unlockedSum.Add(output.Amount)
+			}
+			if c := unlockedSum.Cmp(wallet.Balance.Unlocked.Total); c == 1 {
+				diff := unlockedSum.Sub(wallet.Balance.Unlocked.Total)
+				panic(fmt.Sprintf("unexpected total unlocked of wallet %s coins: %s > %s (diff: %s)",
+					addr, unlockedSum.String(), wallet.Balance.Unlocked.Total.String(), diff.String()))
+			}
+		}
+
+		// ensure that the sum of all locked outputs equals the total locked balance of each wallet
+		if !wallet.Balance.Locked.Total.IsZero() {
+			var lockedSum types.Currency
+			for _, output := range wallet.Balance.Locked.Outputs {
+				lockedSum = lockedSum.Add(output.Amount)
+			}
+			if c := lockedSum.Cmp(wallet.Balance.Locked.Total); c != 0 {
+				var diff types.Currency
+				switch c {
+				case -1:
+					diff = wallet.Balance.Locked.Total.Sub(lockedSum)
+				case 1:
+					diff = lockedSum.Sub(wallet.Balance.Locked.Total)
+				}
+
+				panic(fmt.Sprintf("unexpected total locked of wallet %s coins: %s != %s (diff: %s)",
+					addr, lockedSum.String(), wallet.Balance.Locked.Total.String(), diff.String()))
+			}
+		}
+
 	}
 	totalCoins := unlockedCoins.Add(lockedCoins)
 
