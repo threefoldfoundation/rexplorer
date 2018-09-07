@@ -527,18 +527,18 @@ There is a Go example that you can checkout at [/examples/getcoins/main.go](/exa
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getcoins/main.go 0133021d18cc15467883a34074bb514665380bafd8879d9f1edd171d7f043e800367fd4d1c3ec8
-unlocked: 100 TFT
-locked:   24691.36 TFT
+$ go run ./examples/getcoins/main.go 01de096b60b4ece712409b8dc1ea1f9247b89953774503efdb689284a4ff06412c82223f867f2f
+unlocked: 10000 TFT
+locked:   0 TFT
 --------------------
-total: 24791.36 TFT
+total: 10000 TFT
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
-$ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
+$ redis-cli HGET a:01de09 6b60b4ece712409b8dc1ea1f9247b89953774503efdb689284a4ff06412c82223f867f2f
+"{\"balance\":{\"unlocked\":{\"total\":\"10000000000000\"}}}\n"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).,
@@ -588,18 +588,18 @@ and you can run it yourself as follows:
 
 ```
 $ go run ./examples/getcoincreators/main.go
-1) 01434535fd01243c02c277cd58d71423163767a575a8ae44e15807bf545e4a8456a5c4afabad51
-2) 0149a5496fea27315b7db6251e5dfda23bc9d4bf677c5a5c2d70f1382c44357197d8453d9dfa32
-3) 01334cf68f312026ff9df84fc023558db8624bedd717adcc9edc6900488cf6df54ac8e3d1c89a8
+1) 016148ac9b17828e0933796eaca94418a376f2aa3fefa15685cea5fa462093f0150e09067f7512
+2) 013a787bf6248c518aee3a040a14b0dd3a029bc8e9b19a1823faf5bcdde397f4201ad01aace4c9
+3) 01d553fab496f3fd6092e25ce60e6f72e24b57950bffc0d372d659e38e5a95e89fb117b4eb3481
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
 $ redis-cli SMEMBERS coincreators
-1) "01434535fd01243c02c277cd58d71423163767a575a8ae44e15807bf545e4a8456a5c4afabad51"
-2) "0149a5496fea27315b7db6251e5dfda23bc9d4bf677c5a5c2d70f1382c44357197d8453d9dfa32"
-3) "01334cf68f312026ff9df84fc023558db8624bedd717adcc9edc6900488cf6df54ac8e3d1c89a8"
+1) "016148ac9b17828e0933796eaca94418a376f2aa3fefa15685cea5fa462093f0150e09067f7512"
+2) "013a787bf6248c518aee3a040a14b0dd3a029bc8e9b19a1823faf5bcdde397f4201ad01aace4c9"
+3) "01d553fab496f3fd6092e25ce60e6f72e24b57950bffc0d372d659e38e5a95e89fb117b4eb3481"
 ```
 
 As you can see for yourself, the unique wallet addresses are stored in a Redis Set,
@@ -641,7 +641,7 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli get stats
-"{\"timestamp\":1535661244,\"blockHeight\":103481,\"txCount\":103830,\"coinCreationTxCount\":2,\"coinCreatorDefinitionTxCount\":1,\"valueTxCount\":348,\"coinOutputCount\":104414,\"lockedCoinOutputCount\":736,\"coinInputCount\":1884,\"minerPayoutCount\":103481,\"txFeeCount\":306,\"minerPayouts\":\"1034810000000000\",\"txFees\":\"36100000071\",\"coins\":\"101054810300000000\",\"lockedCoins\":\"8045200000000\"}\n"
+"{\"timestamp\":1535662095,\"blockHeight\":103492,\"txCount\":103841,\"coinCreationTxCount\":2,\"coinCreatorDefinitionTxCount\":1,\"valueTxCount\":348,\"coinOutputCount\":104425,\"lockedCoinOutputCount\":735,\"coinInputCount\":1884,\"minerPayoutCount\":103492,\"txFeeCount\":306,\"minerPayouts\":\"1034920000000000\",\"txFees\":\"36100000071\",\"coins\":\"101054920300000000\",\"lockedCoins\":\"8045100000000\"}\n"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).
@@ -674,7 +674,7 @@ This example also works in the opposite direction, where the multisig address wi
 
 ```
 $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
-"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":2}}\n"
+"{\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"]}\n"
 ```
 
 > Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
