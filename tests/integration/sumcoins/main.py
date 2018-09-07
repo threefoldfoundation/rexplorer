@@ -30,7 +30,7 @@ balanceTotalKey = None
 balanceOutputKey = None
 balanceOutputAmountKey = None
 statsLockedCoinsKey = None
-statsUnlockedCoinsKey = None
+statsCoinsKey = None
 
 # define decode function
 dec = None
@@ -43,7 +43,7 @@ if args.encoding == EncodingType.msgp:
     balanceOutputKey = 'o'
     balanceOutputAmountKey = 'a'
     statsLockedCoinsKey = 'lct'
-    statsUnlockedCoinsKey = 'ct'
+    statsCoinsKey = 'ct'
 elif args.encoding == EncodingType.json:
     dec = json.loads
     walletBalanceKey = 'balance'
@@ -53,7 +53,7 @@ elif args.encoding == EncodingType.json:
     balanceOutputKey = 'outputs'
     balanceOutputAmountKey = 'amount'
     statsLockedCoinsKey = 'lockedCoins'
-    statsUnlockedCoinsKey = 'coins'
+    statsCoinsKey = 'coins'
 else:
     raise Exception('unsupported encoding type: ' + str(args.encoding))
 
@@ -97,7 +97,7 @@ for addr in r.sscan_iter(name='addresses'):
 
 # get stats and compare the computed total locked and unlocked coin count
 stats = dec(r.get('stats'))
-uc = int(stats[statsUnlockedCoinsKey])
+uc = int(stats[statsCoinsKey]) - int(stats[statsLockedCoinsKey])
 if uc != coinsUnlocked:
     raise Exception('unexpected total unlocked coins: ' + str(uc) + ' != ' + str(coinsUnlocked))
 lc = int(stats[statsLockedCoinsKey])
