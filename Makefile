@@ -1,7 +1,9 @@
-STANDARD_REDIS_ADDR ?= :6379
+STANDARD_REDIS_PORT ?= 6379
+STANDARD_REDIS_ADDR ?= :$(STANDARD_REDIS_PORT)
 STANDARD_REDIS_DB ?= 0
 STANDARD_ENCODING_TYPE ?= msgp
-TESTNET_REDIS_ADDR ?= :6379
+TESTNET_REDIS_PORT ?= 6379
+TESTNET_REDIS_ADDR ?= :$(TESTNET_REDIS_PORT)
 TESTNET_REDIS_DB ?= 1
 TESTNET_ENCODING_TYPE ?= msgp
 
@@ -32,7 +34,7 @@ unit-tests:
 ineffassign:
 	ineffassign $(testpkgs)
 
-integration-tests: integration-test-sumcoins
+integration-tests: integration-test-sumcoins integration-test-sumcoins-python
 
 integration-test-sumcoins:
 	go run tests/integration/sumcoins/main.go \
@@ -40,6 +42,14 @@ integration-test-sumcoins:
 		--encoding "$(TESTNET_ENCODING_TYPE)"
 	go run tests/integration/sumcoins/main.go \
 		--db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)" \
+		--encoding "$(STANDARD_ENCODING_TYPE)"
+
+integration-test-sumcoins-python:
+	python tests/integration/sumcoins/main.py \
+		--db-port "$(TESTNET_REDIS_PORT)" --db-slot "$(TESTNET_REDIS_DB)" \
+		--encoding "$(TESTNET_ENCODING_TYPE)"
+	python tests/integration/sumcoins/main.py \
+		--db-port "$(STANDARD_REDIS_PORT)" --db-slot "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
 generate-types:
