@@ -431,7 +431,7 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"24691360000000\",\"outputs\":null}},\"multisignAddresses\":null,\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
+"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).,
@@ -560,14 +560,14 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
+"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
 ```
 
 This example also works in the opposite direction, where the multisig address will return all owner addresses:
 
 ```
 $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
-"{\"balance\":{\"unlocked\":\"0\",\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":2}}\n"
+"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisign\":{\"owners\":[\"01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa\",\"0114df42a3bb8303a745d23c47062a1333246b3adac446e6d62f4de74f5223faf4c2da465e76af\"],\"signaturesRequired\":2}}\n"
 ```
 
 > Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
