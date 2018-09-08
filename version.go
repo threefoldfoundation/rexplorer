@@ -3,7 +3,7 @@ package main
 import "github.com/rivine/rivine/build"
 
 var (
-	rawVersion = "v0.1.2"
+	rawVersion = "v0.2.0"
 	version    build.ProtocolVersion
 )
 
