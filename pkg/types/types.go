@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/glycerine/greenpack/msgp"
 	rivineencoding "github.com/rivine/rivine/encoding"
 	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	"github.com/tinylib/msgp/msgp"
 )
 
-// message pack 2 (using github.com/glycerine/greenpack)
-//go:generate greenpack -msgpack2 -marshal=false -io=true
+// message pack (using github.com/tinylib/msgp)
+//go:generate msgp -marshal=false -io=true
 
 // protobuf (using gogo/protobuf)
 //   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and
@@ -161,10 +161,10 @@ func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter
 		CoinInputCount:        stats.CoinInputCount,
 		MinerPayoutCount:      stats.MinerPayoutCount,
 		TxFeeCount:            stats.TransactionFeeCount,
-		MinerPayouts:          rivineencoding.Marshal(stats.MinerPayouts),
-		TxFees:                rivineencoding.Marshal(stats.TransactionFees),
-		Coins:                 rivineencoding.Marshal(stats.Coins),
-		LockedCoins:           rivineencoding.Marshal(stats.LockedCoins),
+		MinerPayouts:          stats.MinerPayouts.Bytes(),
+		TxFees:                stats.TransactionFees.Bytes(),
+		Coins:                 stats.Coins.Bytes(),
+		LockedCoins:           stats.LockedCoins.Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("NetworkStats: %v", err)
@@ -196,19 +196,19 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.TransactionFeeCount = pb.TxFeeCount
 
 	// unmarshal all required Currency values
-	err = rivineencoding.Unmarshal(pb.MinerPayouts, &stats.MinerPayouts)
+	err = stats.MinerPayouts.LoadBytes(pb.MinerPayouts)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: MinerPayouts: %v", err)
 	}
-	err = rivineencoding.Unmarshal(pb.TxFees, &stats.TransactionFees)
+	err = stats.TransactionFees.LoadBytes(pb.TxFees)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: TransactionFees: %v", err)
 	}
-	err = rivineencoding.Unmarshal(pb.LockedCoins, &stats.LockedCoins)
+	err = stats.LockedCoins.LoadBytes(pb.LockedCoins)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: LockedCoins: %v", err)
 	}
-	err = rivineencoding.Unmarshal(pb.Coins, &stats.Coins)
+	err = stats.Coins.LoadBytes(pb.Coins)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: Coins: %v", err)
 	}
@@ -224,13 +224,13 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	// add optional UnlockedBalance only if available
 	if !wallet.Balance.Unlocked.Total.IsZero() {
 		ub := &PBWalletUnlockedBalance{
-			Total:   rivineencoding.Marshal(wallet.Balance.Unlocked.Total),
+			Total:   wallet.Balance.Unlocked.Total.Bytes(),
 			Outputs: make(map[string]*PBWalletUnlockedOutput, len(wallet.Balance.Unlocked.Outputs)),
 		}
 		pb.BalanceUnlocked = ub
 		for id, output := range wallet.Balance.Unlocked.Outputs {
 			ub.Outputs[id] = &PBWalletUnlockedOutput{
-				Amount:      rivineencoding.Marshal(output.Amount),
+				Amount:      output.Amount.Bytes(),
 				Description: output.Description,
 			}
 		}
@@ -238,13 +238,13 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	// add optional LockedBalance only if available
 	if !wallet.Balance.Locked.Total.IsZero() {
 		lb := &PBWalletLockedBalance{
-			Total:   rivineencoding.Marshal(wallet.Balance.Locked.Total),
+			Total:   wallet.Balance.Locked.Total.Bytes(),
 			Outputs: make(map[string]*PBWalletLockedOutput, len(wallet.Balance.Locked.Outputs)),
 		}
 		pb.BalanceLocked = lb
 		for id, output := range wallet.Balance.Locked.Outputs {
 			lb.Outputs[id] = &PBWalletLockedOutput{
-				Amount:      rivineencoding.Marshal(output.Amount),
+				Amount:      output.Amount.Bytes(),
 				LockedUntil: uint64(output.LockedUntil),
 				Description: output.Description,
 			}
@@ -508,7 +508,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	if pb.BalanceUnlocked == nil {
 		wallet.Balance.Unlocked = WalletUnlockedBalance{}
 	} else {
-		err = rivineencoding.Unmarshal(pb.BalanceUnlocked.Total, &wallet.Balance.Unlocked.Total)
+		err = wallet.Balance.Unlocked.Total.LoadBytes(pb.BalanceUnlocked.Total)
 		if err != nil {
 			return fmt.Errorf("Wallet: Unlocked Balance: Total: %v", err)
 		}
@@ -517,7 +517,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 		for id, output := range pb.BalanceUnlocked.Outputs {
 			var unlockedOutput WalletUnlockedOutput
 			// unmarshal amount
-			err = rivineencoding.Unmarshal(output.Amount, &unlockedOutput.Amount)
+			err = unlockedOutput.Amount.LoadBytes(output.Amount)
 			if err != nil {
 				return fmt.Errorf("Wallet: Unlocked Balance: Output %s: Amount: %v", id, err)
 			}
@@ -531,7 +531,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	if pb.BalanceLocked == nil {
 		wallet.Balance.Locked = WalletLockedBalance{}
 	} else {
-		err = rivineencoding.Unmarshal(pb.BalanceLocked.Total, &wallet.Balance.Locked.Total)
+		err = wallet.Balance.Locked.Total.LoadBytes(pb.BalanceLocked.Total)
 		if err != nil {
 			return fmt.Errorf("Wallet: Locked Balance: Total: %v", err)
 		}
@@ -540,7 +540,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 		for id, output := range pb.BalanceLocked.Outputs {
 			var lockedOutput WalletLockedOutput
 			// unmarshal amount
-			err = rivineencoding.Unmarshal(output.Amount, &lockedOutput.Amount)
+			err = lockedOutput.Amount.LoadBytes(output.Amount)
 			if err != nil {
 				return fmt.Errorf("Wallet: Locked Balance: Output %s: Amount: %v", id, err)
 			}

@@ -44,26 +44,26 @@ if args.encoding == EncodingType.msgp:
             raise Exception('nil wallet for addr: ' + addr)
 
         balance = WalletBalance()
-        if b'b' not in wallet:
+        if b'b' not in wallet or wallet[b'b'] == None:
             return balance # skip wallets with no balance
         
-        if b'u' in wallet[b'b']:
-            balance.unlocked = int(wallet[b'b'][b'u'][b't'])
+        if b'u' in wallet[b'b'] and wallet[b'b'][b'u'] != None:
+            balance.unlocked = int.from_bytes(wallet[b'b'][b'u'][b't'], byteorder='big')
             if b'o' in wallet[b'b'][b'u']:
                 for _, output in wallet[b'b'][b'u'][b'o'].items():
                     balance.unlocked_outputs.append(int(output[b'a']))
-        if b'l' in wallet[b'b']:
-            balance.locked = int(wallet[b'b'][b'l'][b't'])
+        if b'l' in wallet[b'b'] and wallet[b'b'][b'l'] != None:
+            balance.locked = int.from_bytes(wallet[b'b'][b'l'][b't'], byteorder='big')
             for _, output in wallet[b'b'][b'l'][b'o'].items():
-                balance.locked_outputs.append(int(output[b'a']))
+                balance.locked_outputs.append(int.from_bytes(output[b'a'], byteorder='big'))
         return balance
     def decs(b):
         stats = msgpack.unpackb(b)
         if stats == None:
             raise Exception('nil stats')
         chain_stats = ChainStats()
-        chain_stats.locked_coins = int(stats[b'lct'])
-        chain_stats.unlocked_coins = int(stats[b'ct']) - chain_stats.locked_coins
+        chain_stats.locked_coins = int.from_bytes(stats[b'lct'], byteorder='big')
+        chain_stats.unlocked_coins = int.from_bytes(stats[b'ct'], byteorder='big') - chain_stats.locked_coins
         chain_stats.block_height = stats[b'cbh']
         return chain_stats
 elif args.encoding == EncodingType.json:
@@ -103,12 +103,12 @@ elif args.encoding == EncodingType.protobuf:
             raise Exception('nil wallet for addr: ' + addr)
         balance = WalletBalance()
 
-        balance.unlocked = int.from_bytes(wallet.balance_unlocked.total[8:], byteorder='big')
+        balance.unlocked = int.from_bytes(wallet.balance_unlocked.total, byteorder='big')
         for _, output in wallet.balance_unlocked.outputs.items():
-            balance.unlocked_outputs.append(int.from_bytes(output.amount[8:], byteorder='big'))
-        balance.locked = int.from_bytes(wallet.balance_locked.total[8:], byteorder='big')
+            balance.unlocked_outputs.append(int.from_bytes(output.amount, byteorder='big'))
+        balance.locked = int.from_bytes(wallet.balance_locked.total, byteorder='big')
         for _, output in wallet.balance_locked.outputs.items():
-            balance.locked_outputs.append(int.from_bytes(output.amount[8:], byteorder='big'))
+            balance.locked_outputs.append(int.from_bytes(output.amount, byteorder='big'))
         return balance
     def decs(b):
         stats = rtypes.types_pb2.PBNetworkStats()
@@ -116,8 +116,8 @@ elif args.encoding == EncodingType.protobuf:
         if stats == None:
             raise Exception('nil stats')
         chain_stats = ChainStats()
-        chain_stats.locked_coins = int.from_bytes(stats.locked_coins[8:], byteorder='big')
-        chain_stats.unlocked_coins = int.from_bytes(stats.coins[8:], byteorder='big') - chain_stats.locked_coins
+        chain_stats.locked_coins = int.from_bytes(stats.locked_coins, byteorder='big')
+        chain_stats.unlocked_coins = int.from_bytes(stats.coins, byteorder='big') - chain_stats.locked_coins
         chain_stats.block_height = stats.blockheight
         return chain_stats
 else:

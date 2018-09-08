@@ -13,8 +13,8 @@ import (
 	"github.com/rivine/rivine/modules"
 )
 
-// message pack 2 (using github.com/glycerine/greenpack)
-//go:generate greenpack -msgpack2 -marshal=false -io=true
+// message pack (using github.com/tinylib/msgp)
+//go:generate msgp -marshal=false -io=true
 
 // protobuf (using gogo/protobuf)
 //   requires protoc (https://github.com/protocolbuffers/protobuf/releases/tag/v3.6.1) and

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/glycerine/greenpack/msgp"
 	"github.com/gogo/protobuf/proto"
+	"github.com/tinylib/msgp/msgp"
 )
 
 // Type identifies a type of Encoder

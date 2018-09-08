@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/glycerine/greenpack/msgp"
 	"github.com/rivine/rivine/types"
+	"github.com/tinylib/msgp/msgp"
 )
 
 func TestJSONEncodeMinimalWallets(t *testing.T) {
@@ -122,21 +122,8 @@ func TestMessagePackEncodeMinimalWallets(t *testing.T) {
 			t.Errorf("failed to decode %s as json: %v", description, err)
 			return
 		}
-		// decode and encode using a map, to remove the specially added @ field
-		var jsonMap map[string]interface{}
-		err = json.Unmarshal(jsonBuf.Bytes(), &jsonMap)
-		if err != nil {
-			t.Errorf("failed to json-decode %s as map[string]interface{}: %v", description, err)
-			return
-		}
-		deepRemoveTaggedField(jsonMap)
-		data, err := json.Marshal(jsonMap)
-		if err != nil {
-			t.Errorf("failed to json-encode %s as map[string]interface{}: %v", description, err)
-			return
-		}
 		// compare encoded result with expected situation
-		result := string(data)
+		result := string(jsonBuf.Bytes())
 		if expected != result {
 			t.Errorf("unexpected JSON-encoded result for %s: %s != %s", description, expected, result)
 			return
@@ -158,17 +145,19 @@ func TestMessagePackEncodeMinimalWallets(t *testing.T) {
 		}
 	}
 
-	testMarshal(Wallet{}, "empty wallet", "{}")
+	testMarshal(Wallet{}, "empty wallet", `{"b":null,"ma":[],"m":null}`)
 	testMarshal(Wallet{
 		MultiSignAddresses: []UnlockHash{unlockHashFromHex(t, "0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37")},
 	}, "multisig-referenced-only-wallet",
-		`{"ma":["0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"]}`)
+		`{"b":null,"ma":["A1mqqjEaEO/XdilTQYuCi/4tTiER3+aq+C1K328vs4Vo"],"m":null}`)
 	testMarshal(Wallet{
 		Balance: WalletBalance{
 			Unlocked: WalletUnlockedBalance{
-				Total: AsCurrency(types.NewCurrency64(1))}}},
+				Total:   AsCurrency(types.NewCurrency64(1)),
+				Outputs: make(WalletUnlockedOutputMap),
+			}}},
 		"minimal-unlocked-balance-only-wallet",
-		`{"b":{"u":{"t":"1"}}}`)
+		`{"b":{"u":{"t":"AQ==","o":{}},"l":null},"ma":[],"m":null}`)
 	testMarshal(Wallet{
 		Balance: WalletBalance{
 			Unlocked: WalletUnlockedBalance{
@@ -181,7 +170,7 @@ func TestMessagePackEncodeMinimalWallets(t *testing.T) {
 				},
 			}}},
 		"minimal-unlocked-balance-with-output-wallet",
-		`{"b":{"u":{"o":{"1e8cb9bfd8d35a523fefe563b5402e8a49ce86b5555bfde6eafbd226457a23ef":{"a":"1","d":"for:you"}},"t":"1"}}}`)
+		`{"b":{"u":{"t":"AQ==","o":{"1e8cb9bfd8d35a523fefe563b5402e8a49ce86b5555bfde6eafbd226457a23ef":{"a":"AQ==","d":"for:you"}}},"l":null},"ma":[],"m":null}`)
 	testMarshal(Wallet{
 		Balance: WalletBalance{
 			Locked: WalletLockedBalance{
@@ -195,7 +184,7 @@ func TestMessagePackEncodeMinimalWallets(t *testing.T) {
 				},
 			}}},
 		"minimal-locked-balance-wallet",
-		`{"b":{"l":{"o":{"1e8cb9bfd8d35a523fefe563b5402e8a49ce86b5555bfde6eafbd226457a23ef":{"a":"1","d":"for:you","lu":2000}},"t":"1"}}}`)
+		`{"b":{"u":null,"l":{"t":"AQ==","o":{"1e8cb9bfd8d35a523fefe563b5402e8a49ce86b5555bfde6eafbd226457a23ef":{"a":"AQ==","lu":2000,"d":"for:you"}}}},"ma":[],"m":null}`)
 }
 
 func unlockHashFromHex(t *testing.T, str string) (uh UnlockHash) {

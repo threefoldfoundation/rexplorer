@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/types"
 
-	"github.com/glycerine/greenpack/msgp"
+	"github.com/tinylib/msgp/msgp"
 )
 
 // Type overwrites as to be able to define MessagePack (de)serialization methods for them.
@@ -175,7 +176,7 @@ func (c *Currency) UnmarshalJSON(data []byte) error {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (c Currency) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteString(c.String())
+	err := w.WriteBytes(c.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to write currency as string: %v", err)
 	}
@@ -184,11 +185,11 @@ func (c Currency) EncodeMsg(w *msgp.Writer) error {
 
 // DecodeMsg implements msgp.Decodable.DecodeMsg
 func (c *Currency) DecodeMsg(r *msgp.Reader) error {
-	str, err := r.ReadString()
+	b, err := r.ReadBytes(nil)
 	if err != nil {
 		return fmt.Errorf("failed to read currency as string: %v", err)
 	}
-	err = c.LoadString(str)
+	err = c.LoadBytes(b)
 	if err != nil {
 		return fmt.Errorf("failed to load currency-string as currency: %v", err)
 	}
@@ -198,6 +199,21 @@ func (c *Currency) DecodeMsg(r *msgp.Reader) error {
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (c Currency) Msgsize() int {
 	return stringerLength(c)
+}
+
+// Bytes returns this currency as a Big-Endian order byte slice.
+func (c Currency) Bytes() []byte {
+	return c.Big().Bytes()
+}
+
+// LoadBytes loads this Currency from a Big-Endian order byte slice.
+func (c *Currency) LoadBytes(b []byte) error {
+	if len(b) == 0 {
+		c.Currency = types.ZeroCurrency
+		return nil
+	}
+	c.Currency = types.NewCurrency(new(big.Int).SetBytes(b))
+	return nil
 }
 
 // Add adds two currencies together, returning this Currency instance,
@@ -252,7 +268,7 @@ func (uh *UnlockHash) UnmarshalJSON(data []byte) error {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (uh UnlockHash) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteString(uh.String())
+	err := w.WriteBytes(encoding.Marshal(uh))
 	if err != nil {
 		return fmt.Errorf("failed to write UnlockHash as string: %v", err)
 	}
@@ -261,11 +277,11 @@ func (uh UnlockHash) EncodeMsg(w *msgp.Writer) error {
 
 // DecodeMsg implements msgp.Decodable.DecodeMsg
 func (uh *UnlockHash) DecodeMsg(r *msgp.Reader) error {
-	str, err := r.ReadString()
+	b, err := r.ReadBytes(nil)
 	if err != nil {
 		return fmt.Errorf("failed to read UnlockHash as string: %v", err)
 	}
-	err = uh.LoadString(str)
+	err = encoding.Unmarshal(b, uh)
 	if err != nil {
 		return fmt.Errorf("failed to load UnlockHash-string as UnlockHash: %v", err)
 	}
