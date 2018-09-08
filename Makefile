@@ -38,18 +38,18 @@ integration-tests: integration-test-sumcoins integration-test-sumcoins-python
 
 integration-test-sumcoins:
 	go run tests/integration/sumcoins/main.go \
-		--db-address "$(TESTNET_REDIS_ADDR)" --db-slot "$(TESTNET_REDIS_DB)" \
+		--redis-addr "$(TESTNET_REDIS_ADDR)" --redis-db "$(TESTNET_REDIS_DB)" \
 		--encoding "$(TESTNET_ENCODING_TYPE)"
 	go run tests/integration/sumcoins/main.go \
-		--db-address "$(STANDARD_REDIS_ADDR)" --db-slot "$(STANDARD_REDIS_DB)" \
+		--redis-addr "$(STANDARD_REDIS_ADDR)" --redis-db "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
 integration-test-sumcoins-python:
 	python3 tests/integration/sumcoins/main.py \
-		--db-port "$(TESTNET_REDIS_PORT)" --db-slot "$(TESTNET_REDIS_DB)" \
+		--redis-port "$(TESTNET_REDIS_PORT)" --redis-db "$(TESTNET_REDIS_DB)" \
 		--encoding "$(TESTNET_ENCODING_TYPE)"
 	python3 tests/integration/sumcoins/main.py \
-		--db-port "$(STANDARD_REDIS_PORT)" --db-slot "$(STANDARD_REDIS_DB)" \
+		--redis-port "$(STANDARD_REDIS_PORT)" --redis-db "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
 generate-types:

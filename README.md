@@ -524,14 +524,14 @@ This will give you the total time it took to execute these commands, dividing th
 Using [./tools/statsbytesize](./tools/statsbytesize) you can gather the byte size of the global `stats` value for a given Redis database (no decoding is required for this tool):
 
 ```
-$ go run ./tools/statsbytesize/main.go --db-slot 3
+$ go run ./tools/statsbytesize/main.go --redis-db 3
 byte size of stats value:  104
 ```
 
 Using [./tools/walletbytesize](./tools/walletbytesize) you can gather the minimum, maximum and average byte size of individual and multi-signature wallets for a given Redis database (make sure to specify the correct `--encoding` flag for each Redis database slot):
 
 ```
-$ go run ./tools/walletbytesize/main.go --db-slot 3 --encoding protobuf
+$ go run ./tools/walletbytesize/main.go --redis-db 3 --encoding protobuf
 2018/08/31 11:06:15 scanned wallet addresses in 51 SSCAN cycles
                        average       min          max
 Individual Wallets     165           10           33426
@@ -634,7 +634,7 @@ There is a Go example that you can checkout at [/examples/getstats/main.go](/exa
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getstats/main.go --db-slot 1
+$ go run ./examples/getstats/main.go --redis-db 1
 tfchain network has:
   * a total of 101054600.3 TFT, of which 101046555.1 TFT is liquid,
     8045.2 TFT is locked, 1034600 TFT is paid out as miner payouts
@@ -681,7 +681,7 @@ There is a Go example that you can checkout at [/examples/getmultisigaddresses/m
 and you can run it yourself as follows:
 
 ```
-$ go run ./examples/getmultisigaddresses/main.go --db-slot 1 01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
+$ go run ./examples/getmultisigaddresses/main.go --redis-db 1 01b650391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
 * 0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
 ```
 
@@ -759,19 +759,19 @@ If you meet all conditions listed above you can run the integration tests as fol
 ```
 $ make integration-tests
 go run tests/integration/sumcoins/main.go \
-                --db-address ":6379" --db-slot "1" \
+                --redis-addr ":6379" --redis-db "1" \
                 --encoding "msgp"
 sumcoins test —using encoding msgp— on block height 108762 passed :)
 go run tests/integration/sumcoins/main.go \
-                --db-address ":6379" --db-slot "0" \
+                --redis-addr ":6379" --redis-db "0" \
                 --encoding "msgp"
 sumcoins test —using encoding msgp— on block height 96024 passed :)
-python tests/integration/sumcoins/main.py \
-                --db-port "6379" --db-slot "1" \
+python3 tests/integration/sumcoins/main.py \
+                --redis-port "6379" --redis-db "1" \
                 --encoding "msgp"
 sumcoins test --using encoding msgp-- on block height 108762 passed for 525 wallets :)
-python tests/integration/sumcoins/main.py \
-                --db-port "6379" --db-slot "0" \
+python3 tests/integration/sumcoins/main.py \
+                --redis-port "6379" --redis-db "0" \
                 --encoding "msgp"
 sumcoins test --using encoding msgp-- on block height 96024 passed for 699 wallets :)
 ```

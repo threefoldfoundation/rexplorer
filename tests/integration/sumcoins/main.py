@@ -25,9 +25,9 @@ class ChainStats:
 
 # parse CLI arguments
 parser = argparse.ArgumentParser(description='Read and validate a MsgPack db.')
-parser.add_argument('--db-slot', dest='dbslot',
+parser.add_argument('--redis-db', dest='dbslot',
     default=0, help='slot/index of the redis db')
-parser.add_argument('--db-port', dest='dbport',
+parser.add_argument('--redis-port', dest='dbport',
     default=6379, help='port of the redis db')
 parser.add_argument('--encoding', dest='encoding',
     default=EncodingType.msgp, type=EncodingType, choices=list(EncodingType))
