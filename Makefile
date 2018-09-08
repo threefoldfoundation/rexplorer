@@ -45,13 +45,14 @@ integration-test-sumcoins:
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
 integration-test-sumcoins-python:
-	python tests/integration/sumcoins/main.py \
+	python3 tests/integration/sumcoins/main.py \
 		--db-port "$(TESTNET_REDIS_PORT)" --db-slot "$(TESTNET_REDIS_DB)" \
 		--encoding "$(TESTNET_ENCODING_TYPE)"
-	python tests/integration/sumcoins/main.py \
+	python3 tests/integration/sumcoins/main.py \
 		--db-port "$(STANDARD_REDIS_PORT)" --db-slot "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 
 generate-types:
 	go generate pkg/types/types.go
 	go generate types.go
+	go generate tests/integration/sumcoins/types/generate.go

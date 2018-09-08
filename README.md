@@ -8,6 +8,27 @@
 It applies/reverts data —received from an embedded consensus module— into a Redis db of choice,
 such that the tfchain network data can be consumed/used in a meaningful way.
 
+The public data (data meant for consumption) stored into Redis is stored using a public encoding format.
+The available encoding formats are [MessagePack][encoding-msgp], [JSON][encoding-json] and [Protocol Buffers][encoding-pb].
+Consequently you should be able to consume the public data using any (programming) language which
+supports the desired format.
+
+> For [Golang][golang] you can use the 
+> [`github.com/threefoldfoundation/rexplorer/pkg/encoding`](https://godoc.org/github.com/threefoldfoundation/rexplorer/pkg/encoding) and
+> [`github.com/threefoldfoundation/rexplorer/pkg/types`](https://godoc.org/github.com/threefoldfoundation/rexplorer/pkg/types) in order to easily consume the data.
+
+> [Python 3][python] is supported as well, in the form of an integration test, where it is tested for all available
+> encoding formats. You can find the source code for
+> that integration test at
+> [./tests/integration/sumcoins/main.py](./tests/integration/sumcoins/main.py).
+>
+> For this integration test we used the following [pip](http://pip.pypa.io) packages:
+> [msgpack@0.5.6](https://pypi.org/project/msgpack/), [redis@2.10.6](https://pypi.org/project/redis/)
+> and [protobuf@3.6.1](https://pypi.org/project/protobuf/).
+
+[golang]: http://golang.org
+[python]: http://python.org
+
 ## Index
 
 * [Install](#install): how to install `rexplorer`;
@@ -740,12 +761,30 @@ $ make integration-tests
 go run tests/integration/sumcoins/main.go \
                 --db-address ":6379" --db-slot "1" \
                 --encoding "msgp"
-sumcoins test —using encoding msgp— on block height 91385 passed :)
+sumcoins test —using encoding msgp— on block height 108762 passed :)
 go run tests/integration/sumcoins/main.go \
                 --db-address ":6379" --db-slot "0" \
                 --encoding "msgp"
-sumcoins test —using encoding msgp— on block height 81082 passed :)
+sumcoins test —using encoding msgp— on block height 96024 passed :)
+python tests/integration/sumcoins/main.py \
+                --db-port "6379" --db-slot "1" \
+                --encoding "msgp"
+sumcoins test --using encoding msgp-- on block height 108762 passed for 525 wallets :)
+python tests/integration/sumcoins/main.py \
+                --db-port "6379" --db-slot "0" \
+                --encoding "msgp"
+sumcoins test --using encoding msgp-- on block height 96024 passed for 699 wallets :)
 ```
+
+> In order to be able to run the integration tests,
+> you'll need `Make`, [Golang][golang] (1.9 or above) and
+> [Python 3][python]. Prior to executing the 
+> `integration-tests` Make target you'll also have
+> to install all external [Python 3][python]
+> dependencies which can be be done using the command:
+> ```
+> pip3 install -r ./tests/integration/sumcoins/requirements.txt
+> ```
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
 [rivine]: https://github.com/rivine/rivine
