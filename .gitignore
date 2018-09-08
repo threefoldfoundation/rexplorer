@@ -16,3 +16,7 @@
 
 # Release Dir
 release/
+
+# Python
+*.pyc
+__pycache__

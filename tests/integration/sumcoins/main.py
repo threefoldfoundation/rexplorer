@@ -1,37 +1,5 @@
-import argparse, redis, json, msgpack
+import argparse, redis, json, msgpack, rtypes.types_pb2
 from enum import Enum
-from build.types_pb2 import PBWallet, PBNetworkStats
-
-class ProtoMsg(object):
-
-    def __init__(self, data, msgcls=None):
-        if msgcls is not None:
-            self._msg = msgcls()
-            self._msg.ParseFromString(data)
-        else:
-            self._msg = data
-
-    def is_valid(self):
-        return self._msg is not None
-
-    def __dir__(self):
-        return dir(self._msg)
-
-    def __contains__(self, k):
-        if hasattr(self._msg, 'DESCRIPTOR'):
-            return k in self._msg.DESCRIPTOR.fields_by_name.keys()
-        return k in self._msg if self._msg else False
-
-    def __getitem__(self, k):
-        try:
-            item = getattr(self._msg, k)
-            if hasattr(item, 'DESCRIPTOR'):
-                return ProtoMsg(item)
-            else:
-                return item
-        except:
-            if self._msg:
-                return self._msg.__getitem__(k)
 
 # encoding type used to define a decoder dynamically
 class EncodingType(Enum):
@@ -41,6 +9,19 @@ class EncodingType(Enum):
 
     def __str__(self):
         return self.value
+
+class WalletBalance:
+    def __init__(self):
+        self.unlocked = 0
+        self.unlocked_outputs = []
+        self.locked = 0
+        self.locked_outputs = []
+
+class ChainStats:
+    def __init__(self):
+        self.locked_coins = 0
+        self.unlocked_coins = []
+        self.block_height = 0
 
 # parse CLI arguments
 parser = argparse.ArgumentParser(description='Read and validate a MsgPack db.')
@@ -55,54 +36,90 @@ args = parser.parse_args()
 # create redis host
 r = redis.StrictRedis(host='localhost', port=args.dbport, db=args.dbslot)
 
-walletBalanceKey = None
-balanceUnlockedKey = None
-balanceLockedKey = None
-balanceTotalKey = None
-balanceOutputKey = None
-balanceOutputAmountKey = None
-statsLockedCoinsKey = None
-statsUnlockedCoinsKey = None
-
-# define decode function
-dec = None
+# define decode functions
 if args.encoding == EncodingType.msgp:
-    dec = msgpack.unpackb
-    decode_stats = dec
-    walletBalanceKey = 'b'
-    balanceUnlockedKey = 'u'
-    balanceLockedKey = 'l'
-    balanceTotalKey = 't'
-    balanceOutputKey = 'o'
-    balanceOutputAmountKey = 'a'
-    statsLockedCoinsKey = 'lct'
-    statsCoinsKey = 'ct'
+    def decw(b):
+        wallet = msgpack.unpackb(b)
+        if wallet == None:
+            raise Exception('nil wallet for addr: ' + addr)
+
+        balance = WalletBalance()
+        if b'b' not in wallet:
+            return balance # skip wallets with no balance
+        
+        if b'u' in wallet[b'b']:
+            balance.unlocked = int(wallet[b'b'][b'u'][b't'])
+            if b'o' in wallet[b'b'][b'u']:
+                for _, output in wallet[b'b'][b'u'][b'o'].items():
+                    balance.unlocked_outputs.append(int(output[b'a']))
+        if b'l' in wallet[b'b']:
+            balance.locked = int(wallet[b'b'][b'l'][b't'])
+            for _, output in wallet[b'b'][b'l'][b'o'].items():
+                balance.locked_outputs.append(int(output[b'a']))
+        return balance
+    def decs(b):
+        stats = msgpack.unpackb(b)
+        if stats == None:
+            raise Exception('nil stats')
+        chain_stats = ChainStats()
+        chain_stats.locked_coins = int(stats[b'lct'])
+        chain_stats.unlocked_coins = int(stats[b'ct']) - chain_stats.locked_coins
+        chain_stats.block_height = stats[b'cbh']
+        return chain_stats
 elif args.encoding == EncodingType.json:
-    dec = json.loads
-    decode_stats = dec
-    walletBalanceKey = 'balance'
-    balanceUnlockedKey = 'unlocked'
-    balanceLockedKey = 'locked'
-    balanceTotalKey = 'total'
-    balanceOutputKey = 'outputs'
-    balanceOutputAmountKey = 'amount'
-    statsLockedCoinsKey = 'lockedCoins'
-    statsCoinsKey = 'coins'
+    def decw(b):
+        wallet = json.loads(b)
+        if wallet == None:
+            raise Exception('nil wallet for addr: ' + addr)
 
+        balance = WalletBalance()
+        if 'balance' not in wallet:
+            return balance # skip wallets with no balance
+        
+        if 'unlocked' in wallet['balance']:
+            balance.unlocked = int(wallet['balance']['unlocked']['total'])
+            if 'outputs' in wallet['balance']['unlocked']:
+                for _, output in wallet['balance']['unlocked']['outputs'].items():
+                    balance.unlocked_outputs.append(int(output['amount']))
+        if 'locked' in wallet['balance']:
+            balance.locked = int(wallet['balance']['locked']['total'])
+            for _, output in wallet['balance']['locked']['outputs'].items():
+                balance.locked_outputs.append(int(output['amount']))
+        return balance
+    def decs(b):
+        stats = json.loads(b)
+        if stats == None:
+            raise Exception('nil stats')
+        chain_stats = ChainStats()
+        chain_stats.locked_coins = int(stats['lockedCoins'])
+        chain_stats.unlocked_coins = int(stats['coins']) - chain_stats.locked_coins
+        chain_stats.block_height = stats['blockHeight']
+        return chain_stats
 elif args.encoding == EncodingType.protobuf:
-    decode_wallet = lambda data: ProtoMsg(data, PBWallet)
-    dec = decode_wallet
-    decode_stats = lambda data: ProtoMsg(data, PBNetworkStats)
-    walletBalanceKey = 'balance'
-    balanceUnlockedKey = 'balance_unlocked'
-    balanceLockedKey = 'balance_locked'
-    balanceTotalKey = 'total'
-    balanceOutputKey = 'outputs'
-    balanceOutputAmountKey = 'amount'
-    statsLockedCoinsKey = 'lockedCoins'
-    statsCoinsKey = 'coins'
+    def decw(b):
+        wallet = rtypes.types_pb2.PBWallet()
+        wallet.ParseFromString(b)
+        if wallet == None:
+            raise Exception('nil wallet for addr: ' + addr)
+        balance = WalletBalance()
 
-    print('using protobuf')
+        balance.unlocked = int.from_bytes(wallet.balance_unlocked.total[8:], byteorder='big')
+        for _, output in wallet.balance_unlocked.outputs.items():
+            balance.unlocked_outputs.append(int.from_bytes(output.amount[8:], byteorder='big'))
+        balance.locked = int.from_bytes(wallet.balance_locked.total[8:], byteorder='big')
+        for _, output in wallet.balance_locked.outputs.items():
+            balance.locked_outputs.append(int.from_bytes(output.amount[8:], byteorder='big'))
+        return balance
+    def decs(b):
+        stats = rtypes.types_pb2.PBNetworkStats()
+        stats.ParseFromString(b)
+        if stats == None:
+            raise Exception('nil stats')
+        chain_stats = ChainStats()
+        chain_stats.locked_coins = int.from_bytes(stats.locked_coins[8:], byteorder='big')
+        chain_stats.unlocked_coins = int.from_bytes(stats.coins[8:], byteorder='big') - chain_stats.locked_coins
+        chain_stats.block_height = stats.blockheight
+        return chain_stats
 else:
     raise Exception('unsupported encoding type: ' + str(args.encoding))
 
@@ -121,64 +138,24 @@ for addr in r.sscan_iter(name='addresses'):
     if b == None:
         continue # skip nil wallets
     # ensure we can encode
-
-    if args.encoding == EncodingType.protobuf:
-
-        wallet = dec(b)
-        # add check for valid wallet
-        
-        # *1) balance key isn't defined in the proto schema
-        # go directly to balance unlocked
-
-        if balanceOutputKey in wallet[balanceUnlockedKey]:
-            totalUnlocked = 0
-            import ipdb; ipdb.set_trace()
-            for id, output in wallet[balanceUnlockedKey][balanceOutputKey].items():
-                totalUnlocked += int('>I', output[balanceOutputAmountKey])
-            if totalUnlocked > int(wallet[balanceUnlockedKey][balanceTotalKey]):
-                raise Exception('invalid total unlock balance for wallet: ' + addr)
-        coinsUnlocked += int(wallet[balanceUnlockedKey][balanceTotalKey])
-
-        totalLocked = 0
-        for id, output in wallet[balanceLockedKey][balanceOutputKey].items():
-            print(id, output)
-            totalLocked += int(output[balanceOutputAmountKey])
-        if totalLocked != int(wallet[balanceLockedKey][balanceTotalKey]):
-            raise Exception('invalid total locked balance for wallet: ' + addr)
-        coinsLocked += int(wallet[balanceLockedKey][balanceTotalKey])
-    else:
-
-        # ensure we can encode
-        wallet = dec(b)
-        if wallet == None:
-            raise Exception('nil wallet for addr: ' + addr)
-        if walletBalanceKey not in wallet:
-            continue # skip wallets with no balance
-
-        if balanceUnlockedKey in wallet[walletBalanceKey]:
-            if balanceOutputKey in wallet[walletBalanceKey][balanceUnlockedKey]:
-                totalUnlocked = 0
-                for id, output in wallet[walletBalanceKey][balanceUnlockedKey][balanceOutputKey].items():
-                    totalUnlocked += int('>I', output[balanceOutputAmountKey])
-                if totalUnlocked > int(wallet[walletBalanceKey][balanceUnlockedKey][balanceTotalKey]):
-                    raise Exception('invalid total unlock balance for wallet: ' + addr)
-            coinsUnlocked += int(wallet[walletBalanceKey][balanceUnlockedKey][balanceTotalKey])
-        
-        if balanceLockedKey in wallet[walletBalanceKey]:
-            totalLocked = 0
-            for id, output in wallet[walletBalanceKey][balanceLockedKey][balanceOutputKey].items():
-                totalLocked += int(output[balanceOutputAmountKey])
-            if totalLocked != int(wallet[walletBalanceKey][balanceLockedKey][balanceTotalKey]):
-                raise Exception('invalid total locked balance for wallet: ' + addr)
-            coinsLocked += int(wallet[walletBalanceKey][balanceLockedKey][balanceTotalKey])
+    balance = decw(b)
+    
+    totalUnlocked = sum(balance.unlocked_outputs, 0)
+    if totalUnlocked > balance.unlocked:
+        raise Exception('invalid total unlocked balance for wallet: ' + addr)
+    coinsUnlocked += balance.unlocked
+    
+    totalLocked = sum(balance.locked_outputs, 0)
+    if totalLocked != balance.locked:
+        raise Exception('invalid total locked balance for wallet: ' + addr)
+    coinsLocked += balance.locked
 
 # get stats and compare the computed total locked and unlocked coin count
-stats = decode_stats(r.get('stats'))
-uc = int(stats[statsCoinsKey]) - int(stats[statsLockedCoinsKey])
-if uc != coinsUnlocked:
-    raise Exception('unexpected total unlocked coins: ' + str(uc) + ' != ' + str(coinsUnlocked))
-lc = int(stats[statsLockedCoinsKey])
-if lc != coinsLocked:
-    raise Exception('unexpected total locked coins: ' + str(lc) + ' != ' + str(coinsLocked))
+stats = decs(r.get('stats'))
+if stats.unlocked_coins != coinsUnlocked:
+    raise Exception('unexpected total unlocked coins: ' + str(stats.unlocked_coins) + ' != ' + str(coinsUnlocked))
+if stats.locked_coins != coinsLocked:
+    raise Exception('unexpected total locked coins: ' + str(stats.locked_coins) + ' != ' + str(coinsLocked))
 
-print('validated balance of ' + str(ac) + ' wallets successfully, decoding them from ' + str(args.encoding) + ' :)')
+
+print('sumcoins test --using encoding ' + str(args.encoding) + '-- on block height ' + str(stats.block_height) + ' passed for ' + str(ac) + ' wallets :)')
