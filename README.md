@@ -410,25 +410,27 @@ it is chosen  as the default protocol for following reasons:
 You might however have other preferences. [JSON][encoding-json] is even more widely supported
 and has the advantage that it can be read by humans without need to decode it prior to consumption.
 [Protocol Buffers][encoding-pb] is —in the current implementation—
-much faster than our [MessagePack][encoding-msgp] implementation and is much more compact in terms of byte size.
+slightly slower than the [MessagePack][encoding-msgp] implementation but is more compact in terms of byte size.
 [Protocol Buffers][encoding-pb] has however not as much support across (programming) languages as [MessagePack][encoding-msgp].
+It should also be noted that if the current [MessagePack][encoding-msgp] implementation would not encode null values,
+it would be a bit more compact as well.
 
 Here are some numbers to put the available encoding protocols into context.
 
 ||[MessagePack][encoding-msgp]|[JSON][encoding-json]|[Protocol Buffers][encoding-pb]|
 |---|---|---|---|
-|time to sync from disk (ms/block)|6.25810|7.94517|2.31926|
-|byte size of global `stats` value|187|372|104|}
+|time to sync from disk (ms/block)|1.28775|7.94517|1.60229|
+|byte size of global `stats` value|142|372|72|}
 |byte size of individual wallets
-|minimum|86|46|16|
-|maximum|42 992|50 156|36 037|
-|average|563|487|331|
-|total|115 519|121 296|82 429|
+|minimum|28|46|8|
+|maximum|33 986|50 156|33 227|
+|average|324|487|298|
+|total|80 904|121 296|74 421|
 |byte size of multi-signature wallets|||
-|minimum|211|211|74|
-|maximum|371|373|145|
-|average|272|268|98|
-|total|2725|2687|984|
+|minimum|88|211|74|
+|maximum|158|373|145|
+|average|112|268|96|
+|total|1124|2687|968|
 
 #### Information about the last statistics update
 
@@ -440,7 +442,7 @@ blockchain information:
 `rexplorer` version:
 ```
 $ rexplorer version
-Tool version            v0.1.2-bf101dd
+Tool version            v0.1.2-2c7b54b
 TFChain Daemon version  v1.1.0
 Rivine protocol version v1.0.7
 
