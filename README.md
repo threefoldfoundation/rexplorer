@@ -182,17 +182,24 @@ Following _public_ keys are reserved:
     * example key: `a:032b61`
     * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
 
-Rivine Value Encodings:
+Rivine (Primitive) Value Encodings:
 
+String/Text encodings used for [JSON][encoding-json] encoding:
 * addresses are Hex-encoded and the exact format (and how it is created) is described in:
   <https://github.com/rivine/rivine/blob/master/doc/transactions/unlockhash.md#textstring-encoding>
 * currencies are encoded as described in <https://godoc.org/math/big#Int.Text>
   using base 10, and using the smallest coin unit as value (e.g. 10^-9 TFT)
-* coin outputs are stored in the Rivine-defined JSON format, described in:
-  <https://github.com/rivine/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v0-transactions> (`v0` tx) and
-  <https://github.com/rivine/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v1-transactions> (`v1` tx)
 
-JSON formats of value types defined by this module:
+String/Text encodings used for all encodings:
+* coin output identifiers are hex-encoded versions of the 32 byte hash, forming a 64 byte string as a result;
+
+Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][encoding-pb]:
+* addresses are binary encoded and the exact format (and how it is created) is described in:
+  <https://github.com/rivine/rivine/blob/master/doc/transactions/unlockhash.md#binary-encoding>
+* currencies are encoded as described in <https://godoc.org/math/big#Int.Bytes>
+  using base 10, in Big-Endian order, and using the smallest coin unit as value (e.g. 10^-9 TFT)
+
+[JSON][encoding-json] formats of value types defined by this module:
 
 * example of global stats (stored under `stats`):
 
