@@ -44,7 +44,7 @@ supports the desired format.
 ```
 $ go get -u github.com/threefoldfoundation/rexplorer && rexplorer version
 Tool version            v0.2.0
-TFChain Daemon version  v1.1.0-rc-1
+TFChain Daemon version  v1.1.0
 Rivine protocol version v1.0.7
 
 Go Version   v1.11
