@@ -33,67 +33,91 @@ func main() {
 		panic("failed to unmarshal network stats: " + err.Error())
 	}
 
-	// get all unique addresses
-	addresses, err := redis.Strings(conn.Do("SMEMBERS", "addresses"))
-	if err != nil {
-		panic("failed to get all unique addresses: " + err.Error())
-	}
-
 	// compute total unlocked and locked coins for all addresses
 	var unlockedCoins, lockedCoins types.Currency
-	for _, addr := range addresses {
-		var wallet types.Wallet
-		addressKey, addressField := getAddressKeyAndField(addr)
-		b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
+
+	// scan through all unique addresses, validate each wallet and keep track of the total
+	// locked and unlocked coins
+	walletCounter := 0
+	cursor := "0"
+	for {
+		results, err := redis.Values(conn.Do("SSCAN", "addresses", cursor))
 		if err != nil {
-			if err != redis.ErrNil {
-				panic("failed to get wallet " + err.Error())
-			}
-			b = nil
+			panic(fmt.Sprintf("error while scanning through unique addresses with cursor %q: %v", cursor, err.Error()))
 		}
-		if len(b) > 0 {
-			err = encoder.Unmarshal(b, &wallet)
+		if n := len(results); n != 2 {
+			panic(fmt.Sprintf("expected to receive 2 results from a ZSCAN call, but received %d result(s)", n))
+		}
+
+		addresses, err := redis.Strings(results[1], nil)
+		if err != nil {
+			panic(fmt.Sprintf("error while scanning through unique addresses with cursor %q: invalid addresses: %v", cursor, err.Error()))
+		}
+		for _, addr := range addresses {
+			walletCounter++
+
+			var wallet types.Wallet
+			addressKey, addressField := getAddressKeyAndField(addr)
+			b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 			if err != nil {
-				panic("failed to json-unmarshal wallet: " + err.Error())
-			}
-		}
-		// keep track of total locked coins and unlocked coins
-		unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked.Total)
-		lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
-
-		// ensure that the sum of all unlocked outputs is not greater than the total unlocked balance of each wallet
-		if !wallet.Balance.Unlocked.Total.IsZero() {
-			var unlockedSum types.Currency
-			for _, output := range wallet.Balance.Unlocked.Outputs {
-				unlockedSum = unlockedSum.Add(output.Amount)
-			}
-			if c := unlockedSum.Cmp(wallet.Balance.Unlocked.Total); c == 1 {
-				diff := unlockedSum.Sub(wallet.Balance.Unlocked.Total)
-				panic(fmt.Sprintf("unexpected total unlocked of wallet %s coins: %s > %s (diff: %s)",
-					addr, unlockedSum.String(), wallet.Balance.Unlocked.Total.String(), diff.String()))
-			}
-		}
-
-		// ensure that the sum of all locked outputs equals the total locked balance of each wallet
-		if !wallet.Balance.Locked.Total.IsZero() {
-			var lockedSum types.Currency
-			for _, output := range wallet.Balance.Locked.Outputs {
-				lockedSum = lockedSum.Add(output.Amount)
-			}
-			if c := lockedSum.Cmp(wallet.Balance.Locked.Total); c != 0 {
-				var diff types.Currency
-				switch c {
-				case -1:
-					diff = wallet.Balance.Locked.Total.Sub(lockedSum)
-				case 1:
-					diff = lockedSum.Sub(wallet.Balance.Locked.Total)
+				if err != redis.ErrNil {
+					panic("failed to get wallet " + err.Error())
 				}
-
-				panic(fmt.Sprintf("unexpected total locked of wallet %s coins: %s != %s (diff: %s)",
-					addr, lockedSum.String(), wallet.Balance.Locked.Total.String(), diff.String()))
+				b = nil
 			}
+			if len(b) > 0 {
+				err = encoder.Unmarshal(b, &wallet)
+				if err != nil {
+					panic("failed to json-unmarshal wallet: " + err.Error())
+				}
+			}
+			// keep track of total locked coins and unlocked coins
+			unlockedCoins = unlockedCoins.Add(wallet.Balance.Unlocked.Total)
+			lockedCoins = lockedCoins.Add(wallet.Balance.Locked.Total)
+
+			// ensure that the sum of all unlocked outputs is not greater than the total unlocked balance of each wallet
+			if !wallet.Balance.Unlocked.Total.IsZero() {
+				var unlockedSum types.Currency
+				for _, output := range wallet.Balance.Unlocked.Outputs {
+					unlockedSum = unlockedSum.Add(output.Amount)
+				}
+				if c := unlockedSum.Cmp(wallet.Balance.Unlocked.Total); c == 1 {
+					diff := unlockedSum.Sub(wallet.Balance.Unlocked.Total)
+					panic(fmt.Sprintf("unexpected total unlocked of wallet %s coins: %s > %s (diff: %s)",
+						addr, unlockedSum.String(), wallet.Balance.Unlocked.Total.String(), diff.String()))
+				}
+			}
+
+			// ensure that the sum of all locked outputs equals the total locked balance of each wallet
+			if !wallet.Balance.Locked.Total.IsZero() {
+				var lockedSum types.Currency
+				for _, output := range wallet.Balance.Locked.Outputs {
+					lockedSum = lockedSum.Add(output.Amount)
+				}
+				if c := lockedSum.Cmp(wallet.Balance.Locked.Total); c != 0 {
+					var diff types.Currency
+					switch c {
+					case -1:
+						diff = wallet.Balance.Locked.Total.Sub(lockedSum)
+					case 1:
+						diff = lockedSum.Sub(wallet.Balance.Locked.Total)
+					}
+
+					panic(fmt.Sprintf("unexpected total locked of wallet %s coins: %s != %s (diff: %s)",
+						addr, lockedSum.String(), wallet.Balance.Locked.Total.String(), diff.String()))
+				}
+			}
+
 		}
 
+		// interpret received cursor, if 0, we can stop
+		cursor, err = redis.String(results[0], nil)
+		if err != nil {
+			panic(fmt.Sprintf("failed to interpret cursor received from last ZSCAN call: %v", err))
+		}
+		if cursor == "0" {
+			break
+		}
 	}
 	totalCoins := unlockedCoins.Add(lockedCoins)
 
@@ -124,8 +148,8 @@ func main() {
 	}
 
 	fmt.Printf(
-		"sumcoins test —using encoding %s— on block height %d passed :)\n",
-		encodingType.String(), stats.BlockHeight.BlockHeight)
+		"sumcoins test —using encoding %s— on block height %d passed for %d wallets :)\n,",
+		encodingType.String(), stats.BlockHeight.BlockHeight, walletCounter)
 }
 
 func getAddressKeyAndField(addr string) (key, field string) {
