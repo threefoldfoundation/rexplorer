@@ -118,7 +118,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	// create database
 	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants, cmd.DescriptionFilterSet)
 	if err != nil {
-		return fmt.Errorf("failed to create redis db client: %v", err)
+		return fmt.Errorf("failed to create redis db client "+
+			"(if you use an existing Redis DB ensure you are using the same flags as used previously): %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

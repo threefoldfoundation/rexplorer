@@ -43,8 +43,9 @@ func main() {
 	example: '[!a-f]oo' // does not match 'foo', 'boo', ...
 	                    // but does match 'woo', 'zoo', 5oo, ...
 `,
-		Args: cobra.ExactArgs(0),
-		RunE: cmd.Root,
+		Args:         cobra.ExactArgs(0),
+		SilenceUsage: true,
+		RunE:         cmd.Root,
 	}
 
 	cmdVersion := &cobra.Command{
