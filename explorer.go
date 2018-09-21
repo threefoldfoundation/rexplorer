@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	dtypes "github.com/threefoldfoundation/rexplorer/pkg/database/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
 	"github.com/rivine/rivine/modules"
@@ -16,7 +17,7 @@ import (
 // used to dump the data of a tfchain network in a meaningful way.
 type Explorer struct {
 	db    Database
-	state ExplorerState
+	state dtypes.ExplorerState
 	stats types.NetworkStats
 
 	cs   modules.ConsensusSet
@@ -90,7 +91,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				panic(fmt.Sprintf("failed to revert miner payout of %s to %s: %v",
 					mp.UnlockHash.String(), mp.Value.String(), err))
 			}
-			if state == CoinOutputStateLocked {
+			if state == dtypes.CoinOutputStateLocked {
 				explorer.stats.LockedCoinOutputCount--
 				explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(types.AsCurrency(mp.Value))
 			}
@@ -157,7 +158,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(co.Value))
 				}
 				// always count locked coins
-				if state == CoinOutputStateLocked {
+				if state == dtypes.CoinOutputStateLocked {
 					explorer.stats.LockedCoinOutputCount--
 					explorer.stats.LockedCoins = explorer.stats.LockedCoins.Sub(types.AsCurrency(co.Value))
 				}
@@ -390,9 +391,9 @@ func (explorer *Explorer) addCoinOutput(id types.CoinOutputID, co rivinetypes.Co
 	}
 	// only a TimeLockedCondition can be locked for now
 	tlc := co.Condition.Condition.(*rivinetypes.TimeLockCondition)
-	lt := LockTypeTime
+	lt := dtypes.LockTypeTime
 	if tlc.LockTime < rivinetypes.LockTimeMinTimestampValue {
-		lt = LockTypeHeight
+		lt = dtypes.LockTypeHeight
 	}
 	return true, explorer.db.AddLockedCoinOutput(id, CoinOutput{
 		Value:       types.AsCurrency(co.Value),

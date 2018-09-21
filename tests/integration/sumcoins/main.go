@@ -46,7 +46,7 @@ func main() {
 			panic(fmt.Sprintf("error while scanning through unique addresses with cursor %q: %v", cursor, err.Error()))
 		}
 		if n := len(results); n != 2 {
-			panic(fmt.Sprintf("expected to receive 2 results from a ZSCAN call, but received %d result(s)", n))
+			panic(fmt.Sprintf("expected to receive 2 results from a SSCAN call, but received %d result(s)", n))
 		}
 
 		addresses, err := redis.Strings(results[1], nil)
@@ -68,7 +68,7 @@ func main() {
 			if len(b) > 0 {
 				err = encoder.Unmarshal(b, &wallet)
 				if err != nil {
-					panic("failed to json-unmarshal wallet: " + err.Error())
+					panic("failed to unmarshal wallet: " + err.Error())
 				}
 			}
 			// keep track of total locked coins and unlocked coins
@@ -113,7 +113,7 @@ func main() {
 		// interpret received cursor, if 0, we can stop
 		cursor, err = redis.String(results[0], nil)
 		if err != nil {
-			panic(fmt.Sprintf("failed to interpret cursor received from last ZSCAN call: %v", err))
+			panic(fmt.Sprintf("failed to interpret cursor received from last SSCAN call: %v", err))
 		}
 		if cursor == "0" {
 			break
@@ -148,7 +148,7 @@ func main() {
 	}
 
 	fmt.Printf(
-		"sumcoins test —using encoding %s— on block height %d passed for %d wallets :)\n,",
+		"sumcoins test —using encoding %s— on block height %d passed for %d wallets :)\n",
 		encodingType.String(), stats.BlockHeight.BlockHeight, walletCounter)
 }
 

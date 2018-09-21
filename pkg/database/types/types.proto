@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package main;
+package types;
 
 // ExplorerState collects the (internal) state for the explorer.
 message PBExplorerState {

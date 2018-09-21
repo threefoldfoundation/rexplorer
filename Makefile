@@ -54,5 +54,5 @@ integration-test-sumcoins-python:
 
 generate-types:
 	go generate pkg/types/types.go
-	go generate types.go
+	go generate pkg/database/types/types.go
 	go generate tests/integration/sumcoins/rtypes/generate.go
