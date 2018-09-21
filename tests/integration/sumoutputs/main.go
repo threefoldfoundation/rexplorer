@@ -94,7 +94,23 @@ func main() {
 					}
 
 					var output dtypes.CoinOutput
-					output.LoadBytes([]byte(value))
+					err := output.LoadBytes([]byte(value))
+					if err != nil {
+						panic(fmt.Sprintf("unexpected error while decoding coin output %s: %v", outputID, err))
+					}
+
+					// ensure unlock hash is part of the set of all unique addresses
+					addressIsKnown, err := redis.Bool(conn.Do("SISMEMBER", "addresses", output.UnlockHash.String()))
+					if err != nil {
+						panic(fmt.Sprintf(
+							"unexpected error while checking if address %s is part of all known unique addresses: %v",
+							output.UnlockHash.String(), err))
+					}
+					if !addressIsKnown {
+						panic(fmt.Sprintf(
+							"wallet %s is not part of the set of unique known addresses while it is expected to be",
+							output.UnlockHash.String()))
+					}
 
 					// get wallet for given unlock hash
 					var wallet types.Wallet
