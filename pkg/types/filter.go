@@ -202,7 +202,7 @@ func (set *DescriptionFilterSet) LoadString(str string) error {
 
 	// reset the set
 	set.filters = nil
-	// load all columns as seperate patterns
+	// load all columns as separate patterns
 	for i, pattern := range record {
 		err = set.AppendPattern(pattern)
 		if err != nil {

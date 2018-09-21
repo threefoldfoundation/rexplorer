@@ -7,14 +7,14 @@ import (
 
 // DescriptionFilterSetFlagVar defines a DescriptionFilterSet flag with specified name, shorthand and usage string.
 // The argument s points to a DescriptionFilterSet variable in which to store the compiled values of the multiple flags.
-// The value of each argument will not try to be separated by comma, each value has to be defined as a seperate flag (using the same name).
+// The value of each argument will not try to be separated by comma, each value has to be defined as a separate flag (using the same name).
 func DescriptionFilterSetFlagVar(f *pflag.FlagSet, s *types.DescriptionFilterSet, name string, usage string) {
 	f.Var(&descriptionFilterSetFlag{set: s}, name, usage)
 }
 
 // DescriptionFilterSetFlagVarP defines a DescriptionFilterSet flag with specified name, and usage string.
 // The argument s points to a DescriptionFilterSet variable in which to store the compiled values of the multiple flags.
-// The value of each argument will not try to be separated by comma, each value has to be defined as a seperate flag (using the same name or shorthand).
+// The value of each argument will not try to be separated by comma, each value has to be defined as a separate flag (using the same name or shorthand).
 func DescriptionFilterSetFlagVarP(f *pflag.FlagSet, s *types.DescriptionFilterSet, name, shorthand string, usage string) {
 	f.VarP(&descriptionFilterSetFlag{set: s}, name, shorthand, usage)
 }
