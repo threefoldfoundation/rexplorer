@@ -18,7 +18,7 @@ endif
 stdbindir = $(GOPATH)/bin
 ldflagsversion = -X main.rawVersion=$(fullversion)
 
-testpkgs = . ./pkg/types ./pkg/encoding
+testpkgs = . ./pkg/database/types ./pkg/encoding ./pkg/rflag ./pkg/types
 
 install-std: test
 	go build -ldflags "$(ldflagsversion) -s -w" -o $(stdbindir)/rexplorer .
