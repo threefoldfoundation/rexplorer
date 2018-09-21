@@ -129,6 +129,58 @@ func main() {
 						}
 					}
 
+					// if the coin lock type is not nil, we want to make sure it also exists and matches our coin output
+					switch output.LockType {
+					case dtypes.LockTypeNone:
+						// ignore
+					case dtypes.LockTypeTime:
+						bucketKey := getLockTimeBucketKey(output.LockValue)
+						strings, err := redis.Strings(conn.Do("LRANGE", bucketKey, 0, 10000))
+						var outputFound bool
+						if err != redis.ErrNil {
+							if err != nil {
+								panic(fmt.Sprintf("error to fetch all keys in bucket %s: %v", bucketKey, err))
+							}
+							for _, str := range strings {
+								var col dtypes.CoinOutputLock
+								err := col.LoadString(str)
+								if err != nil {
+									panic(fmt.Sprintf("error to load locked coin output value from str %q: %v", str, err))
+								}
+								if col.CoinOutputID.String() == outputID {
+									outputFound = true
+									if col.LockValue != output.LockValue {
+										panic(fmt.Sprintf("lock entry found for coin output %s, but lockvalue found(%d) != expected(%s) ",
+											outputID, col.LockValue, output.LockValue))
+									}
+									break
+								}
+							}
+						}
+						if !outputFound {
+							panic(fmt.Sprintf("no time-lock entry found for coin output %s", outputID))
+						}
+
+					case dtypes.LockTypeHeight:
+						bucketKey := getLockHeightBucketKey(output.LockValue)
+						strings, err := redis.Strings(conn.Do("LRANGE", bucketKey, 0, 10000))
+						var outputFound bool
+						if err != redis.ErrNil {
+							if err != nil {
+								panic(fmt.Sprintf("error to fetch all keys in bucket %s: %v", bucketKey, err))
+							}
+							for _, str := range strings {
+								if str == outputID {
+									outputFound = true
+									break
+								}
+							}
+						}
+						if !outputFound {
+							panic(fmt.Sprintf("no height-lock entry found for coin output %s", outputID))
+						}
+					}
+
 					switch output.State {
 					case dtypes.CoinOutputStateLiquid:
 						// ensure output isn't listed in wallet as a locked output, it is spend and should exist
@@ -251,6 +303,18 @@ func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
 	addr := uh.String()
 	key, field = "a:"+addr[:6], addr[6:]
 	return
+}
+
+// getLockTimeBucketKey is an internal util function,
+// used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
+func getLockTimeBucketKey(lockValue types.LockValue) string {
+	return "lcos.time:" + (lockValue - lockValue%7200).String()
+}
+
+// getLockHeightBucketKey is an internal util function,
+// used to create the heightlocked bucket keys, grouping all heightlocked outputs with the same lock-height value.
+func getLockHeightBucketKey(lockValue types.LockValue) string {
+	return "lcos.height:" + lockValue.String()
 }
 
 var (

@@ -770,19 +770,59 @@ $ make integration-tests
 go run tests/integration/sumcoins/main.go \
                 --redis-addr ":6379" --redis-db "1" \
                 --encoding "msgp"
-sumcoins test —using encoding msgp— on block height 108762 passed :)
+sumcoins test —using encoding msgp— on block height 113868 passed for 541 wallets :)
 go run tests/integration/sumcoins/main.go \
                 --redis-addr ":6379" --redis-db "0" \
                 --encoding "msgp"
-sumcoins test —using encoding msgp— on block height 96024 passed :)
+sumcoins test —using encoding msgp— on block height 103625 passed for 729 wallets :)
 python3 tests/integration/sumcoins/main.py \
                 --redis-port "6379" --redis-db "1" \
                 --encoding "msgp"
-sumcoins test --using encoding msgp-- on block height 108762 passed for 525 wallets :)
+sumcoins test --using encoding msgp-- on block height 113868 passed for 541 wallets :)
 python3 tests/integration/sumcoins/main.py \
                 --redis-port "6379" --redis-db "0" \
                 --encoding "msgp"
-sumcoins test --using encoding msgp-- on block height 96024 passed for 699 wallets :)
+sumcoins test --using encoding msgp-- on block height 103625 passed for 729 wallets :)
+go run tests/integration/sumoutputs/main.go \
+                --redis-addr ":6379" --redis-db "1" \
+                --encoding "msgp"
+coin output scanner is now at coin output #5000 with id ffec585ef3118b3b5707b8dd1cabe2cd2e183340863eb1720edacd739973e418...
+...
+coin output scanner is now at coin output #110000 with id dada46d17ace12b869c160f4a2396170e90cf827665246d93c4737a370c9c5ab...
+found 114896 coin outputs spread over 54103 buckets
+sumoutputs test —using encoding msgp— on block height 113868 passed for 114896 outputs :)
+go run tests/integration/sumoutputs/main.go \
+                --redis-addr ":6379" --redis-db "0" \
+                --encoding "msgp"
+coin output scanner is now at coin output #5000 with id 514b6678bd22451cee9abbdd21aa5672be30e22d00dae25a9945343d0307a5ce...
+...
+coin output scanner is now at coin output #105000 with id 3bafa8e01ce132d3d777c965b1e0042fab444e5b2a555ed90da06fea8b4fb415...
+found 105410 coin outputs spread over 52562 buckets
+sumoutputs test —using encoding msgp— on block height 103625 passed for 105410 outputs :)
+go run tests/integration/validatevalues/main.go \
+                --redis-addr ":6379" --redis-db "1" \
+                --encoding "msgp"
+Global stats are valid :)
+Internal keys are valid :)
+height-locked output scanner is now at output #5000 with id 15ede59eac6544af28c3eae72e3900dd729048f220e610110f03a3b623f6cf65...
+...
+height-locked output scanner is now at output #110000 with id aee1836a8773e38bdeb2a39d6ef0d1856558843574552aef001c9eef9b2ddc93...
+Height-Locked Output entries are valid :)
+All 3 coin creators are known and tracked :)
+validatevalues test —using encoding msgp— on block height 113868 passed :)
+go run tests/integration/validatevalues/main.go \
+                --redis-addr ":6379" --redis-db "0" \
+                --encoding "msgp"
+Global stats are valid :)
+Internal keys are valid :)
+time-locked output scanner is now at output #100 with id 85eb2a127cebe70c4fa560bd268fa4d4d8f915a75eff7494b8e367e53c6923dd...
+Time-Locked Output entries are valid :)
+height-locked output scanner is now at output #5000 with id 75318b55d6ece13b30703a4f8f1eb077a23092a9b7888efe2b5fdee14b830d14...
+...
+height-locked output scanner is now at output #100000 with id bdf3c443f75c8d8190a1e5939a5838b0d6ac61321a222aa86ba54fcb59ed317c...
+Height-Locked Output entries are valid :)
+All 3 coin creators are known and tracked :)
+validatevalues test —using encoding msgp— on block height 103625 passed :)
 ```
 
 > In order to be able to run the integration tests,

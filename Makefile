@@ -34,7 +34,7 @@ unit-tests:
 ineffassign:
 	ineffassign $(testpkgs)
 
-integration-tests: integration-test-sumcoins integration-test-sumcoins-python integration-test-sumoutputs
+integration-tests: integration-test-sumcoins integration-test-sumcoins-python integration-test-sumoutputs integration-test-validatevalues
 
 integration-test-sumcoins:
 	go run tests/integration/sumcoins/main.go \
@@ -57,6 +57,14 @@ integration-test-sumoutputs:
 		--redis-addr "$(TESTNET_REDIS_ADDR)" --redis-db "$(TESTNET_REDIS_DB)" \
 		--encoding "$(TESTNET_ENCODING_TYPE)"
 	go run tests/integration/sumoutputs/main.go \
+		--redis-addr "$(STANDARD_REDIS_ADDR)" --redis-db "$(STANDARD_REDIS_DB)" \
+		--encoding "$(STANDARD_ENCODING_TYPE)"
+
+integration-test-validatevalues:
+	go run tests/integration/validatevalues/main.go \
+		--redis-addr "$(TESTNET_REDIS_ADDR)" --redis-db "$(TESTNET_REDIS_DB)" \
+		--encoding "$(TESTNET_ENCODING_TYPE)"
+	go run tests/integration/validatevalues/main.go \
 		--redis-addr "$(STANDARD_REDIS_ADDR)" --redis-db "$(STANDARD_REDIS_DB)" \
 		--encoding "$(STANDARD_ENCODING_TYPE)"
 

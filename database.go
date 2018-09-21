@@ -970,6 +970,8 @@ func (rdb *RedisDatabase) SetCoinCreators(creators []types.UnlockHash) error {
 	rdb.conn.Send("DEL", coinCreatorsKey)
 	for _, creator := range creators {
 		rdb.conn.Send("SADD", coinCreatorsKey, creator.String())
+		// also track the coin creator address
+		rdb.conn.Send("SADD", addressesKey, creator.String())
 	}
 	_, err := RedisFlushAndReceive(rdb.conn, 1+len(creators))
 	if err != nil {
