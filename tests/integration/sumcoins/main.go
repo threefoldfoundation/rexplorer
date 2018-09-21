@@ -167,5 +167,5 @@ func init() {
 	flag.StringVar(&dbAddress, "redis-addr", ":6379", "(tcp) address of the redis db")
 	flag.IntVar(&dbSlot, "redis-db", 0, "slot/index of the redis db")
 	flag.Var(&encodingType, "encoding",
-		"which encoding protocol to use, one of {json,msgp} (default: "+encodingType.String()+")")
+		"which encoding protocol to use, one of {json,msgp,protobuf} (default: "+encodingType.String()+")")
 }
