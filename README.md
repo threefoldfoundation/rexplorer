@@ -724,21 +724,25 @@ You can run all unit tests in one command as follows:
 
 ```
 $ make unit-tests
-go test -race -tags "debug testing" . ./pkg/types ./pkg/encoding
-ok      github.com/threefoldfoundation/rexplorer        1.066s
-ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.046s
+go test -race -tags "debug testing" . ./pkg/database/types ./pkg/encoding ./pkg/rflag ./pkg/types
+?       github.com/threefoldfoundation/rexplorer        [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/database/types     (cached)
 ?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/rflag      (cached)
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      (cached)
 ```
 
 Even better is if you run the `test` Make target instead, as that will also detects ineffectual assignments:
 
 ```
 $ make test
-ineffassign . ./pkg/types ./pkg/encoding
-go test -race -tags "debug testing" . ./pkg/types ./pkg/encoding
-ok      github.com/threefoldfoundation/rexplorer        1.066s
-ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.046s
+ineffassign . ./pkg/database/types ./pkg/encoding ./pkg/rflag ./pkg/types
+go test -race -tags "debug testing" . ./pkg/database/types ./pkg/encoding ./pkg/rflag ./pkg/types
+?       github.com/threefoldfoundation/rexplorer        [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/database/types     (cached)
 ?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/rflag      (cached)
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      (cached)
 ```
 
 > the Make `test` target (and thus also its depending Make `ineffassign` target)
@@ -749,9 +753,11 @@ Should you want to run the unit tests without having to use Make, you can do so 
 
 ```
 $ go test -race -tags "debug testing" . $(go list ./pkg/...)
-ok      github.com/threefoldfoundation/rexplorer        1.033s
+?       github.com/threefoldfoundation/rexplorer        [no test files]
+ok      github.com/threefoldfoundation/rexplorer/pkg/database/types     (cached)
 ?       github.com/threefoldfoundation/rexplorer/pkg/encoding   [no test files]
-ok      github.com/threefoldfoundation/rexplorer/pkg/types      1.025s
+ok      github.com/threefoldfoundation/rexplorer/pkg/rflag      (cached)
+ok      github.com/threefoldfoundation/rexplorer/pkg/types      (cached)
 ```
 
 ### Integration Tests
