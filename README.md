@@ -580,6 +580,38 @@ and the total balance is something which you have to compute yourself.
 > If so, you'll first have to decode prior to being able to consume it as human reader.
 > The Golang example does this automatically for you.
 
+### Get outputs
+
+In order to fetch the logic for a given wallet, we have to apply the same logic as already
+covered in the [Get coins](#get-coins) example. This is because the outputs for a wallet
+are stored together with the balance totals and MultiSig info for a given wallet in a single structured value.
+
+There is a Go example that you can checkout at [/examples/getoutputs/main.go](/examples/getoutputs/main.go),
+and you can run it yourself as follows:
+
+```
+$ go run ./examples/getoutputs/main.go 01547499996a673c394f7c1f229a20c6e75262b64f44d0fb45cf30f497da6c35710457a561f102
+Unlocked Outputs (1159):
+
+37b30b768bad83e47d388d49d24d22e2d05ffea5470bc9e5a4ea64cd54538ea0  1 TFT            reward:block
+...
+ed3d1b313ff30ee8be26f0b65a71eff0dce6ee788f67622ea8383ad778cbe937  1 TFT            reward:block
+
+Locked Outputs (19):
+
+2e5f286c7c28b647ddedf15a9dfb50225ca864cd5b3f9912136ee3323b40d7fb  1 TFT            1537719085  reward:block
+...
+5ed251edcf144b26b003e7201b52cd968a57bcb976142e1f5e734759599e791b  1 TFT            1537689491  reward:block
+```
+
+Again, you can get the data directly from redis using `redis-cli`, but you will still have
+to decode the data and filter the desired data before you can use it.
+The Golang example does this all for you.
+
+> Note that this wallet has unlocked outputs only because these outputs have descriptions
+> which match the filters applied to the used `rexplorer` instance.
+> The filters applied to the instance in this example was `-f 'reward:*` on the standard network.
+
 ### Get all unique addresses used
 
 Get all the unique addresses used within a network.

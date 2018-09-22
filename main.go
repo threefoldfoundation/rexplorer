@@ -102,6 +102,11 @@ func main() {
 		"filter", "f",
 		"list unlocked outputs in wallets if the description of output matches any of the unique glob (*) filters",
 	)
+	cmdRoot.Flags().BoolVarP(
+		&cmd.YesToAll,
+		"yes", "y", false,
+		"answer to any question at startup which would otherwise require manual answering via the STDIN",
+	)
 	cmdRoot.Flags().StringVarP(
 		&cmd.BlockchainInfo.NetworkName,
 		"network", "n",

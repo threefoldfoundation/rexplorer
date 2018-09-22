@@ -589,26 +589,31 @@ func (wb *WalletBalance) IsZero() bool {
 
 // AddUnlockedCoinOutput adds the unique unlocked coin output to the wallet's map of unlocked outputs
 // as well as adds the coin output's value to the total amount of unlocked coins registered for this wallet.
-func (wub *WalletUnlockedBalance) AddUnlockedCoinOutput(id CoinOutputID, co WalletUnlockedOutput) error {
+func (wub *WalletUnlockedBalance) AddUnlockedCoinOutput(id CoinOutputID, co WalletUnlockedOutput, addAmount bool) error {
 	idStr := id.String()
 	if len(wub.Outputs) == 0 {
 		wub.Outputs = make(WalletUnlockedOutputMap)
 	} else if _, exists := wub.Outputs[idStr]; exists {
-		return fmt.Errorf("trying to add existing unlocked coin output %s", id.String())
+		return fmt.Errorf("trying to add existing unlocked coin output %s", idStr)
 	}
 	wub.Outputs[idStr] = co
-	wub.Total = wub.Total.Add(co.Amount)
+	if addAmount {
+		wub.Total = wub.Total.Add(co.Amount)
+	}
 	return nil
 }
 
 // SubUnlockedCoinOutput tries to remove the unlocked coin output from the wallet's map of unlocked outputs,
 // try as it might not exist to never having been added. This method does always
 // subtract the coin output's value from the total amount of unlocked coins registered for this wallet.
-func (wub *WalletUnlockedBalance) SubUnlockedCoinOutput(id CoinOutputID, amount Currency) error {
-	if len(wub.Outputs) != 0 {
-		delete(wub.Outputs, id.String())
+func (wub *WalletUnlockedBalance) SubUnlockedCoinOutput(id CoinOutputID, amount Currency, subAmount bool) error {
+	if len(wub.Outputs) == 0 {
+		return nil // nothing to do
 	}
-	wub.Total = wub.Total.Sub(amount)
+	delete(wub.Outputs, id.String())
+	if subAmount {
+		wub.Total = wub.Total.Sub(amount)
+	}
 	return nil
 }
 

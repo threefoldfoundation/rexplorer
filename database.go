@@ -232,7 +232,7 @@ const (
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
 // see RedisDatabase for more information.
-func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, filters types.DescriptionFilterSet) (*RedisDatabase, error) {
+func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, filters types.DescriptionFilterSet, yesToAll bool) (*RedisDatabase, error) {
 	// dial a TCP connection
 	conn, err := redis.Dial("tcp", address, redis.DialDatabase(db))
 	if err != nil {
@@ -247,27 +247,27 @@ func NewRedisDatabase(address string, db int, encodingType encoding.Type, bcInfo
 	// ensure the encoding type is as expected (or register if this is a fresh db)
 	err = rdb.registerOrValidateEncodingType(encodingType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+		return nil, err
 	}
 	// create our encoder, now that we know our encoding type is OK, as we'll need it from here on out
 	rdb.encoder, err = encoding.NewEncoder(encodingType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+		return nil, err
 	}
 	// ensure the network info is as expected (or register if this is a fresh db)
 	err = rdb.registerOrValidateNetworkInfo(bcInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+		return nil, err
 	}
 	// set the description filter set (an empty set is fine too)
-	err = rdb.registerFilterSet(filters)
+	err = rdb.registerFilterSet(filters, yesToAll)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RedisDatabase client instance: %v", err)
+		return nil, err
 	}
 	// create and load scripts
 	err = rdb.createAndLoadScripts()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RedisDatabase client instance: failed to create/load a lua script: %v", err)
+		return nil, fmt.Errorf("failed to create/load a lua script(s): %v", err)
 	}
 	return &rdb, nil
 }
@@ -406,39 +406,227 @@ return coinOutputID .. output:sub(2)
 
 // registerFilterSet registers the filter set if it doesn't exist yet,
 // otherwise it ensures that the returned filter set matches the expected filter set.
-func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet) error {
-	rdb.conn.Send("HSETNX", internalKey, internalFieldDescriptionFilters, filters.String())
-	rdb.conn.Send("HGET", internalKey, internalFieldDescriptionFilters)
-	replies, err := redis.Values(RedisFlushAndReceive(rdb.conn, 2))
-	if err != nil {
-		return fmt.Errorf("failed to register/validate description filter set: %v", err)
-	}
-	if len(replies) != 2 {
-		return errors.New("failed to register/validate description filter set: unexpected amount of replies received")
-	}
-
+func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet, overwriteFilters bool) error {
 	// load previous stored, as to be able to delete out references and add new references
 	var receivedFilters types.DescriptionFilterSet
-	err = RedisStringLoader(&receivedFilters)(replies[1], err)
+	err := RedisStringLoader(&receivedFilters)(rdb.conn.Do("HGET", internalKey, internalFieldDescriptionFilters))
 	if err != nil {
-		return fmt.Errorf("failed to decode previously stored description filter set: %v", err)
+		return fmt.Errorf("failed to register/validate description filter set: %v", err)
 	}
 
 	// validate returned filter set
 	removedFilters := receivedFilters.Difference(filters)
 	addedFilters := filters.Difference(receivedFilters)
-	if removedFilters.Len() > 0 && addedFilters.Len() > 0 {
-		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
-			"added filters %s and removed filters %s", addedFilters.String(), removedFilters.String())
-	} else if removedFilters.Len() > 0 {
-		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
-			"removed filters %s", removedFilters.String())
-	} else if addedFilters.Len() > 0 {
-		return fmt.Errorf("given description filter set is incompatible with the already stored filter set: "+
-			"added filters %s", addedFilters.String())
+	filtersChanged := false
+	if removedFilters.Len() > 0 || addedFilters.Len() > 0 {
+		filtersChanged = true
+		if !overwriteFilters {
+			var question string
+			if removedFilters.Len() > 0 {
+				question += "{" + removedFilters.String() + "} will be removed."
+			}
+			if addedFilters.Len() > 0 {
+				if question != "" {
+					question += " "
+				}
+				question += "{" + addedFilters.String() + "} will be added."
+			}
+			question += " Are you sure that you want to change the description filters to apply " +
+				"and modify the stored wallet values as a consequence?"
+			overwriteFilters, err = askYesNoQuestion(question)
+			if err != nil {
+				return fmt.Errorf("failed to register/validate description filter set: %v", err)
+			}
+			if !overwriteFilters {
+				return errors.New("failed to register/validate description filter set: user denied to modify existing filters")
+			}
+		}
+		// apply new filter set
+		err = rdb.applyNewFilterSet(addedFilters, removedFilters)
+		if err != nil {
+			return fmt.Errorf("failed to register/validate description filter set: "+
+				"an error occured while applying new filter set: %v", err)
+		}
 	}
 
-	rdb.filters = receivedFilters
+	rdb.filters = filters
+
+	if filtersChanged {
+		// store filters
+		err = RedisError(rdb.conn.Do("HSET", internalKey, internalFieldDescriptionFilters, filters.String()))
+		if err != nil {
+			return fmt.Errorf("failed to register/validate description filter set: %v", err)
+		}
+	}
+
+	// return succesfully
+	return nil
+}
+
+// for all outputs, check if it has a description that matches an added/removed filter,
+// if so, the wallet has to be fetched and updated IFF the output is in the unlocked state.
+func (rdb *RedisDatabase) applyNewFilterSet(addedFilters, removedFilters types.DescriptionFilterSet) error {
+	// needed to know the total coin outputs, as to be able to report progress within a useful context
+	stats, err := rdb.GetNetworkStats()
+	if err != nil {
+		return fmt.Errorf("failed to applyNewFilters: could not fetch network stats: %v", err)
+	}
+
+	// cache wallets, so we do not constantly need to serialize and deserialize
+	wallets := make(map[types.UnlockHash]*types.Wallet)
+
+	// used to keep track of output conter, and report progress
+	var outputCounter int
+
+	// scan through all outputs (scanning through all outputs of all buckets)
+	cursor := "0"
+	for {
+		results, err := redis.Values(rdb.conn.Do("SCAN", cursor, "MATCH", "c:*"))
+		if err != nil {
+			return fmt.Errorf("unexpected error while scanning through unique outputs with cursor %q: %v", cursor, err.Error())
+		}
+		if n := len(results); n != 2 {
+			return fmt.Errorf("expected to receive 2 results from a SCAN call, but received %d result(s)", n)
+		}
+		cursor, err = redis.String(results[0], nil)
+		if err != nil {
+			return fmt.Errorf("failed to interpret cursor received from last SCAN call: %v", err)
+		}
+
+		buckets, err := redis.Strings(results[1], nil)
+		if err == redis.ErrNil || len(buckets) == 0 {
+			// MATCH is applied only at the end, therefore it is possible
+			// that an iteration returns no elements
+			if cursor == "0" {
+				break
+			}
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("unexpected error while scanning through unique outputs with cursor %q: invalid addresses: %v", cursor, err.Error())
+		}
+
+		for _, bucket := range buckets {
+			bucketCursor := "0"
+			for {
+				bucketResults, err := redis.Values(rdb.conn.Do("HSCAN", bucket, bucketCursor))
+				if err != nil {
+					return fmt.Errorf("unexpected error while scanning through outputs bucket with cursor %q: %v", bucketCursor, err.Error())
+				}
+				if n := len(bucketResults); n != 2 {
+					return fmt.Errorf("unexpected to receive 2 results from a HSCAN call, but received %d result(s)", n)
+				}
+
+				outputs, err := redis.StringMap(bucketResults[1], nil)
+				if err != nil {
+					return fmt.Errorf("error while scanning through output buckets with cursor %q: invalid outputs: %v", bucketCursor, err.Error())
+				}
+
+				for key, value := range outputs {
+					outputIDStr := bucket[2:] + key
+					var outputID types.CoinOutputID
+					err := outputID.LoadString(outputIDStr)
+					if err != nil {
+						return fmt.Errorf("unexpected error while decoding coin output ID %s: %v", outputIDStr, err)
+					}
+					var output dtypes.CoinOutput
+					err = output.LoadBytes([]byte(value))
+					if err != nil {
+						return fmt.Errorf("unexpected error while decoding coin output %s: %v", outputIDStr, err)
+					}
+
+					// print progress
+					outputCounter++
+					if outputCounter%5000 == 0 {
+						log.Printf("[filter update] coin output scanner is now at coin output %d/%d...\n",
+							outputCounter, stats.CoinOutputCount)
+					}
+
+					// check state, we only care about the ones which are in state Liquid,
+					// reason being that only those are expected to be in the unlocked list of a wallet,
+					// which is the list populated after using the description filters
+					if output.State != dtypes.CoinOutputStateLiquid {
+						continue
+					}
+					// if the description is empty we also do not care
+					if output.Description == "" {
+						continue
+					}
+
+					var added, removed bool
+					added = addedFilters.Match(output.Description)
+					if !added {
+						removed = removedFilters.Match(output.Description)
+						if !removed {
+							// if not affected by a removed/added filter we can stop as well,
+							// as the output will not be affected either
+							continue
+						}
+					}
+
+					// get wallet for given unlock hash
+					wallet, ok := wallets[output.UnlockHash]
+					if !ok {
+						addressKey, addressField := getAddressKeyAndField(output.UnlockHash)
+						b, err := redis.Bytes(rdb.conn.Do("HGET", addressKey, addressField))
+						if err != nil {
+							// not even redis.ErrNil is expected at this point
+							return fmt.Errorf("failed to get wallet (uh: %s) for output %s: %v", output.UnlockHash, outputIDStr, err)
+						}
+						if len(b) > 0 {
+							wallet = new(types.Wallet)
+							err = rdb.encoder.Unmarshal(b, wallet)
+							if err != nil {
+								return errors.New("failed to unmarshal wallet: " + err.Error())
+							}
+						}
+						wallets[output.UnlockHash] = wallet
+					}
+
+					// add or remove the output
+					if added {
+						// add the unlocked output
+						err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(outputID, types.WalletUnlockedOutput{
+							Amount:      output.CoinValue,
+							Description: output.Description,
+						}, false)
+						if err != nil {
+							return fmt.Errorf("failed to add unlocked coin output %s to wallet %s: %v",
+								outputIDStr, output.UnlockHash.String(), err)
+						}
+					} else {
+						// remove the unlocked output
+						err = wallet.Balance.Unlocked.SubUnlockedCoinOutput(outputID, output.CoinValue, false)
+						if err != nil {
+							return fmt.Errorf("failed to remove unlocked coin output %s from wallet %s: %v",
+								outputIDStr, output.UnlockHash.String(), err)
+						}
+					}
+				}
+
+				bucketCursor, err = redis.String(bucketResults[0], nil)
+				if err != nil {
+					return fmt.Errorf("failed to interpret cursor received from last HSCAN call: %v", err)
+				}
+				if bucketCursor == "0" {
+					break
+				}
+			}
+		}
+
+		if cursor == "0" {
+			break
+		}
+	}
+
+	// store all updated wallets
+	for uh, wallet := range wallets {
+		rdb.planWalletStorageOrDeletion(*wallet, uh)
+	}
+	err = RedisError(RedisFlushAndReceive(rdb.conn, len(wallets)))
+	if err != nil {
+		return fmt.Errorf("failed to update wallets with modifed filterset: %v", err)
+	}
 	return nil
 }
 
@@ -558,7 +746,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 		err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(id, types.WalletUnlockedOutput{
 			Amount:      co.Value,
 			Description: co.Description,
-		})
+		}, true)
 		if err != nil {
 			return fmt.Errorf(
 				"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
@@ -669,7 +857,7 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	}
 
 	// update unlocked coins (and optionally mapped outputs)
-	wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, result.CoinValue)
+	wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, result.CoinValue, true)
 
 	// store or delete the updated wallet
 	err = rdb.storeOrDeleteWallet(wallet, result.UnlockHash)
@@ -705,7 +893,7 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 		err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(id, types.WalletUnlockedOutput{
 			Amount:      result.CoinValue,
 			Description: result.Description,
-		})
+		}, true)
 		if err != nil {
 			return fmt.Errorf(
 				"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
@@ -757,7 +945,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (dtypes.CoinOu
 		switch co.State {
 		case dtypes.CoinOutputStateLiquid:
 			// update unlocked balance of address wallet (and optionally mapped outputs)
-			wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, co.CoinValue)
+			wallet.Balance.Unlocked.SubUnlockedCoinOutput(id, co.CoinValue, true)
 		case dtypes.CoinOutputStateLocked:
 			// update locked output map and balance of address wallet
 			err = wallet.Balance.Locked.SubLockedCoinOutput(id)
@@ -839,7 +1027,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 			err = wallet.Balance.Unlocked.AddUnlockedCoinOutput(lcor.CoinOutputID, types.WalletUnlockedOutput{
 				Amount:      lcor.CoinValue,
 				Description: lcor.Description,
-			})
+			}, true)
 			if err != nil {
 				return 0, types.Currency{}, fmt.Errorf(
 					"redis: failed to add unlocked coinoutput %s to wallet for %s: %v",
@@ -900,7 +1088,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		coins = coins.Add(ulcor.CoinValue)
 		n++
 		// update unlocked balance (and optionally mapped outputs)
-		wallet.Balance.Unlocked.SubUnlockedCoinOutput(ulcor.CoinOutputID, ulcor.CoinValue)
+		wallet.Balance.Unlocked.SubUnlockedCoinOutput(ulcor.CoinOutputID, ulcor.CoinValue, true)
 		// store or delete the updated wallet
 		err = rdb.storeOrDeleteWallet(wallet, ulcor.UnlockHash)
 		if err != nil {

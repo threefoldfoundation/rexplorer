@@ -53,6 +53,10 @@ type Commands struct {
 	// in wallet values, even when unlocked.
 	DescriptionFilterSet types.DescriptionFilterSet
 
+	// YesToAll is a bool property that allows you to answer any
+	// question that would otherwise require answering manually via the STDIN
+	YesToAll bool
+
 	// the parent directory where the individual module
 	// directories will be created
 	RootPersistentDir string
@@ -116,7 +120,10 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	}
 
 	// create database
-	db, err := NewRedisDatabase(cmd.RedisAddr, cmd.RedisDB, cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants, cmd.DescriptionFilterSet)
+	db, err := NewRedisDatabase(
+		cmd.RedisAddr, cmd.RedisDB,
+		cmd.EncodingType, cmd.BlockchainInfo, cmd.ChainConstants,
+		cmd.DescriptionFilterSet, cmd.YesToAll)
 	if err != nil {
 		return fmt.Errorf("failed to create redis db client "+
 			"(if you use an existing Redis DB ensure you are using the same flags as used previously): %v", err)
