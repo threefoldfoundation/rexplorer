@@ -37,6 +37,9 @@ func main() {
 	// compute total unlocked and locked coins for all outputs
 	var unlockedCoins, lockedCoins types.Currency
 
+	// cache wallets
+	wallets := make(map[types.UnlockHash]*types.Wallet)
+
 	// scan through all outputs (scanning through all outputs of all buckets)
 	outputCounter := 0
 	bucketCounter := 0
@@ -113,20 +116,24 @@ func main() {
 					}
 
 					// get wallet for given unlock hash
-					var wallet types.Wallet
-					addressKey, addressField := getAddressKeyAndField(output.UnlockHash)
-					b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
-					if err != nil {
-						if err != redis.ErrNil {
-							panic(fmt.Sprintf("failed to get wallet (uh: %s) for output %s: %v", output.UnlockHash, outputID, err))
-						}
-						b = nil
-					}
-					if len(b) > 0 {
-						err = encoder.Unmarshal(b, &wallet)
+					wallet, ok := wallets[output.UnlockHash]
+					if !ok {
+						wallet = new(types.Wallet)
+						addressKey, addressField := getAddressKeyAndField(output.UnlockHash)
+						b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 						if err != nil {
-							panic("failed to unmarshal wallet: " + err.Error())
+							if err != redis.ErrNil {
+								panic(fmt.Sprintf("failed to get wallet (uh: %s) for output %s: %v", output.UnlockHash, outputID, err))
+							}
+							b = nil
 						}
+						if len(b) > 0 {
+							err = encoder.Unmarshal(b, wallet)
+							if err != nil {
+								panic("failed to unmarshal wallet: " + err.Error())
+							}
+						}
+						wallets[output.UnlockHash] = wallet
 					}
 
 					// if the coin lock type is not nil, we want to make sure it also exists and matches our coin output

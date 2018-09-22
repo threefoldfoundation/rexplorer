@@ -143,8 +143,8 @@ func main() {
 			diff = totalCoins.Sub(stats.Coins)
 		}
 
-		panic(fmt.Sprintf("unexpected total coins: %s != %s (diff: %s)",
-			totalCoins.String(), stats.Coins.String(), diff.String()))
+		panic(fmt.Sprintf("unexpected total coins: %s != %s (diff: %s) (locked coins: %s)",
+			totalCoins.String(), stats.Coins.String(), diff.String(), lockedCoins.String()))
 	}
 
 	fmt.Printf(

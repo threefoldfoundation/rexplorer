@@ -607,10 +607,9 @@ func (wub *WalletUnlockedBalance) AddUnlockedCoinOutput(id CoinOutputID, co Wall
 // try as it might not exist to never having been added. This method does always
 // subtract the coin output's value from the total amount of unlocked coins registered for this wallet.
 func (wub *WalletUnlockedBalance) SubUnlockedCoinOutput(id CoinOutputID, amount Currency, subAmount bool) error {
-	if len(wub.Outputs) == 0 {
-		return nil // nothing to do
+	if len(wub.Outputs) != 0 {
+		delete(wub.Outputs, id.String())
 	}
-	delete(wub.Outputs, id.String())
 	if subAmount {
 		wub.Total = wub.Total.Sub(amount)
 	}

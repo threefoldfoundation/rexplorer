@@ -411,6 +411,14 @@ func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet, 
 	var receivedFilters types.DescriptionFilterSet
 	err := RedisStringLoader(&receivedFilters)(rdb.conn.Do("HGET", internalKey, internalFieldDescriptionFilters))
 	if err != nil {
+		if err == redis.ErrNil {
+			// assume a new database, simply register description filter set
+			err = RedisError(rdb.conn.Do("HSET", internalKey, internalFieldDescriptionFilters, filters.String()))
+			if err != nil {
+				return fmt.Errorf("failed to register/validate description filter set: %v", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to register/validate description filter set: %v", err)
 	}
 
@@ -989,6 +997,9 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (dtypes.CoinOu
 
 // ApplyCoinOutputLocks implements Database.ApplyCoinOutputLocks
 func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time types.Timestamp) (n uint64, coins types.Currency, err error) {
+	if height.BlockHeight == 0 {
+		return
+	}
 	rdb.networkTime, rdb.networkBlockHeight = time, height
 	rdb.unlockByHeightScript.SendHash(rdb.conn, getLockHeightBucketKey(types.LockValue(height.BlockHeight)))
 	rdb.unlockByTimeScript.SendHash(rdb.conn, getLockTimeBucketKey(types.LockValue(time.Timestamp)), types.LockValue(time.Timestamp).String())
@@ -997,11 +1008,11 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 		return 0, types.Currency{}, fmt.Errorf("failed to unlock outputs: %v", err)
 	}
 	lockedByHeightCoinOutputResults, err := RedisCoinOutputResults(values[0], nil)
-	if err != nil && err != redis.ErrNil {
+	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-height output results: %v", err)
 	}
 	lockedByTimeCoinOutputResults, err := RedisCoinOutputResults(values[1], nil)
-	if err != nil && err != redis.ErrNil {
+	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-time output results: %v", err)
 	}
 	lockedCoinOutputResults := append(lockedByHeightCoinOutputResults, lockedByTimeCoinOutputResults...)
@@ -1057,11 +1068,11 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 		return 0, types.Currency{}, fmt.Errorf("failed to lock outputs: %v", err)
 	}
 	unlockedByHeightCoinOutputResults, err := RedisCoinOutputResults(values[0], nil)
-	if err != nil && err != redis.ErrNil {
+	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-height output results: %v", err)
 	}
 	unlockedByTimeCoinOutputResults, err := RedisCoinOutputResults(values[1], nil)
-	if err != nil && err != redis.ErrNil {
+	if err != nil {
 		return 0, types.Currency{}, fmt.Errorf("failed to update+parse locked-by-time output results: %v", err)
 	}
 	unlockedCoinOutputResults := append(unlockedByHeightCoinOutputResults, unlockedByTimeCoinOutputResults...)
@@ -1316,6 +1327,9 @@ func RedisBytesLoader(bl dtypes.BytesLoader) func(interface{}, error) error {
 func RedisCoinOutputResults(reply interface{}, err error) ([]DatabaseCoinOutputResult, error) {
 	slices, err := redis.ByteSlices(reply, err)
 	if err != nil {
+		if err == redis.ErrNil {
+			return nil, nil
+		}
 		return nil, err
 	}
 	results := make([]DatabaseCoinOutputResult, len(slices))

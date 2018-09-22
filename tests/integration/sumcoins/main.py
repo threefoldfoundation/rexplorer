@@ -51,7 +51,7 @@ if args.encoding == EncodingType.msgp:
             balance.unlocked = int.from_bytes(wallet[b'b'][b'u'][b't'], byteorder='big')
             if b'o' in wallet[b'b'][b'u']:
                 for _, output in wallet[b'b'][b'u'][b'o'].items():
-                    balance.unlocked_outputs.append(int(output[b'a']))
+                    balance.unlocked_outputs.append(int.from_bytes(output[b'a'], byteorder='big'))
         if b'l' in wallet[b'b'] and wallet[b'b'][b'l'] != None:
             balance.locked = int.from_bytes(wallet[b'b'][b'l'][b't'], byteorder='big')
             for _, output in wallet[b'b'][b'l'][b'o'].items():
