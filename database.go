@@ -453,7 +453,7 @@ func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet, 
 		err = rdb.applyNewFilterSet(addedFilters, removedFilters)
 		if err != nil {
 			return fmt.Errorf("failed to register/validate description filter set: "+
-				"an error occured while applying new filter set: %v", err)
+				"an error occurred while applying new filter set: %v", err)
 		}
 	}
 
@@ -467,7 +467,7 @@ func (rdb *RedisDatabase) registerFilterSet(filters types.DescriptionFilterSet, 
 		}
 	}
 
-	// return succesfully
+	// return successfully
 	return nil
 }
 
