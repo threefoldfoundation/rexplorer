@@ -33,7 +33,7 @@
   version = "0.0.3"
 
 [[constraint]]
-  branch = "master"
+  branch = "3bot-registration"
   name = "github.com/threefoldfoundation/tfchain"
 
 [[constraint]]

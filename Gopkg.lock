@@ -135,7 +135,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5a23363a333dcab9cc469881fd8f9c5f7ea202f49be7d0cb53df75f46a9a8ef5"
+  digest = "1:ae9ba98017a21387c7d5bf39db573bf6eaa1067297c66bc5920ffad61cebd24b"
   name = "github.com/rivine/rivine"
   packages = [
     "build",
@@ -152,7 +152,7 @@
     "types",
   ]
   pruneopts = "NUT"
-  revision = "45e533fb8e588094e2f0ec84d7cf778e382480cc"
+  revision = "b09c4d270ea92918b208b6e28c28c858bbc203ce"
 
 [[projects]]
   digest = "1:3186aade954ad7beb5a94a678d9d108de9f7ac7127de34255f3feed64cfca525"
@@ -179,38 +179,26 @@
   version = "v1.0.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:51d06b842edde76ae0578665ef3e73e6fc46a246b6aa111d5d797961a164a0e5"
+  branch = "3bot-registration"
+  digest = "1:3c3912123ee9fe77db0623c5b081235a5aff6fc26aa0f679742ce067e98afe47"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
+    "pkg/encoding",
     "pkg/persist",
+    "pkg/persist/internal",
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "2f950a1676ee811fd54fd756619d15afa4b8623f"
+  revision = "c323a5d3bde6ce887bea82639717057c90538e52"
 
 [[projects]]
-  digest = "1:145eef7b0ecf51774488e6580b175f9f12fc1fb5d9b97aae04d38bfa796fb24e"
+  digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
   name = "github.com/tinylib/msgp"
-  packages = [
-    ".",
-    "gen",
-    "msgp",
-    "parse",
-    "printer",
-  ]
+  packages = ["msgp"]
   pruneopts = "NUT"
   revision = "b2b6a672cf1e5b90748f79b8b81fc8c5cf0571a1"
   version = "1.0.2"
-
-[[projects]]
-  digest = "1:b086d902da868451271503ef4deb884b50551a5ed8a06cf490d98e6ee84a11e6"
-  name = "github.com/ttacon/chalk"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "76b3c8b611dea8f83e49e9ce81fc2b189e0ef3d2"
-  version = "v0.1"
 
 [[projects]]
   branch = "master"
@@ -286,18 +274,6 @@
   revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
   version = "v0.3.0"
 
-[[projects]]
-  branch = "master"
-  digest = "1:a05bd2d296bc727082abcb63ff52615b4dcc6219d8b61e99fd83d605dc779a18"
-  name = "golang.org/x/tools"
-  packages = [
-    "go/ast/astutil",
-    "imports",
-    "internal/fastwalk",
-  ]
-  pruneopts = "NUT"
-  revision = "0aa4b8830f481fed77b73cf7cea2bc3129e05148"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -316,9 +292,10 @@
     "github.com/spf13/cobra",
     "github.com/spf13/pflag",
     "github.com/threefoldfoundation/tfchain/pkg/config",
+    "github.com/threefoldfoundation/tfchain/pkg/encoding",
     "github.com/threefoldfoundation/tfchain/pkg/persist",
     "github.com/threefoldfoundation/tfchain/pkg/types",
-    "github.com/tinylib/msgp",
+    "github.com/tinylib/msgp/msgp",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

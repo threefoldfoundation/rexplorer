@@ -80,7 +80,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		}
 		// Register the transaction controllers for all transaction versions
 		// supported on the standard network
-		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB)
+		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetStandardDaemonNetworkConfig())
 		// Forbid the usage of MultiSignatureCondition (and thus the multisig feature),
 		// until the blockchain reached a height of 42000 blocks.
 		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
@@ -95,7 +96,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		}
 		// Register the transaction controllers for all transaction versions
 		// supported on the test network
-		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB)
+		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetTestnetDaemonNetworkConfig())
 		// Use our custom MultiSignatureCondition, just for testing purposes
 		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
 		// get chain constants and bootstrap peers
