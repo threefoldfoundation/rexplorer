@@ -27,19 +27,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b5005db868cc60244a715d5df4e27466e103931a113818eddcfba591802db599"
+  digest = "1:ad959a01e8101fe9dc44c3b572813a35d3664d212b548d49f506ee6d3018f35e"
   name = "github.com/NebulousLabs/go-upnp"
-  packages = [
-    ".",
-    "goupnp",
-    "goupnp/dcps/internetgateway1",
-    "goupnp/httpu",
-    "goupnp/scpd",
-    "goupnp/soap",
-    "goupnp/ssdp",
-  ]
+  packages = ["."]
   pruneopts = "NUT"
-  revision = "29b680b06c82d044ebea91bf3069038eb562df2a"
+  revision = "3a71999ed0d393fba27f9c9b54f25a0943af97af"
 
 [[projects]]
   branch = "master"
@@ -47,7 +39,7 @@
   name = "github.com/NebulousLabs/merkletree"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "1db44fa75fb1036c6d7be59a5793be4b1fb8a5ab"
+  revision = "2a1d1d1dc33ce5cf7271c7560c8c62423dd0b094"
 
 [[projects]]
   branch = "master"
@@ -102,12 +94,12 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:65c75e07f060f0f8c66b2a0377ea2b1c130b5aeed3e77f1e74b94dab0f3d51de"
+  digest = "1:42be69e2e0f087861268b28425f3d97bb8b5abf4e1b73b330a9c6863bddac1c7"
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
-  version = "v1.1"
+  revision = "348b672cd90d8190f8240323e372ecd1e66b59dc"
+  version = "v1.2.0"
 
 [[projects]]
   digest = "1:44c66ad69563dbe3f8e76d7d6cad21a03626e53f1875b5ab163ded419e01ca7a"
@@ -171,16 +163,16 @@
   version = "v0.0.3"
 
 [[projects]]
-  digest = "1:e3707aeaccd2adc89eba6c062fec72116fe1fc1ba71097da85b4d8ae1668a675"
+  digest = "1:9d8420bbf131d1618bde6530af37c3799340d3762cc47210c1d9532a4c3a2779"
   name = "github.com/spf13/pflag"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "9a97c102cda95a86cec2345a6f09f55a939babf5"
-  version = "v1.0.2"
+  revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
+  version = "v1.0.3"
 
 [[projects]]
   branch = "3bot-registration"
-  digest = "1:3c3912123ee9fe77db0623c5b081235a5aff6fc26aa0f679742ce067e98afe47"
+  digest = "1:30c1e8bfa0fe2260f9f47aef448ab85919be260a21310ff2c95eb84230da5faa"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
@@ -190,7 +182,7 @@
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "c323a5d3bde6ce887bea82639717057c90538e52"
+  revision = "c3871a4db1946b6a4b30d19b68122fab1ff33c07"
 
 [[projects]]
   digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
@@ -202,14 +194,37 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:150a80af5603fe5beeaf180b975964f2d2878fca0c9615d8bd3bc0220ba52742"
+  digest = "1:911f96501e797f1c65003edd03ca33f4515e92d89f1dbf3301a5582646eb156f"
   name = "github.com/tyler-smith/go-bip39"
   packages = [
     ".",
     "wordlists",
   ]
   pruneopts = "NUT"
-  revision = "95c66720ed7ac2f4b78ddb31d940d59193894f49"
+  revision = "dbb3b84ba2ef14e894f5e33d6c6e43641e665738"
+
+[[projects]]
+  branch = "master"
+  digest = "1:95cee5860be057f2a6e41b7995deb0d5efc21bdc6e69d5e9bd50bd4c4aaa13fd"
+  name = "gitlab.com/NebulousLabs/fastrand"
+  packages = ["."]
+  pruneopts = "NUT"
+  revision = "95aefc5d053e09b33438f723e08cd6ae3c54e12d"
+
+[[projects]]
+  branch = "master"
+  digest = "1:a49b61a99b8850e948daf6b21969697c90263860eefdb63fcd873598d0311ddc"
+  name = "gitlab.com/NebulousLabs/go-upnp"
+  packages = [
+    "goupnp",
+    "goupnp/dcps/internetgateway1",
+    "goupnp/httpu",
+    "goupnp/scpd",
+    "goupnp/soap",
+    "goupnp/ssdp",
+  ]
+  pruneopts = "NUT"
+  revision = "3a71999ed0d393fba27f9c9b54f25a0943af97af"
 
 [[projects]]
   branch = "master"
@@ -223,11 +238,11 @@
     "twofish",
   ]
   pruneopts = "NUT"
-  revision = "0709b304e793a5edb4a2c0145f281ecdc20838a4"
+  revision = "e84da0312774c21d64ee2317962ef669b27ffb41"
 
 [[projects]]
   branch = "master"
-  digest = "1:8bc7ff3c61fb32fe0bf7dfe7158b434608a562f891bf9b4ff1f1c2fa8cfe48e2"
+  digest = "1:5193d913046443e59093d66a97a40c51f4a5ea4ceba60f3b3ecf89694de5d16f"
   name = "golang.org/x/net"
   packages = [
     "html",
@@ -235,18 +250,18 @@
     "html/charset",
   ]
   pruneopts = "NUT"
-  revision = "161cd47e91fd58ac17490ef4d742dc98bb4cf60e"
+  revision = "9b4f9f5ad5197c79fd623a3638e70d8b26cef344"
 
 [[projects]]
   branch = "master"
-  digest = "1:8b1b7d3aee8dfeca377705729353a1a75d6ba9675f0d845bb73d96c052742290"
+  digest = "1:6c5ae3ec87be169fc64a12ef76b28297b99874da04d7ff1d72fe6f06ad6918e9"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
     "unix",
   ]
   pruneopts = "NUT"
-  revision = "8cf3aee429924738c56c34bb819c4ea8273fc434"
+  revision = "731415f00dce967a133e841b3079eda31c996761"
 
 [[projects]]
   digest = "1:7c61a813b250ba8bb02bebb0382e6c3d00e04da2b577dc58985b86312fb89ffd"
