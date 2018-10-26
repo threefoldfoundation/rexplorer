@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -87,7 +88,9 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetStandardnetGenesis()
-		cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+		if len(cmd.BootstrapPeers) == 0 {
+			cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+		}
 
 	case config.NetworkNameTest:
 		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetTestnetGenesisMintCondition())
@@ -102,11 +105,30 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetTestnetGenesis()
-		cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+		if len(cmd.BootstrapPeers) == 0 {
+			cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+		}
+
+	case config.NetworkNameDev:
+		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetDevnetGenesisMintCondition())
+		if cmdErr != nil {
+			return fmt.Errorf("failed to create tfchain transaction DB for tfchain devnet: %v", cmdErr)
+		}
+		// Register the transaction controllers for all transaction versions
+		// supported on the dev network
+		tfchaintypes.RegisterTransactionTypesForDevNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetDevnetDaemonNetworkConfig())
+		// Use our custom MultiSignatureCondition, just for testing purposes
+		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		// get chain constants and bootstrap peers
+		cmd.ChainConstants = config.GetDevnetGenesis()
+		if len(cmd.BootstrapPeers) == 0 {
+			return errors.New("no bootstrap peers are defined while this is required for devnet (using the --bootstrap-peer flag)")
+		}
 
 	default:
 		return fmt.Errorf(
-			"%q is an invalid network name, has to be one of {standard,testnet}",
+			"%q is an invalid network name, has to be one of {standard,testnet,devnet}",
 			cmd.BlockchainInfo.NetworkName)
 	}
 

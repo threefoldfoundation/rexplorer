@@ -111,7 +111,13 @@ func main() {
 		&cmd.BlockchainInfo.NetworkName,
 		"network", "n",
 		cmd.BlockchainInfo.NetworkName,
-		"the name of the network to which the daemon connects, one of {standard,testnet}",
+		"the name of the network to which the daemon connects, one of {standard,testnet,devnet}",
+	)
+	rflag.NetAddressArrayFlagVar(
+		cmdRoot.Flags(),
+		&cmd.BootstrapPeers,
+		"bootstrap-peer",
+		"overwrite the bootstrap peers to use, instead of using the default bootstrap peer (requird for devnet)",
 	)
 
 	// execute logic
