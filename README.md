@@ -13,7 +13,8 @@ The available encoding formats are [MessagePack][encoding-msgp], [JSON][encoding
 Consequently you should be able to consume the public data using any (programming) language which
 supports the desired format.
 
-> For [Golang][golang] you can use the 
+> For [Golang][golang] you can use the
+> [`github.com/threefoldfoundation/rexplorer/pkg/database`](https://godoc.org/github.com/threefoldfoundation/rexplorer/pkg/database),
 > [`github.com/threefoldfoundation/rexplorer/pkg/encoding`](https://godoc.org/github.com/threefoldfoundation/rexplorer/pkg/encoding) and
 > [`github.com/threefoldfoundation/rexplorer/pkg/types`](https://godoc.org/github.com/threefoldfoundation/rexplorer/pkg/types) in order to easily consume the data.
 
@@ -173,14 +174,19 @@ Following _public_ keys are reserved:
     * format value: [Redis SET][redistypes], where each value is a [Rivine][rivine]-defined hex-encoded UnlockHash
 * `a:01<4_random_hex_chars>`:
     * used by all wallet addresses, contains unlocked balance, locked balance and coin outputs as well as all multisig wallets jointly owned by this wallet
-    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/Protobuf
     * example key: `a:012b61`
     * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
 * `a:03<4_random_hex_chars>`:
     * used by all multisig wallet addresses, contains unlocked balance, locked balance and coin outputs as well as owner addresses and signatures required
-    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/ProtoBuf
     * example key: `a:032b61`
     * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
+* `b:<1+_random_digits>`:
+    * used by all 3Bots, containing a hashmap of maximum 100 3bot records;
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/Protobuf of a 3Bot record
+    * example keys: `b:0`, `b12`, `b:1234`
+    * fields have the format `<1_or_2_random_digits>`, examples: `0`, `1`, `99`
 
 Rivine (Primitive) Value Encodings:
 
@@ -199,6 +205,25 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 * currencies are encoded as described in <https://godoc.org/math/big#Int.Bytes>
   using base 10, in Big-Endian order, and using the smallest coin unit as value (e.g. 10^-9 TFT)
 
+TFChain (Primitive) Value Encodings (applies to 3Bot-related content only):
+
+Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][encoding-pb]:
+* sorted sets of network addresses are encoded in a tfchain-defined encoding format. It is encoded as a variable-sized slice
+  with each element being a binary-encoded network address:
+  * You can read about how variable-sized slices are encoded at: <https://github.com/threefoldfoundation/tfchain/blob/master/doc/binary_encoding.md#standard-encoding>;
+  * You can read about how network addresses are encoded at:
+  <https://github.com/threefoldfoundation/tfchain/blob/master/doc/binary_encoding.md#Network-Address>;
+* sorted sets of bot names are encoded in a tfchain-defined encoding format. It is encoded as a variable-sized slice
+  with each element being a binary-encoded bot name:
+  * You can read about how bot names are encoded at:
+  <https://github.com/threefoldfoundation/tfchain/blob/master/doc/3bot.md#bot-name>;
+* bot identifiers and compact time stamps (expiration time) are encoded as uint32, using the standard encoding protocol
+  ([MessagePack][encoding-msgp] or [Protocol Buffers][encoding-pb]);
+* public keys are encoded using a 1-byte prefix (read more about it
+  <https://github.com/threefoldfoundation/tfchain/blob/master/doc/binary_encoding.md#Public-Key>),
+  with the prefix indicating the signature algorithm, and the rest of the bytes being the actual public key as a raw byte slice.
+
+
 [JSON][encoding-json] formats of value types defined by this module:
 
 * example of global stats (stored under `stats`):
@@ -210,6 +235,8 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 	"txCount": 103830,
 	"coinCreationTxCount": 2,
 	"coinCreatorDefinitionTxCount": 1,
+	"botRegistrationTxCount": 3402,
+	"botUpdateTxCount": 100,
 	"valueTxCount": 348,
 	"coinOutputCount": 104414,
 	"lockedCoinOutputCount": 736,
@@ -227,7 +254,7 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 > and the values are encoded in the exact same way, except that the resulting values
 > follow the [MessagePack spec][msgp-spec].
 
-* example of a wallet (stored under a:01<4_random_hex_chars>):
+* example of a wallet (stored under `a:01<4_random_hex_chars>`):
 
 ```javascript
 {
@@ -274,7 +301,7 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 
 Null fields will not be encoded in JSON encoding.
 
-* example of a multisig wallet (stored under a:03<4_random_hex_chars>):
+* example of a multisig wallet (stored under `a:03<4_random_hex_chars>`):
 
 ```json
 {
@@ -293,6 +320,18 @@ Null fields will not be encoded in JSON encoding.
 }
 ```
 
+* example of a 3Bot record (stored under `b:<1+_random_digits>` `<1_or_2_random_digits>`):
+
+```json
+{
+    "id": 1,
+    "addresses":["example.com","91.198.174.192"],
+    "names": ["thisis.mybot", "voicebot.example", "voicebot.example.myorg"],
+    "publickey": "ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614",
+	"expiration": 1542815220
+}
+```
+
 [MessagePack][encoding-msgp]:
 
 When using `MessagePack` encoding the Layout is pretty much the same,
@@ -307,8 +346,10 @@ Here is how in a JSON Layout the keys are of the different [MessagePack][encodin
 	"txc": 103830, // transaction count
 	"cctxc": 2, // coin creation transaction count
 	"ccdtxc": 1, // coin creator definition transaction count
+	"tbrtxc": 201, // three bot registration transaction count
+	"tbutxc": 10, // three bot update transaction count
 	"vtxc": 348, // value transaction count
-	"coinOutputCount": 104414, // coin output count
+	"coc": 104414, // coin output count
 	"lcoc": 736, // locked coin output count
 	"cic": 1884, // coin input count
 	"mpc": 103481, // miner payout count
@@ -377,6 +418,16 @@ Here is how in a JSON Layout the keys are of the different [MessagePack][encodin
         ],
         "sr": 1 // signatures required
     }
+}
+```
+
+```javascript
+{
+    "i": 1,
+    "a":["example.com","91.198.174.192"],
+    "n": ["thisis.mybot", "voicebot.example", "voicebot.example.myorg"],
+    "k": "ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614",
+    "e": 1542815220
 }
 ```
 
@@ -569,11 +620,46 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli HGET a:01de09 6b60b4ece712409b8dc1ea1f9247b89953774503efdb689284a4ff06412c82223f867f2f
-"{\"balance\":{\"unlocked\":{\"total\":\"10000000000000\"}}}\n"
+{"balance":{"unlocked":{"total":"10000000000000"}}}
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).,
 and the total balance is something which you have to compute yourself.
+
+> Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
+> or [Protocol Buffers][encoding-pb] as the encoding type of your rexplorer.
+> If so, you'll first have to decode prior to being able to consume it as human reader.
+> The Golang example does this automatically for you.
+
+### Get 3Bot
+
+There is a Go example that you can checkout at [/examples/getbot/main.go](/examples/getbot/main.go),
+and you can run it yourself as follows:
+
+```
+$ go run ./examples/getbot/main.go 2
+{
+  "id": 2,
+  "addresses": [
+    "bot.threefold.io"
+  ],
+  "names": [
+    "chatbot.example"
+  ],
+  "publickey": "ed25519:ddc61d4b8e70a9d02a7c99e28f58fdaae93645fa376aa75db23411567ec9b7df",
+  "expiration": 1602780240
+}
+
+```
+
+You can run the same example directly from the shell —using `redis-cli`— as well:
+
+```
+$ redis-cli HGET b:0 2
+{"id":2,"addresses":["bot.threefold.io"],"names":["chatbot.example"],"publickey":"ed25519:ddc61d4b8e70a9d02a7c99e28f58fdaae93645fa376aa75db23411567ec9b7df","expiration":1602780240}
+```
+
+As you can see for yourself, the record of an 3Bot is stored directly as an object (if you use the `--encoding json` flag).
 
 > Note that your redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]
 > or [Protocol Buffers][encoding-pb] as the encoding type of your rexplorer.
@@ -677,34 +763,33 @@ and you can run it yourself as follows:
 ```
 $ go run ./examples/getstats/main.go --redis-db 1
 tfchain network has:
-  * a total of 101054600.3 TFT, of which 101046555.1 TFT is liquid,
-    8045.2 TFT is locked, 1034600 TFT is paid out as miner payouts
-    and 36.100000071 TFT is paid out as tx fees
-  * 99.99204% liquid coins of a total of 101054600.3 TFT coins
-  * 00.00796% locked coins of a total of 101054600.3 TFT coins
-  * a total of 103809 transactions, of which 348 value transactions,
-    2 coin creation transactions, 1 coin creator definition transactions
-    and 103458 are pure block creation transactions
-  * a block height of 103460, with the time of the highest block
-    being 2018-08-30 22:12:44 +0200 CEST (1535659964)
-  * a total of 103461 blocks, 348 value transactions and 1884 coin inputs
-  * a total of 104393 coin outputs, of which 103657 are liquid, 736 are locked,
-    627 transfer value, 103460 are miner payouts and 306 are tx fees
-  * a total of 517 unique addresses that have been used
-  * an average of 01.80172% value coin outputs per value transaction
-  * an average of 00.00336% value transactions per block
-  * 99.29497% liquid outputs of a total of 104393 coin outputs
-  * 00.70503% locked outputs of a total of 104393 coin outputs
-  * 00.33523% value transactions of a total of 103809 transactions
-  * 00.00193% coin creation transactions of a total of 103809 transactions
-  * 00.00096% coin creator definition transactions of a total of 103809 transactions
+  * a total of 100001800 TFT, of which 100001700 TFT is liquid,
+    100 TFT is locked, 1800 TFT is paid out as miner payouts
+    and 16 TFT is paid out as tx fees
+  * 99.99990% liquid coins of a total of 100001800 TFT coins
+  * 00.00010% locked coins of a total of 100001800 TFT coins
+  * a total of 197 transactions, of which 0 wallet-value transactions,
+    0 coin creation transactions, 0 coin creator definition transactions,
+    2 3Bot registration transactions, 14 3Bot update transactions
+    and 181 are pure block creation transactions
+  * a block height of 180, with the time of the highest block
+    being 2018-10-26 19:45:42 +0200 CEST (1540575942)
+  * a total of 181 blocks, 16 value transactions and 16 coin inputs
+  * a total of 229 coin outputs, of which 219 are liquid, 10 are locked,
+    33 transfer value, 180 are miner payouts and 16 are tx fees
+  * a total of 17 unique addresses that have been used
+  * an average of 02.06250% value coin outputs per value transaction
+  * an average of 00.08840% value transactions per block
+  * 95.63319% liquid outputs of a total of 229 coin outputs
+  * 04.36681% locked outputs of a total of 229 coin outputs
+  * 08.12183% value transactions of a total of 197 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
 
 ```
 $ redis-cli get stats
-"{\"timestamp\":1535662095,\"blockHeight\":103492,\"txCount\":103841,\"coinCreationTxCount\":2,\"coinCreatorDefinitionTxCount\":1,\"valueTxCount\":348,\"coinOutputCount\":104425,\"lockedCoinOutputCount\":735,\"coinInputCount\":1884,\"minerPayoutCount\":103492,\"txFeeCount\":306,\"minerPayouts\":\"1034920000000000\",\"txFees\":\"36100000071\",\"coins\":\"101054920300000000\",\"lockedCoins\":\"8045100000000\"}\n"
+{"timestamp":1540577367,"blockHeight":299,"txCount":316,"coinCreationTxCount":0,"coinCreatorDefinitionTxCount":0,"threeBotRegistrationTransactionCount":2,"threeBotUpdateTransactionCount":14,"valueTxCount":16,"coinOutputCount":348,"lockedCoinOutputCount":10,"coinInputCount":16,"minerPayoutCount":299,"txFeeCount":16,"minerPayouts":"2990000000000","txFees":"16000000000","coins":"100002990000000000","lockedCoins":"100000000000"}
 ```
 
 As you can see for yourself, the balance of an address is stored as a JSON object (if you use the `--encoding json` flag).
@@ -730,14 +815,14 @@ You can run the same example directly from the shell —using `redis-cli`— as 
 
 ```
 $ redis-cli HGET a:01b650 391f06c6292ecf892419dd059c6407bf8bb7220ac2e2a2df92e948fae9980a451ac0a6aa
-"{\"balance\":{\"unlocked\":{\"total\":\"0\",\"outputs\":null},\"locked\":{\"total\":\"0\",\"outputs\":null}},\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"],\"multisign\":{\"owners\":null,\"signaturesRequired\":0}}\n"
+{"balance":{"unlocked":{"total":"0","outputs":null},"locked":{"total":"0","outputs":null}},"multisignAddresses":["0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"],"multisign":{"owners":null,"signaturesRequired":0}}
 ```
 
 This example also works in the opposite direction, where the multisig address will return all owner addresses:
 
 ```
 $ redis-cli HGET a:0359aa aa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37
-"{\"multisignAddresses\":[\"0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37\"]}\n"
+{"multisignAddresses":["0359aaaa311a10efd7762953418b828bfe2d4e2111dfe6aaf82d4adf6f2fb385688d7f86510d37"]}
 ```
 
 > Note that your `redis-cli` output will look like binary gibberish in case you are using [MessagePack][encoding-msgp]

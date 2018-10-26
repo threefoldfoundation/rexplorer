@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
+
 	"github.com/rivine/rivine/pkg/client"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
 
@@ -38,7 +40,7 @@ func main() {
 		panic(err)
 	}
 
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 
 	var wallet types.Wallet
 	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
@@ -85,12 +87,6 @@ func main() {
 	if !haveOutputs {
 		fmt.Println("no outputs could be found for the given wallet")
 	}
-}
-
-func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
-	str := uh.String()
-	key, field = "a:"+str[:6], str[6:]
-	return
 }
 
 var (

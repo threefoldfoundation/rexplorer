@@ -100,7 +100,60 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		for _, tx := range block.Transactions {
 			var isCoinCreationTransaction bool
 
-			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
+			switch tx.Version {
+			case tfchaintypes.TransactionVersionBotRegistration:
+				// decrease the 3bot reg tx count
+				explorer.stats.ThreeBotRegistrationTransactionCount--
+
+				// delete the 3Bot record
+				err = explorer.db.DeleteBotRecord(explorer.state.NextThreeBotID)
+				if err != nil {
+					panic(fmt.Sprintf("failed to revert BotRegistrationTransaction: %v", err))
+				}
+				// decrement the sequential counter used for 3Bots in this explorer
+				explorer.state.NextThreeBotID.Decrement()
+
+			case tfchaintypes.TransactionVersionBotRecordUpdate:
+				// decrease the 3bot update tx count
+				explorer.stats.ThreeBotUpdateTransactionCount--
+
+				// expose the 3bot record update data from the tx
+				butx, err := tfchaintypes.BotRecordUpdateTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v145 tx as a BotRecordUpdateTransaction: %v", err))
+				}
+				// update the 3Bot record in a revert way
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(butx.Identifier),
+					wrapTfchainBotUpdateRevertFunction(butx.RevertBotRecordUpdate))
+				if err != nil {
+					panic(fmt.Sprintf("failed to revert BotRecordUpdateTransaction: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionBotNameTransfer:
+				// decrease the 3bot update tx count (also used for name transfers)
+				explorer.stats.ThreeBotUpdateTransactionCount--
+
+				// expose the 3bot record name transfer data from the tx
+				bnttx, err := tfchaintypes.BotNameTransferTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v146 tx as a BotNameTransferTransaction: %v", err))
+				}
+				// update both 3Bot records in a revert way
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(bnttx.Sender.Identifier),
+					wrapTfchainBotUpdateRevertFunction(bnttx.RevertSenderBotRecordUpdate))
+				if err != nil {
+					panic(fmt.Sprintf("failed to revert BotRecordUpdateTransaction for sender: %v", err))
+				}
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(bnttx.Receiver.Identifier),
+					wrapTfchainBotUpdateRevertFunction(bnttx.RevertReceiverBotRecordUpdate))
+				if err != nil {
+					panic(fmt.Sprintf("failed to revert BotRecordUpdateTransaction for receiver: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionCoinCreation:
 				explorer.stats.CoinCreationTransactionCount--
 				isCoinCreationTransaction = true
 				// sub miner fees if it was a coin created tx,
@@ -108,7 +161,8 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				for _, fee := range tx.MinerFees {
 					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(fee))
 				}
-			} else if tx.Version == tfchaintypes.TransactionVersionMinterDefinition {
+
+			case tfchaintypes.TransactionVersionMinterDefinition:
 				// decrease coin creator tx count
 				explorer.stats.CoinCreatorDefinitionTransactionCount--
 
@@ -248,7 +302,82 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 		for _, tx := range block.Transactions {
 			isCoinCreationTransaction := isGenesisBlock
 
-			if tx.Version == tfchaintypes.TransactionVersionCoinCreation {
+			switch tx.Version {
+			case tfchaintypes.TransactionVersionBotRegistration:
+				// increase the 3bot reg tx count
+				explorer.stats.ThreeBotRegistrationTransactionCount++
+
+				// expose the 3bot record registration data from the tx
+				brtx, err := tfchaintypes.BotRegistrationTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v144 tx as a BotRegistrationTransaction: %v", err))
+				}
+				// increment the sequential counter used for 3Bots in this explorer,
+				// this is done prior to storage as to ensure we start from 1,
+				// just as tfchain does
+				explorer.state.NextThreeBotID.Increment()
+				// assemble our new tfchain 3Bot record
+				record := tfchaintypes.BotRecord{
+					ID:        explorer.state.NextThreeBotID.TfchainBotID(),
+					PublicKey: brtx.Identification.PublicKey,
+					Expiration: tfchaintypes.SiaTimestampAsCompactTimestamp(block.Timestamp) +
+						tfchaintypes.CompactTimestamp(brtx.NrOfMonths)*tfchaintypes.BotMonth,
+				}
+				err = record.AddNetworkAddresses(brtx.Addresses...)
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRegistrationTransaction: adding addresses resulted in an error: %v", err))
+				}
+				err = record.AddNames(brtx.Names...)
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRegistrationTransaction: adding names resulted in an error: %v", err))
+				}
+				// create the 3Bot record
+				err = explorer.db.CreateBotRecord(types.BotRecordFromTfchainRecord(record))
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRegistrationTransaction: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionBotRecordUpdate:
+				// increase the 3bot update tx count
+				explorer.stats.ThreeBotUpdateTransactionCount++
+
+				// expose the 3bot record update data from the tx
+				butx, err := tfchaintypes.BotRecordUpdateTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v145 tx as a BotRecordUpdateTransaction: %v", err))
+				}
+				// update the 3Bot record
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(butx.Identifier),
+					wrapTfchainBotUpdateFunction(block.Timestamp, butx.UpdateBotRecord))
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRecordUpdateTransaction: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionBotNameTransfer:
+				// increase the 3bot update tx count (also used for name transfers)
+				explorer.stats.ThreeBotUpdateTransactionCount++
+
+				// expose the 3bot record name transfer data from the tx
+				bnttx, err := tfchaintypes.BotNameTransferTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret v146 tx as a BotNameTransferTransaction: %v", err))
+				}
+				// update both 3Bot records in a revert way
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(bnttx.Sender.Identifier),
+					wrapTfchainBotUpdateFunction(block.Timestamp, bnttx.UpdateSenderBotRecord))
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRecordUpdateTransaction for sender: %v", err))
+				}
+				err = explorer.db.UpdateBotRecord(
+					types.NewBotIDFromTfchainBotID(bnttx.Receiver.Identifier),
+					wrapTfchainBotUpdateFunction(block.Timestamp, bnttx.UpdateReceiverBotRecord))
+				if err != nil {
+					panic(fmt.Sprintf("failed to apply BotRecordUpdateTransaction for receiver: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionCoinCreation:
 				explorer.stats.CoinCreationTransactionCount++
 				isCoinCreationTransaction = true
 				// add miner fees if it was a coin created tx,
@@ -256,7 +385,8 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				for _, fee := range tx.MinerFees {
 					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(fee))
 				}
-			} else if tx.Version == tfchaintypes.TransactionVersionMinterDefinition {
+
+			case tfchaintypes.TransactionVersionMinterDefinition:
 				// decrease coin creator tx count
 				explorer.stats.CoinCreatorDefinitionTransactionCount++
 
@@ -326,6 +456,30 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 	err = explorer.db.SetNetworkStats(explorer.stats)
 	if err != nil {
 		panic("failed to store network stats in db: " + err.Error())
+	}
+}
+
+func wrapTfchainBotUpdateFunction(bts rivinetypes.Timestamp, fn func(rivinetypes.Timestamp, *tfchaintypes.BotRecord) error) func(*types.BotRecord) error {
+	return func(br *types.BotRecord) error {
+		tfbr := br.TfchainRecord()
+		err := fn(bts, &tfbr)
+		if err != nil {
+			return err
+		}
+		*br = types.BotRecordFromTfchainRecord(tfbr)
+		return nil
+	}
+}
+
+func wrapTfchainBotUpdateRevertFunction(fn func(*tfchaintypes.BotRecord) error) func(*types.BotRecord) error {
+	return func(br *types.BotRecord) error {
+		tfbr := br.TfchainRecord()
+		err := fn(&tfbr)
+		if err != nil {
+			return err
+		}
+		*br = types.BotRecordFromTfchainRecord(tfbr)
+		return nil
 	}
 }
 

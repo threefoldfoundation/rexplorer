@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/database"
+
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
@@ -22,13 +24,13 @@ func main() {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		panic("usage: " + os.Args[0] + " <unlockhash>")
+		panic("usage: " + os.Args[0] + " <botID>")
 	}
-	var uh types.UnlockHash
-	err = uh.LoadString(args[0])
+	var id types.BotID
+	err = id.LoadString(args[0])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "usage: "+os.Args[0]+" <unlockhash>")
-		panic(fmt.Sprintf("invalid uh %q: %v", args[0], err))
+		fmt.Fprintln(os.Stderr, "usage: "+os.Args[0]+" <BotID>")
+		panic(fmt.Sprintf("invalid botID %q: %v", args[0], err))
 	}
 
 	conn, err := redis.Dial("tcp", dbAddress, redis.DialDatabase(dbSlot))
@@ -36,25 +38,26 @@ func main() {
 		panic(err)
 	}
 
-	addressKey, addressField := database.GetAddressKeyAndField(uh)
-	var wallet types.Wallet
-	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
+	recordKey, recordField := database.GetThreeBotKeyAndField(id)
+
+	b, err := redis.Bytes(conn.Do("HGET", recordKey, recordField))
 	if err != nil {
 		if err != redis.ErrNil {
-			panic("failed to get wallet " + err.Error())
+			panic("failed to get bot record " + err.Error())
 		}
 		b = nil
 	}
-	if len(b) > 0 {
-		err = encoder.Unmarshal(b, &wallet)
-		if err != nil {
-			panic("failed to unmarshal wallet: " + err.Error())
-		}
+	var record types.BotRecord
+	err = encoder.Unmarshal(b, &record)
+	if err != nil {
+		panic("failed to unmarshal bot record: " + err.Error())
 	}
 
-	// print all unlock hashes
-	for _, uh := range wallet.MultiSignAddresses {
-		fmt.Println("* " + uh.String())
+	e := json.NewEncoder(os.Stdout)
+	e.SetIndent("", "  ")
+	err = e.Encode(record)
+	if err != nil {
+		panic("failed to print bot record: " + err.Error())
 	}
 }
 

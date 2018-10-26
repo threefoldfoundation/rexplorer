@@ -33,7 +33,7 @@ func (flag *netAddressArray) Set(val string) error {
 		flag.changed = true
 	}
 	na := modules.NetAddress(val)
-	err := na.IsValid()
+	err := na.IsStdValid()
 	if err != nil {
 		return fmt.Errorf("invalid network address %v: %v", val, err)
 	}

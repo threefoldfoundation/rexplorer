@@ -7,6 +7,8 @@ import (
 	rivineencoding "github.com/rivine/rivine/encoding"
 	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
+	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
+	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -27,6 +29,8 @@ type (
 		TransactionCount                      uint64      `json:"txCount" msg:"txc"`
 		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"cctxc"`
 		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"ccdtxc"`
+		ThreeBotRegistrationTransactionCount  uint64      `json:"threeBotRegistrationTransactionCount" msg:"tbrtxc"`
+		ThreeBotUpdateTransactionCount        uint64      `json:"threeBotUpdateTransactionCount" msg:"tbutxc"`
 		ValueTransactionCount                 uint64      `json:"valueTxCount" msg:"vtxc"`
 		CoinOutputCount                       uint64      `json:"coinOutputCount" msg:"coc"`
 		LockedCoinOutputCount                 uint64      `json:"lockedCoinOutputCount" msg:"lcoc"`
@@ -136,6 +140,15 @@ type (
 		Owners             []UnlockHash `json:"owners" msg:"o"`
 		SignaturesRequired uint64       `json:"signaturesRequired" msg:"sr"`
 	}
+
+	// BotRecord wraps around the regular (tfchain) bot record, as to be able to define the custom ProtoBuf logic
+	BotRecord struct {
+		ID         BotID                   `json:"id" msg:"i"`
+		Addresses  NetworkAddressSortedSet `json:"addresses,omitempty" msg:"a"`
+		Names      BotNameSortedSet        `json:"names,omitempty" msg:"n"`
+		PublicKey  PublicKey               `json:"publickey" msg:"k"`
+		Expiration CompactTimestamp        `json:"expiration" msg:"e"`
+	}
 )
 
 var (
@@ -144,27 +157,32 @@ var (
 
 	_ encoding.ProtocolBufferMarshaler   = (*Wallet)(nil)
 	_ encoding.ProtocolBufferUnmarshaler = (*Wallet)(nil)
+
+	_ encoding.ProtocolBufferMarshaler   = (*BotRecord)(nil)
+	_ encoding.ProtocolBufferUnmarshaler = (*BotRecord)(nil)
 )
 
 // ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
 // using the generated code based on the PBNetworkStats Message defined in ./types.proto
 func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
 	err := w.Marshal(&PBNetworkStats{
-		Timestamp:             uint64(stats.Timestamp.Timestamp),
-		Blockheight:           uint64(stats.BlockHeight.BlockHeight),
-		TxCount:               stats.TransactionCount,
-		CoinCreationTxCount:   stats.CoinCreationTransactionCount,
-		CoinCreatorDefTxCount: stats.CoinCreatorDefinitionTransactionCount,
-		ValueTxCount:          stats.ValueTransactionCount,
-		CoinOutputCount:       stats.CoinOutputCount,
-		LockedCoinOutputCount: stats.LockedCoinOutputCount,
-		CoinInputCount:        stats.CoinInputCount,
-		MinerPayoutCount:      stats.MinerPayoutCount,
-		TxFeeCount:            stats.TransactionFeeCount,
-		MinerPayouts:          stats.MinerPayouts.Bytes(),
-		TxFees:                stats.TransactionFees.Bytes(),
-		Coins:                 stats.Coins.Bytes(),
-		LockedCoins:           stats.LockedCoins.Bytes(),
+		Timestamp:                            uint64(stats.Timestamp.Timestamp),
+		Blockheight:                          uint64(stats.BlockHeight.BlockHeight),
+		TxCount:                              stats.TransactionCount,
+		CoinCreationTxCount:                  stats.CoinCreationTransactionCount,
+		CoinCreatorDefTxCount:                stats.CoinCreatorDefinitionTransactionCount,
+		ThreeBotRegistrationTransactionCount: stats.ThreeBotRegistrationTransactionCount,
+		ThreeBotUpdateTransactionCount:       stats.ThreeBotUpdateTransactionCount,
+		ValueTxCount:                         stats.ValueTransactionCount,
+		CoinOutputCount:                      stats.CoinOutputCount,
+		LockedCoinOutputCount:                stats.LockedCoinOutputCount,
+		CoinInputCount:                       stats.CoinInputCount,
+		MinerPayoutCount:                     stats.MinerPayoutCount,
+		TxFeeCount:                           stats.TransactionFeeCount,
+		MinerPayouts:                         stats.MinerPayouts.Bytes(),
+		TxFees:                               stats.TransactionFees.Bytes(),
+		Coins:                                stats.Coins.Bytes(),
+		LockedCoins:                          stats.LockedCoins.Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("NetworkStats: %v", err)
@@ -188,6 +206,8 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.TransactionCount = pb.TxCount
 	stats.CoinCreationTransactionCount = pb.CoinCreationTxCount
 	stats.CoinCreatorDefinitionTransactionCount = pb.CoinCreatorDefTxCount
+	stats.ThreeBotRegistrationTransactionCount = pb.ThreeBotRegistrationTransactionCount
+	stats.ThreeBotUpdateTransactionCount = pb.ThreeBotUpdateTransactionCount
 	stats.ValueTransactionCount = pb.ValueTxCount
 	stats.CoinOutputCount = pb.CoinOutputCount
 	stats.LockedCoinOutputCount = pb.LockedCoinOutputCount
@@ -657,4 +677,77 @@ func (wallet *Wallet) AddUniqueMultisignAddress(address UnlockHash) bool {
 	}
 	wallet.MultiSignAddresses = append(wallet.MultiSignAddresses, address)
 	return true
+}
+
+// BotRecordFromTfchainRecord creates a BotRecord using a tf-typed bot record as source.
+func BotRecordFromTfchainRecord(record tftypes.BotRecord) BotRecord {
+	return BotRecord{
+		ID:         NewBotIDFromTfchainBotID(record.ID),
+		Addresses:  NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet(record.Addresses),
+		Names:      NewBotNameSortedSetFromTfchainBotNameSortedSet(record.Names),
+		PublicKey:  NewPublicKeyFromTfchainPublicKey(record.PublicKey),
+		Expiration: NewCompactTimeStampFromTfchainCompactTimestamp(record.Expiration),
+	}
+}
+
+// TfchainRecord creates a tf-typed BotRecord using this bot record as source.
+func (record BotRecord) TfchainRecord() tftypes.BotRecord {
+	return tftypes.BotRecord{
+		ID:         record.ID.TfchainBotID(),
+		Addresses:  record.Addresses.TfchainNetworkAddressSortedSet(),
+		Names:      record.Names.TfchainBotNameSortedSet(),
+		PublicKey:  record.PublicKey.TfchainPublicKey(),
+		Expiration: record.Expiration.TfchainCompactTimestamp(),
+	}
+}
+
+// ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
+// using the generated code based on the PBNetworkStats Message defined in ./types.proto
+func (record *BotRecord) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
+	err := w.Marshal(&PBThreeBotRecord{
+		Id:               uint32(record.ID.TfchainBotID()),
+		NetworkAddresses: tfencoding.Marshal(record.Addresses),
+		Names:            tfencoding.Marshal(record.Names),
+		ExpirationTime:   tfencoding.Marshal(record.Expiration),
+		PublicKey:        tfencoding.Marshal(record.PublicKey),
+	})
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+	return nil
+}
+
+// ProtocolBufferUnmarshal implements encoding.ProtocolBufferUnmarshaler.ProtocolBufferUnmarshal
+// using the generated code based on the PBNetworkStats Message defined in ./types.proto
+func (record *BotRecord) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) error {
+	// unmarshal entire protocol buffer message as a whole
+	var pb PBThreeBotRecord
+	err := r.Unmarshal(&pb)
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+
+	// assign all values that can be assigned directly
+	record.ID = NewBotIDFromTfchainBotID(tftypes.BotID(pb.Id))
+
+	// unmarshal all values that requires decoding
+	err = tfencoding.Unmarshal(pb.NetworkAddresses, &record.Addresses)
+	if err != nil {
+		return fmt.Errorf("BotRecord: Addresses: %v", err)
+	}
+	err = tfencoding.Unmarshal(pb.Names, &record.Names)
+	if err != nil {
+		return fmt.Errorf("BotRecord: Names: %v", err)
+	}
+	err = tfencoding.Unmarshal(pb.ExpirationTime, &record.Expiration)
+	if err != nil {
+		return fmt.Errorf("BotRecord: Expiration: %v", err)
+	}
+	err = tfencoding.Unmarshal(pb.PublicKey, &record.PublicKey)
+	if err != nil {
+		return fmt.Errorf("BotRecord: PublicKey: %v", err)
+	}
+
+	// all was unmarshaled, return nil (= no error)
+	return nil
 }
