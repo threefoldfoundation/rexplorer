@@ -171,8 +171,8 @@
   version = "v1.0.3"
 
 [[projects]]
-  branch = "3bot-registration"
-  digest = "1:30c1e8bfa0fe2260f9f47aef448ab85919be260a21310ff2c95eb84230da5faa"
+  branch = "master"
+  digest = "1:bbd00a05af22c3785820a58a14296ff8abdb0927f48b52875f11b54c1e5ecd8d"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
@@ -182,7 +182,7 @@
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "c3871a4db1946b6a4b30d19b68122fab1ff33c07"
+  revision = "b3213e17176fcf9eeead73892836ba326ec58e1a"
 
 [[projects]]
   digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
