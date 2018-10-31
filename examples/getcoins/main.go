@@ -8,6 +8,7 @@ import (
 	"github.com/rivine/rivine/pkg/client"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
@@ -38,7 +39,7 @@ func main() {
 		panic(err)
 	}
 
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 
 	var wallet types.Wallet
 	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
@@ -62,12 +63,6 @@ func main() {
 	fmt.Println("--------------------")
 	fmt.Println("total: " + cc.ToCoinStringWithUnit(
 		wallet.Balance.Locked.Total.Add(wallet.Balance.Unlocked.Total).Currency))
-}
-
-func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
-	str := uh.String()
-	key, field = "a:"+str[:6], str[6:]
-	return
 }
 
 var (

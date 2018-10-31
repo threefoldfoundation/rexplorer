@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -78,33 +79,56 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 		if cmdErr != nil {
 			return fmt.Errorf("failed to create tfchain transaction DB for tfchain standard: %v", cmdErr)
 		}
+		// get chain constants and bootstrap peers
+		cmd.ChainConstants = config.GetStandardnetGenesis()
 		// Register the transaction controllers for all transaction versions
 		// supported on the standard network
-		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB)
+		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetStandardDaemonNetworkConfig())
 		// Forbid the usage of MultiSignatureCondition (and thus the multisig feature),
 		// until the blockchain reached a height of 42000 blocks.
 		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
-		// get chain constants and bootstrap peers
-		cmd.ChainConstants = config.GetStandardnetGenesis()
-		cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+		if len(cmd.BootstrapPeers) == 0 {
+			cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
+		}
 
 	case config.NetworkNameTest:
 		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetTestnetGenesisMintCondition())
 		if cmdErr != nil {
 			return fmt.Errorf("failed to create tfchain transaction DB for tfchain testnet: %v", cmdErr)
 		}
-		// Register the transaction controllers for all transaction versions
-		// supported on the test network
-		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB)
-		// Use our custom MultiSignatureCondition, just for testing purposes
-		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetTestnetGenesis()
-		cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+		// Register the transaction controllers for all transaction versions
+		// supported on the test network
+		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetTestnetDaemonNetworkConfig())
+		// Use our custom MultiSignatureCondition, just for testing purposes
+		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		if len(cmd.BootstrapPeers) == 0 {
+			cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
+		}
+
+	case config.NetworkNameDev:
+		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetDevnetGenesisMintCondition())
+		if cmdErr != nil {
+			return fmt.Errorf("failed to create tfchain transaction DB for tfchain devnet: %v", cmdErr)
+		}
+		// get chain constants and bootstrap peers
+		cmd.ChainConstants = config.GetDevnetGenesis()
+		// Register the transaction controllers for all transaction versions
+		// supported on the dev network
+		tfchaintypes.RegisterTransactionTypesForDevNetwork(cmd.transactionDB,
+			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetDevnetDaemonNetworkConfig())
+		// Use our custom MultiSignatureCondition, just for testing purposes
+		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		if len(cmd.BootstrapPeers) == 0 {
+			return errors.New("no bootstrap peers are defined while this is required for devnet (using the --bootstrap-peer flag)")
+		}
 
 	default:
 		return fmt.Errorf(
-			"%q is an invalid network name, has to be one of {standard,testnet}",
+			"%q is an invalid network name, has to be one of {standard,testnet,devnet}",
 			cmd.BlockchainInfo.NetworkName)
 	}
 
@@ -175,6 +199,13 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 				log.Println("[ERROR] Closing consensus module resulted in an error: ", err)
 			}
 		}()
+		err = cmd.transactionDB.SubscribeToConsensusSet(cs)
+		if err != nil {
+			cmdErr = fmt.Errorf("failed to subscribe earlier created transactionDB to the consensus created just now: %v", err)
+			log.Println("[ERROR] ", cmdErr)
+			cancel()
+			return
+		}
 
 		log.Println("loading internal explorer module (3/3)...")
 		explorer, err := NewExplorer(

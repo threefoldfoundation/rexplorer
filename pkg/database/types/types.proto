@@ -5,6 +5,7 @@ package types;
 // ExplorerState collects the (internal) state for the explorer.
 message PBExplorerState {
     required bytes current_consensus_change_id = 1;
+    optional uint32 next_threebot_id = 2;
 }
 
 // NetworkInfo defines the info of the chain network data is dumped from,

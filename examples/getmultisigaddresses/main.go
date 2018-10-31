@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
@@ -35,7 +36,7 @@ func main() {
 		panic(err)
 	}
 
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 	var wallet types.Wallet
 	b, err := redis.Bytes(conn.Do("HGET", addressKey, addressField))
 	if err != nil {
@@ -55,12 +56,6 @@ func main() {
 	for _, uh := range wallet.MultiSignAddresses {
 		fmt.Println("* " + uh.String())
 	}
-}
-
-func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
-	str := uh.String()
-	key, field = "a:"+str[:6], str[6:]
-	return
 }
 
 var (

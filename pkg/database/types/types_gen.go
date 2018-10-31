@@ -55,6 +55,11 @@ func (z *ExplorerState) DecodeMsg(dc *msgp.Reader) (err error) {
 			if err != nil {
 				return
 			}
+		case "nbid":
+			err = z.NextThreeBotID.DecodeMsg(dc)
+			if err != nil {
+				return
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -67,13 +72,22 @@ func (z *ExplorerState) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *ExplorerState) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 1
+	// map header, size 2
 	// write "ccid"
-	err = en.Append(0x81, 0xa4, 0x63, 0x63, 0x69, 0x64)
+	err = en.Append(0x82, 0xa4, 0x63, 0x63, 0x69, 0x64)
 	if err != nil {
 		return
 	}
 	err = z.CurrentChangeID.EncodeMsg(en)
+	if err != nil {
+		return
+	}
+	// write "nbid"
+	err = en.Append(0xa4, 0x6e, 0x62, 0x69, 0x64)
+	if err != nil {
+		return
+	}
+	err = z.NextThreeBotID.EncodeMsg(en)
 	if err != nil {
 		return
 	}
@@ -82,7 +96,7 @@ func (z *ExplorerState) EncodeMsg(en *msgp.Writer) (err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *ExplorerState) Msgsize() (s int) {
-	s = 1 + 5 + z.CurrentChangeID.Msgsize()
+	s = 1 + 5 + z.CurrentChangeID.Msgsize() + 5 + z.NextThreeBotID.Msgsize()
 	return
 }
 

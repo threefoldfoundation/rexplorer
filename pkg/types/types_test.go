@@ -187,6 +187,34 @@ func TestMessagePackEncodeMinimalWallets(t *testing.T) {
 		`{"b":{"u":null,"l":{"t":"AQ==","o":{"1e8cb9bfd8d35a523fefe563b5402e8a49ce86b5555bfde6eafbd226457a23ef":{"a":"AQ==","lu":2000,"d":"for:you"}}}},"ma":[],"m":null}`)
 }
 
+func TestUnmarshalJsonBotRecord(t *testing.T) {
+	const input = `{"id":1,"addresses":["example.org","91.198.174.192"],"names":["chatbot.example"],"publickey":"ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614","expiration":1543161720}`
+	var record BotRecord
+	err := json.Unmarshal([]byte(input), &record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id := record.ID.UInt32(); id != 1 {
+		t.Error("unexpected ID", id, "!=", 1)
+	}
+	if et := record.Expiration.CompactTimestamp; et != 1543161720 {
+		t.Error("unexpected Expiration", et, "!=", 1543161720)
+	}
+	if pk := record.PublicKey.String(); pk != "ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614" {
+		t.Error("unexpected PublicKey", pk, "!= ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614")
+	}
+	if addresses, err := record.Addresses.MarshalJSON(); err != nil {
+		t.Error("error while marshaling addresses into a JSON byte slice:", err)
+	} else if string(addresses) != `["example.org","91.198.174.192"]` {
+		t.Error("unexpected NetworkAddresses", string(addresses), `!= ["example.org","91.198.174.192"]`)
+	}
+	if names, err := record.Names.MarshalJSON(); err != nil {
+		t.Error("error while marshaling names into a JSON byte slice:", err)
+	} else if string(names) != `["chatbot.example"]` {
+		t.Error("unexpected BotNames", string(names), `!= ["chatbot.example"]`)
+	}
+}
+
 func unlockHashFromHex(t *testing.T, str string) (uh UnlockHash) {
 	t.Helper()
 	err := uh.LoadString(str)

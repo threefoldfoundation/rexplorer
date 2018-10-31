@@ -27,6 +27,7 @@ jobs:
       script:
         - go build -o /dev/null ./examples/getcoincreators
         - go build -o /dev/null ./examples/getcoins
+        - go build -o /dev/null ./examples/getbot
         - go build -o /dev/null ./examples/getoutputs
         - go build -o /dev/null ./examples/getmultisigaddresses
         - go build -o /dev/null ./examples/getstats
@@ -36,6 +37,7 @@ jobs:
       script:
         - go build -o /dev/null ./examples/getcoincreators
         - go build -o /dev/null ./examples/getcoins
+        - go build -o /dev/null ./examples/getbot
         - go build -o /dev/null ./examples/getoutputs
         - go build -o /dev/null ./examples/getmultisigaddresses
         - go build -o /dev/null ./examples/getstats

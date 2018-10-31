@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
+
+	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
+	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
 
 	"github.com/rivine/rivine/crypto"
 	"github.com/rivine/rivine/encoding"
@@ -401,6 +405,19 @@ func stringerLength(stringer fmt.Stringer) int {
 	}
 }
 
+func binaryMsgpPrefixSize(length int) int {
+	if length <= math.MaxUint8 {
+		return 2
+	}
+	if length <= math.MaxUint16 {
+		return 3
+	}
+	if length <= math.MaxUint32 {
+		return 5
+	}
+	panic("unsupported msgp binary length: " + strconv.Itoa(length))
+}
+
 // LockValue represents a LockValue,
 // representing either a timestamp or a block height
 type LockValue uint64
@@ -458,4 +475,269 @@ func (lv *LockValue) DecodeMsg(r *msgp.Reader) error {
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (lv LockValue) Msgsize() int {
 	return msgp.Uint64Size
+}
+
+// Type overwrites as to be able to define MessagePack (de)serialization methods for tfchain types.
+type (
+	// NetworkAddressSortedSet overwrites the Tfchain NetworkAddressSortedSet type,
+	// encapsulating it internally for practical reasons.
+	NetworkAddressSortedSet struct {
+		tftypes.NetworkAddressSortedSet
+	}
+	// CompactTimestamp overwrites the Tfchain CompactTimestamp type,
+	// encapsulating it internally for practical reasons.
+	CompactTimestamp struct {
+		tftypes.CompactTimestamp
+	}
+	// BotID overwrites the Tfchain BotID type,
+	// encapsulating it internally for practical reasons.
+	BotID struct {
+		tftypes.BotID
+	}
+	// BotNameSortedSet overwrites the Tfchain BotNameSortedSet type,
+	// encapsulating it internally for practical reasons.
+	BotNameSortedSet struct {
+		tftypes.BotNameSortedSet
+	}
+	// PublicKey overwrites the Tfchain PublicKey type,
+	// encapsulating it internally for practical reasons.
+	PublicKey struct {
+		tftypes.PublicKey
+	}
+)
+
+// NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet returns a tfchain-typed NetworkAddressSortedSet into
+// the NetworkAddressSortedSet overwritten type used in this project.
+func NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet(nass tftypes.NetworkAddressSortedSet) NetworkAddressSortedSet {
+	return NetworkAddressSortedSet{NetworkAddressSortedSet: nass}
+}
+
+// TfchainNetworkAddressSortedSet returns the tfchain-typed NetworkAddressSortedSet, embedded by this type.
+func (nass NetworkAddressSortedSet) TfchainNetworkAddressSortedSet() tftypes.NetworkAddressSortedSet {
+	return nass.NetworkAddressSortedSet
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (nass NetworkAddressSortedSet) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteBytes(tfencoding.Marshal(nass.NetworkAddressSortedSet))
+	if err != nil {
+		return fmt.Errorf("failed to write network address sorted set as bytes: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (nass *NetworkAddressSortedSet) DecodeMsg(r *msgp.Reader) error {
+	b, err := r.ReadBytes(nil)
+	if err != nil {
+		return fmt.Errorf("failed to read network address sorted set as bytes: %v", err)
+	}
+	err = tfencoding.Unmarshal(b, &nass.NetworkAddressSortedSet)
+	if err != nil {
+		return fmt.Errorf("failed to byte-decode network address sorted set: %v", err)
+	}
+	return nil
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (nass NetworkAddressSortedSet) Msgsize() int {
+	l := nass.Len() * 63
+	return l + binaryMsgpPrefixSize(l)
+}
+
+// NewCompactTimeStampFromTfchainCompactTimestamp returns a tfchain-typed CompactTimestamp into
+// the CompactTimestamp overwritten type used in this project.
+func NewCompactTimeStampFromTfchainCompactTimestamp(cts tftypes.CompactTimestamp) CompactTimestamp {
+	return CompactTimestamp{CompactTimestamp: cts}
+}
+
+// TfchainCompactTimestamp returns the tfchain-typed CompactTimestamp, embedded by this type.
+func (cts CompactTimestamp) TfchainCompactTimestamp() tftypes.CompactTimestamp {
+	return cts.CompactTimestamp
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (cts CompactTimestamp) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteUint32(cts.UInt32())
+	if err != nil {
+		return fmt.Errorf("failed to write compact time stamp as uint32: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (cts *CompactTimestamp) DecodeMsg(r *msgp.Reader) error {
+	x, err := r.ReadUint32()
+	if err != nil {
+		return fmt.Errorf("failed to read compact time stamp as uint32: %v", err)
+	}
+	cts.SetUInt32(x)
+	return nil
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (cts CompactTimestamp) Msgsize() int {
+	return msgp.Uint32Size
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+func (cts CompactTimestamp) MarshalJSON() ([]byte, error) {
+	return json.Marshal(cts.CompactTimestamp)
+}
+
+// UnmarshalJSON implements json.Marshaler.UnmarshalJSON
+func (cts *CompactTimestamp) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &cts.CompactTimestamp)
+}
+
+// NewBotIDFromTfchainBotID returns a tfchain-typed BotID into
+// the BotID overwritten type used in this project.
+func NewBotIDFromTfchainBotID(id tftypes.BotID) BotID {
+	return BotID{BotID: id}
+}
+
+// TfchainBotID returns the tfchain-typed BotID, embedded by this type.
+func (id BotID) TfchainBotID() tftypes.BotID {
+	return id.BotID
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (id BotID) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteUint32(uint32(id.BotID))
+	if err != nil {
+		return fmt.Errorf("failed to write bot ID as uint32: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (id *BotID) DecodeMsg(r *msgp.Reader) error {
+	u, err := r.ReadUint32()
+	if err != nil {
+		return fmt.Errorf("failed to read Bot ID as uint32: %v", err)
+	}
+	id.BotID = tftypes.BotID(u)
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+func (id BotID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(id.BotID)
+}
+
+// UnmarshalJSON implements json.Marshaler.UnmarshalJSON
+func (id *BotID) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &id.BotID)
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (id BotID) Msgsize() int {
+	return msgp.Uint32Size
+}
+
+// UInt32 returns this BotID as an uint32-typed value.
+func (id BotID) UInt32() uint32 {
+	return uint32(id.BotID)
+}
+
+// SetUInt32 sets the internal value of this BotID
+// equal to the given uint32-typed value.
+func (id *BotID) SetUInt32(x uint32) {
+	id.BotID = tftypes.BotID(x)
+}
+
+// Increment the BotID by one.
+func (id *BotID) Increment() {
+	id.BotID++
+}
+
+// Decrement the BotID by one.
+func (id *BotID) Decrement() {
+	id.BotID--
+}
+
+// NewBotNameSortedSetFromTfchainBotNameSortedSet returns a tfchain-typed BotNameSortedSet into
+// the BotNameSortedSet overwritten type used in this project.
+func NewBotNameSortedSetFromTfchainBotNameSortedSet(bnss tftypes.BotNameSortedSet) BotNameSortedSet {
+	return BotNameSortedSet{BotNameSortedSet: bnss}
+}
+
+// TfchainBotNameSortedSet returns the tfchain-typed BotNameSortedSet, embedded by this type.
+func (bnss BotNameSortedSet) TfchainBotNameSortedSet() tftypes.BotNameSortedSet {
+	return bnss.BotNameSortedSet
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (bnss BotNameSortedSet) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteBytes(tfencoding.Marshal(bnss.BotNameSortedSet))
+	if err != nil {
+		return fmt.Errorf("failed to write bot name sorted setas bytes: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (bnss *BotNameSortedSet) DecodeMsg(r *msgp.Reader) error {
+	b, err := r.ReadBytes(nil)
+	if err != nil {
+		return fmt.Errorf("failed to read bot name sorted set as bytes: %v", err)
+	}
+	err = tfencoding.Unmarshal(b, &bnss.BotNameSortedSet)
+	if err != nil {
+		return fmt.Errorf("failed to byte-decode bot name sorted set: %v", err)
+	}
+	return nil
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (bnss BotNameSortedSet) Msgsize() int {
+	l := bnss.Len() * 63
+	return l + binaryMsgpPrefixSize(l)
+}
+
+// NewPublicKeyFromTfchainPublicKey returns a tfchain-typed PublicKey into
+// the PublicKey overwritten type used in this project.
+func NewPublicKeyFromTfchainPublicKey(pk tftypes.PublicKey) PublicKey {
+	return PublicKey{PublicKey: pk}
+}
+
+// TfchainPublicKey returns the tfchain-typed PublicKey, embedded by this type.
+func (pk PublicKey) TfchainPublicKey() tftypes.PublicKey {
+	return pk.PublicKey
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (pk PublicKey) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteBytes(tfencoding.Marshal(pk.PublicKey))
+	if err != nil {
+		return fmt.Errorf("failed to write public key as bytes: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (pk *PublicKey) DecodeMsg(r *msgp.Reader) error {
+	b, err := r.ReadBytes(nil)
+	if err != nil {
+		return fmt.Errorf("failed to read public key as bytes: %v", err)
+	}
+	err = tfencoding.Unmarshal(b, &pk.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to byte-decode public key: %v", err)
+	}
+	return nil
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (pk PublicKey) Msgsize() int {
+	l := 1 // 1 byte for the algorithm prefix
+	switch pk.Algorithm {
+	case tftypes.SignatureAlgoEd25519:
+		l += crypto.PublicKeySize
+	case tftypes.SignatureAlgoNil:
+		// add nothing
+	default:
+		l += 64 // should 32 bytes ever stop being sufficient, 64 is a likely choice
+	}
+	return l + binaryMsgpPrefixSize(l)
 }

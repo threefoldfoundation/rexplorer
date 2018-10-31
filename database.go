@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
 	dtypes "github.com/threefoldfoundation/rexplorer/pkg/database/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
@@ -37,6 +38,10 @@ type Database interface {
 
 	SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash, signaturesRequired uint64) error
 	SetCoinCreators(creators []types.UnlockHash) error
+
+	CreateBotRecord(record types.BotRecord) error
+	UpdateBotRecord(id types.BotID, fn func(*types.BotRecord) error) error
+	DeleteBotRecord(id types.BotID) error
 
 	Close() error
 }
@@ -90,18 +95,24 @@ type (
 	// JSON formats of value types defined by this module:
 	//
 	//  example of global stats (stored under <chainName>:<networkName>:stats):
-	//    { // see: NetworkStats
-	//    	"timestamp": 1533714154,
-	//    	"blockHeight": 77185,
-	//    	"txCount": 77501,
-	//    	"valueTxCount": 317,
-	//    	"coinOutputCount": 78637,
-	//    	"lockedCoinOutputCount": 743,
-	//    	"coinInputCount": 356,
-	//    	"minerPayoutCount": 77424,
-	//    	"minerPayouts": "77216500000001",
-	//    	"coins": "695176216500000001",
-	//    	"lockedCoins": "4899281850000000"
+	//    {
+	//        "timestamp": 1535661244,
+	//        "blockHeight": 103481,
+	//        "txCount": 103830,
+	//        "coinCreationTxCount": 2,
+	//        "coinCreatorDefinitionTxCount": 1,
+	//        "botRegistrationTxCount": 3402,
+	//        "botUpdateTxCount": 100,
+	//        "valueTxCount": 348,
+	//        "coinOutputCount": 104414,
+	//        "lockedCoinOutputCount": 736,
+	//        "coinInputCount": 1884,
+	//        "minerPayoutCount": 103481,
+	//        "txFeeCount": 306,
+	//        "minerPayouts": "1034810000000000",
+	//        "txFees": "36100000071",
+	//        "coins": "101054810300000000",
+	//        "lockedCoins": "8045200000000"
 	//    }
 	//
 	//  example of a wallet (stored under a:01<4_random_hex_chars>)
@@ -141,6 +152,16 @@ type (
 	//            "signaturesRequired": 1
 	//        }
 	//    }
+	//
+	// example of a 3Bot record (stored under b:<1+_random_digits> <1_or_2_random_digits>)
+	//    {
+	//        "id": 1,
+	//        "addresses":["example.com","91.198.174.192"],
+	//        "names": ["thisis.mybot", "voicebot.example", "voicebot.example.myorg"],
+	//        "publickey": "ed25519:00bde9571b30e1742c41fcca8c730183402d967df5b17b5f4ced22c677806614",
+	//        "expiration": 1542815220
+	//    }
+	//
 	RedisDatabase struct {
 		// The redis connection, no time out
 		conn redis.Conn
@@ -220,14 +241,8 @@ const (
 	internalFieldEncoding           = "encoding"
 	internalFieldDescriptionFilters = "desc.filters"
 
-	statsKey = "stats"
-
-	addressesKey = "addresses"
-
-	coinCreatorsKey = "coincreators"
-
-	lockedByHeightOutputsKey    = "lcos.height"
-	lockedByTimestampOutputsKey = "lcos.time"
+	lockedByHeightOutputsKeyPrefix    = "lcos.height:"
+	lockedByTimestampOutputsKeyPrefix = "lcos.time:"
 )
 
 // NewRedisDatabase creates a new Redis Database client, used by the internal explorer module,
@@ -575,7 +590,7 @@ func (rdb *RedisDatabase) applyNewFilterSet(addedFilters, removedFilters types.D
 					// get wallet for given unlock hash
 					wallet, ok := wallets[output.UnlockHash]
 					if !ok {
-						addressKey, addressField := getAddressKeyAndField(output.UnlockHash)
+						addressKey, addressField := database.GetAddressKeyAndField(output.UnlockHash)
 						b, err := redis.Bytes(rdb.conn.Do("HGET", addressKey, addressField))
 						if err != nil {
 							// not even redis.ErrNil is expected at this point
@@ -713,7 +728,7 @@ func (rdb *RedisDatabase) SetExplorerState(state dtypes.ExplorerState) error {
 // GetNetworkStats implements Database.GetNetworkStats
 func (rdb *RedisDatabase) GetNetworkStats() (types.NetworkStats, error) {
 	var stats types.NetworkStats
-	switch err := rdb.redisStructuredValue(&stats)(rdb.conn.Do("GET", statsKey)); err {
+	switch err := rdb.redisStructuredValue(&stats)(rdb.conn.Do("GET", database.StatsKey)); err {
 	case nil:
 		rdb.networkTime, rdb.networkBlockHeight = stats.Timestamp, stats.BlockHeight
 		return stats, nil
@@ -729,7 +744,7 @@ func (rdb *RedisDatabase) GetNetworkStats() (types.NetworkStats, error) {
 
 // SetNetworkStats implements Database.SetNetworkStats
 func (rdb *RedisDatabase) SetNetworkStats(stats types.NetworkStats) error {
-	err := RedisError(rdb.conn.Do("SET", statsKey, rdb.marshalData(&stats)))
+	err := RedisError(rdb.conn.Do("SET", database.StatsKey, rdb.marshalData(&stats)))
 	if err != nil {
 		return err
 	}
@@ -741,7 +756,7 @@ func (rdb *RedisDatabase) SetNetworkStats(stats types.NetworkStats) error {
 func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) error {
 	uh := types.AsUnlockHash(co.Condition.UnlockHash())
 
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 	// get initial values
 	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
@@ -764,11 +779,11 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 		wallet.Balance.Unlocked.Total = wallet.Balance.Unlocked.Total.Add(co.Value)
 	}
 
-	coinOutputKey, coinOutputField := getCoinOutputKeyAndField(id)
+	coinOutputKey, coinOutputField := database.GetCoinOutputKeyAndField(id)
 
 	// set all values pipelined
 	// store address, an address never gets deleted
-	rdb.conn.Send("SADD", addressesKey, uh.String())
+	rdb.conn.Send("SADD", database.AddressesKey, uh.String())
 	// store output
 	rdb.conn.Send("HSET", coinOutputKey, coinOutputField, dtypes.CoinOutput{
 		UnlockHash:  uh,
@@ -792,7 +807,7 @@ func (rdb *RedisDatabase) AddCoinOutput(id types.CoinOutputID, co CoinOutput) er
 func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutput, lt dtypes.LockType, lockValue types.LockValue) error {
 	uh := types.AsUnlockHash(co.Condition.UnlockHash())
 
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 	// get initial values
 	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
@@ -814,7 +829,7 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 	// set all values pipeline
 
 	// store address, an address never gets deleted
-	rdb.conn.Send("SADD", addressesKey, uh.String())
+	rdb.conn.Send("SADD", database.AddressesKey, uh.String())
 	// store coinoutput in list of locked coins for wallet
 	// keep track of locked output
 	switch lt {
@@ -827,7 +842,7 @@ func (rdb *RedisDatabase) AddLockedCoinOutput(id types.CoinOutputID, co CoinOutp
 		}.String())
 	}
 	// store output
-	coinOutputKey, coinOutputField := getCoinOutputKeyAndField(id)
+	coinOutputKey, coinOutputField := database.GetCoinOutputKeyAndField(id)
 	rdb.conn.Send("HSET", coinOutputKey, coinOutputField, dtypes.CoinOutput{
 		UnlockHash:  uh,
 		CoinValue:   co.Value,
@@ -857,7 +872,7 @@ func (rdb *RedisDatabase) SpendCoinOutput(id types.CoinOutputID) error {
 	}
 
 	// get wallet, so its balance can be updated
-	addressKey, addressField := getAddressKeyAndField(result.UnlockHash)
+	addressKey, addressField := database.GetAddressKeyAndField(result.UnlockHash)
 	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
@@ -889,7 +904,7 @@ func (rdb *RedisDatabase) RevertCoinInput(id types.CoinOutputID) error {
 	}
 
 	// get wallet, so its balance can be updated
-	addressKey, addressField := getAddressKeyAndField(result.UnlockHash)
+	addressKey, addressField := database.GetAddressKeyAndField(result.UnlockHash)
 	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
 		return fmt.Errorf(
@@ -942,7 +957,7 @@ func (rdb *RedisDatabase) RevertCoinOutput(id types.CoinOutputID) (dtypes.CoinOu
 		sendCount++
 
 		// get wallet, so its balance can be updated
-		addressKey, addressField := getAddressKeyAndField(co.UnlockHash)
+		addressKey, addressField := database.GetAddressKeyAndField(co.UnlockHash)
 		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
 			return dtypes.CoinOutputStateNil, fmt.Errorf(
@@ -1017,7 +1032,7 @@ func (rdb *RedisDatabase) ApplyCoinOutputLocks(height types.BlockHeight, time ty
 	}
 	lockedCoinOutputResults := append(lockedByHeightCoinOutputResults, lockedByTimeCoinOutputResults...)
 	for _, lcor := range lockedCoinOutputResults {
-		addressKey, addressField := getAddressKeyAndField(lcor.UnlockHash)
+		addressKey, addressField := database.GetAddressKeyAndField(lcor.UnlockHash)
 		// get initial values
 		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
@@ -1077,7 +1092,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 	}
 	unlockedCoinOutputResults := append(unlockedByHeightCoinOutputResults, unlockedByTimeCoinOutputResults...)
 	for _, ulcor := range unlockedCoinOutputResults {
-		addressKey, addressField := getAddressKeyAndField(ulcor.UnlockHash)
+		addressKey, addressField := database.GetAddressKeyAndField(ulcor.UnlockHash)
 		// get initial values
 		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
@@ -1114,7 +1129,7 @@ func (rdb *RedisDatabase) RevertCoinOutputLocks(height types.BlockHeight, time t
 // SetMultisigAddresses implements Database.SetMultisigAddresses
 func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners []types.UnlockHash, signaturesRequired uint64) error {
 	// store multisig wallet first, as that will indicate if the owners (should) have the address or not
-	addressKey, addressField := getAddressKeyAndField(address)
+	addressKey, addressField := database.GetAddressKeyAndField(address)
 	// get initial values
 	wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 	if err != nil {
@@ -1140,7 +1155,7 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 	// but luckily it only has to be done once per wallet appearance coin output
 	for _, owner := range owners {
 		// store multisig wallet first, as that will indicate if the owners (should) have the address or not
-		addressKey, addressField := getAddressKeyAndField(owner)
+		addressKey, addressField := database.GetAddressKeyAndField(owner)
 		// get initial values
 		wallet, err := rdb.redisWallet(rdb.conn.Do("HGET", addressKey, addressField))
 		if err != nil {
@@ -1166,11 +1181,11 @@ func (rdb *RedisDatabase) SetMultisigAddresses(address types.UnlockHash, owners 
 
 // SetCoinCreators implements Database.SetCoinCreators
 func (rdb *RedisDatabase) SetCoinCreators(creators []types.UnlockHash) error {
-	rdb.conn.Send("DEL", coinCreatorsKey)
+	rdb.conn.Send("DEL", database.CoinCreatorsKey)
 	for _, creator := range creators {
-		rdb.conn.Send("SADD", coinCreatorsKey, creator.String())
+		rdb.conn.Send("SADD", database.CoinCreatorsKey, creator.String())
 		// also track the coin creator address
-		rdb.conn.Send("SADD", addressesKey, creator.String())
+		rdb.conn.Send("SADD", database.AddressesKey, creator.String())
 	}
 	_, err := RedisFlushAndReceive(rdb.conn, 1+len(creators))
 	if err != nil {
@@ -1179,8 +1194,52 @@ func (rdb *RedisDatabase) SetCoinCreators(creators []types.UnlockHash) error {
 	return nil
 }
 
+// CreateBotRecord implements Database.CreateBotRecord
+func (rdb *RedisDatabase) CreateBotRecord(record types.BotRecord) error {
+	key, field := database.GetThreeBotKeyAndField(record.ID)
+	err := RedisError(rdb.conn.Do("HSETNX", key, field, rdb.marshalData(&record)))
+	if err != nil {
+		return fmt.Errorf("failed to create bot record for 3Bot %v: %v", record.ID, err)
+	}
+	return nil
+}
+
+// UpdateBotRecord implements Database.UpdateBotRecord
+func (rdb *RedisDatabase) UpdateBotRecord(id types.BotID, fn func(*types.BotRecord) error) error {
+	key, field := database.GetThreeBotKeyAndField(id)
+	b, err := redis.Bytes(rdb.conn.Do("HGET", key, field))
+	if err != nil {
+		// not even redis.ErrNil is expected at this point
+		return fmt.Errorf("failed to get 3Bot record for 3Bot %v: %v", id, err)
+	}
+	record := new(types.BotRecord)
+	err = rdb.encoder.Unmarshal(b, record)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal 3Bot record for 3Bot %v: %v", id, err)
+	}
+	err = fn(record)
+	if err != nil {
+		return fmt.Errorf("failed to update 3Bot record for 3Bot %v: %v", id, err)
+	}
+	err = RedisError(rdb.conn.Do("HSET", key, field, rdb.marshalData(record)))
+	if err != nil {
+		return fmt.Errorf("failed to update 3bot record for 3Bot %v in redis: %v", record.ID, err)
+	}
+	return nil
+}
+
+// DeleteBotRecord implements Database.DeleteBotRecord
+func (rdb *RedisDatabase) DeleteBotRecord(id types.BotID) error {
+	key, field := database.GetThreeBotKeyAndField(id)
+	err := RedisError(rdb.conn.Do("HDEL", key, field))
+	if err != nil {
+		return fmt.Errorf("failed to delete bot record from 3Bot %v: %v", id, err)
+	}
+	return nil
+}
+
 func (rdb *RedisDatabase) storeOrDeleteWallet(wallet types.Wallet, uh types.UnlockHash) error {
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 	// either delete or store the wallet, depending on whether or not still contains content
 	if wallet.IsNil() {
 		// delete the wallet, as it has no content any longer
@@ -1199,7 +1258,7 @@ func (rdb *RedisDatabase) storeOrDeleteWallet(wallet types.Wallet, uh types.Unlo
 }
 
 func (rdb *RedisDatabase) planWalletStorageOrDeletion(wallet types.Wallet, uh types.UnlockHash) {
-	addressKey, addressField := getAddressKeyAndField(uh)
+	addressKey, addressField := database.GetAddressKeyAndField(uh)
 	// either delete or store the wallet, depending on whether or not still contains content
 	if wallet.IsNil() {
 		// delete the wallet, as it has no content any longer
@@ -1252,28 +1311,16 @@ func (rdb *RedisDatabase) redisWallet(r interface{}, e error) (wallet types.Wall
 	return
 }
 
-func getAddressKeyAndField(uh types.UnlockHash) (key, field string) {
-	str := uh.String()
-	key, field = "a:"+str[:6], str[6:]
-	return
-}
-
-func getCoinOutputKeyAndField(id types.CoinOutputID) (key, field string) {
-	str := id.String()
-	key, field = "c:"+str[:4], str[4:]
-	return
-}
-
 // getLockTimeBucketKey is an internal util function,
 // used to create the timelocked bucket keys, grouping timelocked outputs within a given time range together.
 func getLockTimeBucketKey(lockValue types.LockValue) string {
-	return lockedByTimestampOutputsKey + ":" + (lockValue - lockValue%7200).String()
+	return lockedByTimestampOutputsKeyPrefix + (lockValue - lockValue%7200).String()
 }
 
 // getLockHeightBucketKey is an internal util function,
 // used to create the heightlocked bucket keys, grouping all heightlocked outputs with the same lock-height value.
 func getLockHeightBucketKey(lockValue types.LockValue) string {
-	return lockedByHeightOutputsKey + ":" + lockValue.String()
+	return lockedByHeightOutputsKeyPrefix + lockValue.String()
 }
 
 // Redis Helper Functions

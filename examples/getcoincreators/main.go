@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
+
 	"github.com/gomodule/redigo/redis"
 )
 
@@ -21,7 +23,7 @@ func main() {
 		panic(err)
 	}
 
-	addresses, err := redis.Strings(conn.Do("SMEMBERS", "coincreators"))
+	addresses, err := redis.Strings(conn.Do("SMEMBERS", database.CoinCreatorsKey))
 	if err != nil {
 		if err != redis.ErrNil {
 			panic("failed to get coin creators " + err.Error())

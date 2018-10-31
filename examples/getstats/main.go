@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/threefoldfoundation/rexplorer/pkg/database"
+
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
@@ -27,12 +29,7 @@ func main() {
 		panic(err)
 	}
 
-	const (
-		statsKey     = "stats"
-		addressesKey = "addresses"
-	)
-
-	b, err := redis.Bytes(conn.Do("GET", statsKey))
+	b, err := redis.Bytes(conn.Do("GET", database.StatsKey))
 	if err != nil {
 		panic("failed to get network stats: " + err.Error())
 	}
@@ -42,7 +39,7 @@ func main() {
 		panic("failed to unmarshal network stats: " + err.Error())
 	}
 
-	uniqueAddressCount, err := redis.Uint64(conn.Do("SCARD", addressesKey))
+	uniqueAddressCount, err := redis.Uint64(conn.Do("SCARD", database.AddressesKey))
 	if err != nil {
 		panic("failed to get length of unique addresses: " + err.Error())
 	}
@@ -68,8 +65,11 @@ func main() {
 		lcp, _ := lcpb.Float64()
 		fmt.Printf("  * %08.5f%% locked coins of a total of %s coins\n", lcp, cc.ToCoinStringWithUnit(stats.Coins.Currency))
 	}
-	fmt.Printf("  * a total of %d transactions, of which %d value transactions,\n    %d coin creation transactions, %d coin creator definition transactions\n    and %d are pure block creation transactions\n",
-		stats.TransactionCount, stats.ValueTransactionCount, stats.CoinCreationTransactionCount, stats.CoinCreatorDefinitionTransactionCount,
+	fmt.Printf("  * a total of %d transactions, of which %d wallet-value transactions,\n    %d coin creation transactions, %d coin creator definition transactions,\n    %d 3Bot registration transactions, %d 3Bot update transactions\n    and %d are pure block creation transactions\n",
+		stats.TransactionCount,
+		stats.ValueTransactionCount-stats.ThreeBotRegistrationTransactionCount-stats.ThreeBotUpdateTransactionCount,
+		stats.CoinCreationTransactionCount, stats.CoinCreatorDefinitionTransactionCount,
+		stats.ThreeBotRegistrationTransactionCount, stats.ThreeBotUpdateTransactionCount,
 		stats.TransactionCount-stats.ValueTransactionCount-stats.CoinCreationTransactionCount-stats.CoinCreatorDefinitionTransactionCount)
 	fmt.Printf("  * a block height of %d, with the time of the highest block\n    being %s (%d)\n",
 		stats.BlockHeight.BlockHeight, stats.Timestamp.String(), stats.Timestamp.Timestamp)
@@ -81,10 +81,14 @@ func main() {
 		stats.CoinOutputCount, liquidCoinOutputCount, stats.LockedCoinOutputCount,
 		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount)
 	fmt.Printf("  * a total of %d unique addresses that have been used\n", uniqueAddressCount)
-	fmt.Printf("  * an average of %08.5f%% value coin outputs per value transaction\n",
-		float64(valueCoinOutputs)/float64(stats.ValueTransactionCount))
-	fmt.Printf("  * an average of %08.5f%% value transactions per block\n",
-		float64(stats.ValueTransactionCount)/float64(stats.BlockHeight.BlockHeight+1))
+	if stats.ValueTransactionCount > 0 {
+		if valueCoinOutputs > 0 {
+			fmt.Printf("  * an average of %08.5f%% value coin outputs per value transaction\n",
+				float64(valueCoinOutputs)/float64(stats.ValueTransactionCount))
+		}
+		fmt.Printf("  * an average of %08.5f%% value transactions per block\n",
+			float64(stats.ValueTransactionCount)/float64(stats.BlockHeight.BlockHeight+1))
+	}
 	if liquidCoinOutputCount > 0 {
 		fmt.Printf("  * %08.5f%% liquid outputs of a total of %d coin outputs\n",
 			float64(liquidCoinOutputCount)/float64(stats.CoinOutputCount)*100, stats.CoinOutputCount)

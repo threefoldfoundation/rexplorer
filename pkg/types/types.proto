@@ -19,6 +19,8 @@ message PBNetworkStats {
 	required bytes tx_fees = 13;
 	required bytes coins = 14;
 	required bytes locked_coins = 15;
+    optional uint64 three_bot_registration_transaction_count = 16;
+    optional uint64 three_bot_update_transaction_count = 17;
 }
 
 
@@ -60,4 +62,13 @@ message PBWalletLockedOutput {
 message PBWalletMultiSignData {
     required uint64 signatures_required = 1;
     repeated bytes owners = 2;
+}
+
+// PBThreeBotRecord defines a 3Bot record in a ProtoBuf-friendly format.
+message PBThreeBotRecord {
+    required uint32 id = 1;
+    required bytes network_addresses = 2;
+    required bytes names = 3;
+    required bytes expiration_time = 4;
+    required bytes public_key = 5;
 }

@@ -26,6 +26,7 @@ type (
 	// ExplorerState collects the (internal) state for the explorer.
 	ExplorerState struct {
 		CurrentChangeID types.ConsensusChangeID `json:"currentchangeid" msg:"ccid"`
+		NextThreeBotID  types.BotID             `json:"nextthreebotid" msg:"nbid"`
 	}
 
 	// NetworkInfo defines the info of the chain network data is dumped from,
@@ -57,6 +58,7 @@ func NewExplorerState() ExplorerState {
 func (state ExplorerState) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
 	err := w.Marshal(&PBExplorerState{
 		CurrentConsensusChangeId: rivineencoding.Marshal(state.CurrentChangeID),
+		NextThreebotId:           state.NextThreeBotID.UInt32(),
 	})
 	if err != nil {
 		return fmt.Errorf("ExplorerState: %v", err)
@@ -76,6 +78,7 @@ func (state *ExplorerState) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRea
 	if err != nil {
 		return fmt.Errorf("ExplorerState: CurrentChangeID: %v", err)
 	}
+	state.NextThreeBotID.SetUInt32(pb.NextThreebotId)
 	return nil
 }
 
