@@ -37,8 +37,10 @@ type (
 		CoinInputCount                        uint64      `json:"coinInputCount" msg:"cic"`
 		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"mpc"`
 		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txfc"`
+		FoundationFeeCount                    uint64      `json:"foundationFeeCount" msg:"ffc"`
 		MinerPayouts                          Currency    `json:"minerPayouts" msg:"mpt"`
 		TransactionFees                       Currency    `json:"txFees" msg:"txft"`
+		FoundationFees                        Currency    `json:"foundationFees" msg:"fft"`
 		Coins                                 Currency    `json:"coins" msg:"ct"`
 		LockedCoins                           Currency    `json:"lockedCoins" msg:"lct"`
 	}
@@ -179,8 +181,10 @@ func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter
 		CoinInputCount:                       stats.CoinInputCount,
 		MinerPayoutCount:                     stats.MinerPayoutCount,
 		TxFeeCount:                           stats.TransactionFeeCount,
+		FoundationFeeCount:                   stats.FoundationFeeCount,
 		MinerPayouts:                         stats.MinerPayouts.Bytes(),
 		TxFees:                               stats.TransactionFees.Bytes(),
+		FoundationFees:                       stats.FoundationFees.Bytes(),
 		Coins:                                stats.Coins.Bytes(),
 		LockedCoins:                          stats.LockedCoins.Bytes(),
 	})
@@ -214,6 +218,7 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.CoinInputCount = pb.CoinInputCount
 	stats.MinerPayoutCount = pb.MinerPayoutCount
 	stats.TransactionFeeCount = pb.TxFeeCount
+	stats.FoundationFeeCount = pb.FoundationFeeCount
 
 	// unmarshal all required Currency values
 	err = stats.MinerPayouts.LoadBytes(pb.MinerPayouts)
@@ -223,6 +228,10 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	err = stats.TransactionFees.LoadBytes(pb.TxFees)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: TransactionFees: %v", err)
+	}
+	err = stats.FoundationFees.LoadBytes(pb.FoundationFees)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: FoundationFees: %v", err)
 	}
 	err = stats.LockedCoins.LoadBytes(pb.LockedCoins)
 	if err != nil {

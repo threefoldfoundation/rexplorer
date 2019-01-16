@@ -82,9 +82,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.MinerPayouts = explorer.stats.MinerPayouts.Sub(types.AsCurrency(mp.Value))
 				// block reward is always created money, no matter what txs the block contains
 				explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(mp.Value))
-			} else {
+			} else if i == 1 {
 				explorer.stats.TransactionFeeCount--
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Sub(types.AsCurrency(mp.Value))
+			} else {
+				explorer.stats.FoundationFeeCount--
+				explorer.stats.FoundationFees = explorer.stats.FoundationFees.Sub(types.AsCurrency(mp.Value))
 			}
 			state, err := explorer.db.RevertCoinOutput(types.AsCoinOutputID(block.MinerPayoutID(uint64(i))))
 			if err != nil {
@@ -277,10 +280,14 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				description = "reward:block"
 				// block rewards are always freshly created money
 				explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(mp.Value))
-			} else {
+			} else if i == 1 {
 				explorer.stats.TransactionFeeCount++
 				explorer.stats.TransactionFees = explorer.stats.TransactionFees.Add(types.AsCurrency(mp.Value))
 				description = "reward:tx"
+			} else {
+				explorer.stats.FoundationFeeCount++
+				explorer.stats.FoundationFees = explorer.stats.FoundationFees.Add(types.AsCurrency(mp.Value))
+				description = "reward:foundation"
 			}
 			locked, err := explorer.addCoinOutput(types.AsCoinOutputID(block.MinerPayoutID(uint64(i))), rivinetypes.CoinOutput{
 				Value: mp.Value,
