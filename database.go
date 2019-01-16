@@ -43,6 +43,9 @@ type Database interface {
 	UpdateBotRecord(id types.BotID, fn func(*types.BotRecord) error) error
 	DeleteBotRecord(id types.BotID) error
 
+	AddERC20AddressRegistration(erc20Address types.ERC20Address, tftAddress types.UnlockHash) error
+	DeleteERC20AddressRegistration(erc20Address types.ERC20Address) error
+
 	Close() error
 }
 
@@ -78,10 +81,11 @@ type (
 	//	  lcos.time:<timestamp-(timestamp%7200)>										(custom) all locked coin outputs for a given timestamp range
 	//
 	//	  public keys:
-	//	  stats																			(JSON/MsgPack) used for global network statistics
+	//	  stats																			(JSON/MsgPack/Proto) used for global network statistics
 	//    coincreators																	(SET) set of unique wallet addresses of the coin creator(s)
 	//	  addresses																		(SET) set of unique wallet addresses used (even if reverted) in the network
-	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack) used by all contract and wallet addresses, storing all content of the wallet/contract
+	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack/Proto) used by all contract and wallet addresses, storing all content of the wallet/contract
+	//    e:<6_random_hex_chars>														(JSON/MsgPack/Proto) used by all ERC20 Address, storing the mapping to a TFT address
 	//
 	// Rivine Value Encodings:
 	//	 + addresses are Hex-encoded and the exact format (and how it is created) is described in:
@@ -101,6 +105,7 @@ type (
 	//        "txCount": 103830,
 	//        "coinCreationTxCount": 2,
 	//        "coinCreatorDefinitionTxCount": 1,
+	//		  "coinBurnTxCount": 1,
 	//        "botRegistrationTxCount": 3402,
 	//        "botUpdateTxCount": 100,
 	//        "valueTxCount": 348,
@@ -109,8 +114,10 @@ type (
 	//        "coinInputCount": 1884,
 	//        "minerPayoutCount": 103481,
 	//        "txFeeCount": 306,
+	//        "foundationFeeCount": 10,
 	//        "minerPayouts": "1034810000000000",
 	//        "txFees": "36100000071",
+	//        "foundationFees": "410003200",
 	//        "coins": "101054810300000000",
 	//        "lockedCoins": "8045200000000"
 	//    }
@@ -1234,6 +1241,26 @@ func (rdb *RedisDatabase) DeleteBotRecord(id types.BotID) error {
 	err := RedisError(rdb.conn.Do("HDEL", key, field))
 	if err != nil {
 		return fmt.Errorf("failed to delete bot record from 3Bot %v: %v", id, err)
+	}
+	return nil
+}
+
+// AddERC20AddressRegistration implements Database.AddERC20AddressRegistration
+func (rdb *RedisDatabase) AddERC20AddressRegistration(erc20Address types.ERC20Address, tftAddress types.UnlockHash) error {
+	key, field := database.GetERC20AddressKeyAndField(erc20Address)
+	err := RedisError(rdb.conn.Do("HSETNX", key, field, rdb.marshalData(&tftAddress)))
+	if err != nil {
+		return fmt.Errorf("failed to create ERC20 Address Registration for address %v: %v", erc20Address, err)
+	}
+	return nil
+}
+
+// DeleteERC20AddressRegistration implements Database.DeleteERC20AddressRegistration
+func (rdb *RedisDatabase) DeleteERC20AddressRegistration(erc20Address types.ERC20Address) error {
+	key, field := database.GetERC20AddressKeyAndField(erc20Address)
+	err := RedisError(rdb.conn.Do("HDEL", key, field))
+	if err != nil {
+		return fmt.Errorf("failed to delete ERC20 Address Registration for addr %v: %v", erc20Address, err)
 	}
 	return nil
 }

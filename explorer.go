@@ -156,6 +156,39 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to revert BotRecordUpdateTransaction for receiver: %v", err))
 				}
 
+			case tfchaintypes.TransactionVersionERC20Conversion:
+				explorer.stats.CoinBurnTransactionCount--
+
+				// expose the ERC20 Conversion Tx data from the Tx
+				erc20CTx, err := tfchaintypes.ERC20ConvertTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Conversion Tx: %v", err))
+				}
+				// add value again, as it was burned
+				explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(erc20CTx.Value))
+
+			case tfchaintypes.TransactionVersionERC20CoinCreation:
+				explorer.stats.CoinCreationTransactionCount--
+				isCoinCreationTransaction = true
+				// sub miner fees if it was a coin created tx,
+				// as fees are created from new coins in a coin creation tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(fee))
+				}
+
+			case tfchaintypes.TransactionVersionERC20AddressRegistration:
+				// expose the ERC20 Conversion Tx data from the Tx
+				erc20ARTx, err := tfchaintypes.ERC20AddressRegistrationTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Address Registration Tx: %v", err))
+				}
+				tftAddress := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
+				erc20Address := tfchaintypes.ERC20AddressFromUnlockHash(tftAddress)
+				err = explorer.db.DeleteERC20AddressRegistration(types.AsERC20Address(erc20Address))
+				if err != nil {
+					panic(fmt.Sprintf("failed to unregister ERC20 Address %s: %v", erc20Address.String(), err))
+				}
+
 			case tfchaintypes.TransactionVersionCoinCreation:
 				explorer.stats.CoinCreationTransactionCount--
 				isCoinCreationTransaction = true
@@ -382,6 +415,39 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					wrapTfchainBotUpdateFunction(block.Timestamp, bnttx.UpdateReceiverBotRecord))
 				if err != nil {
 					panic(fmt.Sprintf("failed to apply BotRecordUpdateTransaction for receiver: %v", err))
+				}
+
+			case tfchaintypes.TransactionVersionERC20Conversion:
+				explorer.stats.CoinBurnTransactionCount++
+
+				// expose the ERC20 Conversion Tx data from the Tx
+				erc20CTx, err := tfchaintypes.ERC20ConvertTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Conversion Tx: %v", err))
+				}
+				// remove value, as it is burned
+				explorer.stats.Coins = explorer.stats.Coins.Sub(types.AsCurrency(erc20CTx.Value))
+
+			case tfchaintypes.TransactionVersionERC20CoinCreation:
+				explorer.stats.CoinCreationTransactionCount++
+				isCoinCreationTransaction = true
+				// add miner fees if it was a coin created tx,
+				// as fees are created from new coins in a coin creation tx as well
+				for _, fee := range tx.MinerFees {
+					explorer.stats.Coins = explorer.stats.Coins.Add(types.AsCurrency(fee))
+				}
+
+			case tfchaintypes.TransactionVersionERC20AddressRegistration:
+				// expose the ERC20 Conversion Tx data from the Tx
+				erc20ARTx, err := tfchaintypes.ERC20AddressRegistrationTransactionFromTransaction(tx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Address Registration Tx: %v", err))
+				}
+				tftAddress := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
+				erc20Address := tfchaintypes.ERC20AddressFromUnlockHash(tftAddress)
+				err = explorer.db.AddERC20AddressRegistration(types.AsERC20Address(erc20Address), types.AsUnlockHash(tftAddress))
+				if err != nil {
+					panic(fmt.Sprintf("failed to register ERC20 Address %s: %v", erc20Address.String(), err))
 				}
 
 			case tfchaintypes.TransactionVersionCoinCreation:

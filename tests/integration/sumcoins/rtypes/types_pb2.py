@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='types',
   syntax='proto2',
   serialized_options=None,
-  serialized_pb=_b('\n\x0btypes.proto\x12\x05types\"\x90\x04\n\x0ePBNetworkStats\x12\x11\n\ttimestamp\x18\x01 \x02(\x04\x12\x13\n\x0b\x62lockheight\x18\x02 \x02(\x04\x12\x10\n\x08tx_count\x18\x03 \x02(\x04\x12\x1e\n\x16\x63oin_creation_tx_count\x18\x04 \x02(\x04\x12!\n\x19\x63oin_creator_def_tx_count\x18\x05 \x02(\x04\x12\x16\n\x0evalue_tx_count\x18\x06 \x02(\x04\x12\x19\n\x11\x63oin_output_count\x18\x07 \x02(\x04\x12 \n\x18locked_coin_output_count\x18\x08 \x02(\x04\x12\x18\n\x10\x63oin_input_count\x18\t \x02(\x04\x12\x1a\n\x12miner_payout_count\x18\n \x02(\x04\x12\x14\n\x0ctx_fee_count\x18\x0b \x02(\x04\x12\x15\n\rminer_payouts\x18\x0c \x02(\x0c\x12\x0f\n\x07tx_fees\x18\r \x02(\x0c\x12\r\n\x05\x63oins\x18\x0e \x02(\x0c\x12\x14\n\x0clocked_coins\x18\x0f \x02(\x0c\x12\x30\n(three_bot_registration_transaction_count\x18\x10 \x01(\x04\x12*\n\"three_bot_update_transaction_count\x18\x11 \x01(\x04\x12\x1c\n\x14\x66oundation_fee_count\x18\x12 \x01(\x04\x12\x17\n\x0f\x66oundation_fees\x18\x13 \x01(\x0c\"\xcd\x01\n\x08PBWallet\x12\x38\n\x10\x62\x61lance_unlocked\x18\x01 \x01(\x0b\x32\x1e.types.PBWalletUnlockedBalance\x12\x34\n\x0e\x62\x61lance_locked\x18\x02 \x01(\x0b\x32\x1c.types.PBWalletLockedBalance\x12\x1b\n\x13multisign_addresses\x18\x03 \x03(\x0c\x12\x34\n\x0emultisign_data\x18\x04 \x01(\x0b\x32\x1c.types.PBWalletMultiSignData\"\xb5\x01\n\x17PBWalletUnlockedBalance\x12\r\n\x05total\x18\x01 \x02(\x0c\x12<\n\x07outputs\x18\x02 \x03(\x0b\x32+.types.PBWalletUnlockedBalance.OutputsEntry\x1aM\n\x0cOutputsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12,\n\x05value\x18\x02 \x01(\x0b\x32\x1d.types.PBWalletUnlockedOutput:\x02\x38\x01\"=\n\x16PBWalletUnlockedOutput\x12\x0e\n\x06\x61mount\x18\x01 \x02(\x0c\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\"\xaf\x01\n\x15PBWalletLockedBalance\x12\r\n\x05total\x18\x01 \x02(\x0c\x12:\n\x07outputs\x18\x02 \x03(\x0b\x32).types.PBWalletLockedBalance.OutputsEntry\x1aK\n\x0cOutputsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12*\n\x05value\x18\x02 \x01(\x0b\x32\x1b.types.PBWalletLockedOutput:\x02\x38\x01\"Q\n\x14PBWalletLockedOutput\x12\x0e\n\x06\x61mount\x18\x01 \x02(\x0c\x12\x14\n\x0clocked_until\x18\x02 \x02(\x04\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\"D\n\x15PBWalletMultiSignData\x12\x1b\n\x13signatures_required\x18\x01 \x02(\x04\x12\x0e\n\x06owners\x18\x02 \x03(\x0c\"u\n\x10PBThreeBotRecord\x12\n\n\x02id\x18\x01 \x02(\r\x12\x19\n\x11network_addresses\x18\x02 \x02(\x0c\x12\r\n\x05names\x18\x03 \x02(\x0c\x12\x17\n\x0f\x65xpiration_time\x18\x04 \x02(\x0c\x12\x12\n\npublic_key\x18\x05 \x02(\x0c')
+  serialized_pb=_b('\n\x0btypes.proto\x12\x05types\"\xac\x04\n\x0ePBNetworkStats\x12\x11\n\ttimestamp\x18\x01 \x02(\x04\x12\x13\n\x0b\x62lockheight\x18\x02 \x02(\x04\x12\x10\n\x08tx_count\x18\x03 \x02(\x04\x12\x1e\n\x16\x63oin_creation_tx_count\x18\x04 \x02(\x04\x12!\n\x19\x63oin_creator_def_tx_count\x18\x05 \x02(\x04\x12\x16\n\x0evalue_tx_count\x18\x06 \x02(\x04\x12\x19\n\x11\x63oin_output_count\x18\x07 \x02(\x04\x12 \n\x18locked_coin_output_count\x18\x08 \x02(\x04\x12\x18\n\x10\x63oin_input_count\x18\t \x02(\x04\x12\x1a\n\x12miner_payout_count\x18\n \x02(\x04\x12\x14\n\x0ctx_fee_count\x18\x0b \x02(\x04\x12\x15\n\rminer_payouts\x18\x0c \x02(\x0c\x12\x0f\n\x07tx_fees\x18\r \x02(\x0c\x12\r\n\x05\x63oins\x18\x0e \x02(\x0c\x12\x14\n\x0clocked_coins\x18\x0f \x02(\x0c\x12\x30\n(three_bot_registration_transaction_count\x18\x10 \x01(\x04\x12*\n\"three_bot_update_transaction_count\x18\x11 \x01(\x04\x12\x1c\n\x14\x66oundation_fee_count\x18\x12 \x01(\x04\x12\x17\n\x0f\x66oundation_fees\x18\x13 \x01(\x0c\x12\x1a\n\x12\x63oin_burn_tx_count\x18\x14 \x02(\x04\"\xcd\x01\n\x08PBWallet\x12\x38\n\x10\x62\x61lance_unlocked\x18\x01 \x01(\x0b\x32\x1e.types.PBWalletUnlockedBalance\x12\x34\n\x0e\x62\x61lance_locked\x18\x02 \x01(\x0b\x32\x1c.types.PBWalletLockedBalance\x12\x1b\n\x13multisign_addresses\x18\x03 \x03(\x0c\x12\x34\n\x0emultisign_data\x18\x04 \x01(\x0b\x32\x1c.types.PBWalletMultiSignData\"\xb5\x01\n\x17PBWalletUnlockedBalance\x12\r\n\x05total\x18\x01 \x02(\x0c\x12<\n\x07outputs\x18\x02 \x03(\x0b\x32+.types.PBWalletUnlockedBalance.OutputsEntry\x1aM\n\x0cOutputsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12,\n\x05value\x18\x02 \x01(\x0b\x32\x1d.types.PBWalletUnlockedOutput:\x02\x38\x01\"=\n\x16PBWalletUnlockedOutput\x12\x0e\n\x06\x61mount\x18\x01 \x02(\x0c\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\"\xaf\x01\n\x15PBWalletLockedBalance\x12\r\n\x05total\x18\x01 \x02(\x0c\x12:\n\x07outputs\x18\x02 \x03(\x0b\x32).types.PBWalletLockedBalance.OutputsEntry\x1aK\n\x0cOutputsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12*\n\x05value\x18\x02 \x01(\x0b\x32\x1b.types.PBWalletLockedOutput:\x02\x38\x01\"Q\n\x14PBWalletLockedOutput\x12\x0e\n\x06\x61mount\x18\x01 \x02(\x0c\x12\x14\n\x0clocked_until\x18\x02 \x02(\x04\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\"D\n\x15PBWalletMultiSignData\x12\x1b\n\x13signatures_required\x18\x01 \x02(\x04\x12\x0e\n\x06owners\x18\x02 \x03(\x0c\"u\n\x10PBThreeBotRecord\x12\n\n\x02id\x18\x01 \x02(\r\x12\x19\n\x11network_addresses\x18\x02 \x02(\x0c\x12\r\n\x05names\x18\x03 \x02(\x0c\x12\x17\n\x0f\x65xpiration_time\x18\x04 \x02(\x0c\x12\x12\n\npublic_key\x18\x05 \x02(\x0c')
 )
 
 
@@ -165,6 +165,13 @@ _PBNETWORKSTATS = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='coin_burn_tx_count', full_name='types.PBNetworkStats.coin_burn_tx_count', index=19,
+      number=20, type=4, cpp_type=4, label=2,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -178,7 +185,7 @@ _PBNETWORKSTATS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=23,
-  serialized_end=551,
+  serialized_end=579,
 )
 
 
@@ -229,8 +236,8 @@ _PBWALLET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=554,
-  serialized_end=759,
+  serialized_start=582,
+  serialized_end=787,
 )
 
 
@@ -267,8 +274,8 @@ _PBWALLETUNLOCKEDBALANCE_OUTPUTSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=866,
-  serialized_end=943,
+  serialized_start=894,
+  serialized_end=971,
 )
 
 _PBWALLETUNLOCKEDBALANCE = _descriptor.Descriptor(
@@ -304,8 +311,8 @@ _PBWALLETUNLOCKEDBALANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=762,
-  serialized_end=943,
+  serialized_start=790,
+  serialized_end=971,
 )
 
 
@@ -342,8 +349,8 @@ _PBWALLETUNLOCKEDOUTPUT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=945,
-  serialized_end=1006,
+  serialized_start=973,
+  serialized_end=1034,
 )
 
 
@@ -380,8 +387,8 @@ _PBWALLETLOCKEDBALANCE_OUTPUTSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1109,
-  serialized_end=1184,
+  serialized_start=1137,
+  serialized_end=1212,
 )
 
 _PBWALLETLOCKEDBALANCE = _descriptor.Descriptor(
@@ -417,8 +424,8 @@ _PBWALLETLOCKEDBALANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1009,
-  serialized_end=1184,
+  serialized_start=1037,
+  serialized_end=1212,
 )
 
 
@@ -462,8 +469,8 @@ _PBWALLETLOCKEDOUTPUT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1186,
-  serialized_end=1267,
+  serialized_start=1214,
+  serialized_end=1295,
 )
 
 
@@ -500,8 +507,8 @@ _PBWALLETMULTISIGNDATA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1269,
-  serialized_end=1337,
+  serialized_start=1297,
+  serialized_end=1365,
 )
 
 
@@ -559,8 +566,8 @@ _PBTHREEBOTRECORD = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1339,
-  serialized_end=1456,
+  serialized_start=1367,
+  serialized_end=1484,
 )
 
 _PBWALLET.fields_by_name['balance_unlocked'].message_type = _PBWALLETUNLOCKEDBALANCE

@@ -76,9 +76,9 @@ func main() {
 		stats.BlockHeight.BlockHeight+1, stats.ValueTransactionCount, stats.CoinInputCount)
 	liquidCoinOutputCount := stats.CoinOutputCount - stats.LockedCoinOutputCount
 	valueCoinOutputs := stats.CoinOutputCount - stats.MinerPayoutCount - stats.TransactionFeeCount
-	fmt.Printf("  * a total of %d coin outputs, of which %d are liquid, %d are locked,\n    %d transfer value, %d are miner payouts and %d are tx fees\n",
+	fmt.Printf("  * a total of %d coin outputs, of which %d are liquid, %d are locked,\n    %d transfer value, %d are miner payouts, %d are tx fees\n    and %d are foundation fees\n",
 		stats.CoinOutputCount, liquidCoinOutputCount, stats.LockedCoinOutputCount,
-		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount)
+		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount, stats.FoundationFeeCount)
 	fmt.Printf("  * a total of %d unique addresses that have been used\n", uniqueAddressCount)
 	if stats.ValueTransactionCount > 0 {
 		if valueCoinOutputs > 0 {

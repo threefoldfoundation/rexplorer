@@ -28,6 +28,7 @@ type (
 		BlockHeight                           BlockHeight `json:"blockHeight" msg:"cbh"`
 		TransactionCount                      uint64      `json:"txCount" msg:"txc"`
 		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"cctxc"`
+		CoinBurnTransactionCount              uint64      `json:"coinBurnTxCount" msg:"cbtxc"`
 		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"ccdtxc"`
 		ThreeBotRegistrationTransactionCount  uint64      `json:"threeBotRegistrationTransactionCount" msg:"tbrtxc"`
 		ThreeBotUpdateTransactionCount        uint64      `json:"threeBotUpdateTransactionCount" msg:"tbutxc"`
@@ -172,6 +173,7 @@ func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter
 		Blockheight:                          uint64(stats.BlockHeight.BlockHeight),
 		TxCount:                              stats.TransactionCount,
 		CoinCreationTxCount:                  stats.CoinCreationTransactionCount,
+		CoinBurnTxCount:                      stats.CoinBurnTransactionCount,
 		CoinCreatorDefTxCount:                stats.CoinCreatorDefinitionTransactionCount,
 		ThreeBotRegistrationTransactionCount: stats.ThreeBotRegistrationTransactionCount,
 		ThreeBotUpdateTransactionCount:       stats.ThreeBotUpdateTransactionCount,
@@ -209,6 +211,7 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.BlockHeight = AsBlockHeight(types.BlockHeight(pb.Blockheight))
 	stats.TransactionCount = pb.TxCount
 	stats.CoinCreationTransactionCount = pb.CoinCreationTxCount
+	stats.CoinBurnTransactionCount = pb.CoinBurnTxCount
 	stats.CoinCreatorDefinitionTransactionCount = pb.CoinCreatorDefTxCount
 	stats.ThreeBotRegistrationTransactionCount = pb.ThreeBotRegistrationTransactionCount
 	stats.ThreeBotUpdateTransactionCount = pb.ThreeBotUpdateTransactionCount

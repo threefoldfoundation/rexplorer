@@ -43,6 +43,11 @@ type (
 	UnlockHash struct {
 		types.UnlockHash
 	}
+	// ERC20Address overwrites the TFChain ERC20Address type,
+	// encapsulating it internally for practical reasons.
+	ERC20Address struct {
+		tftypes.ERC20Address
+	}
 
 	// CoinOutputID overwrites the Rivine CoinOutputID type,
 	// encapsulating it internally for practical reasons.
@@ -294,7 +299,57 @@ func (uh *UnlockHash) DecodeMsg(r *msgp.Reader) error {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (uh UnlockHash) Msgsize() int {
-	return stringerLength(uh)
+	const uhs = 33 // type (1) + hash (32)
+	return uhs + binaryMsgpPrefixSize(uhs)
+}
+
+// AsERC20Address returns a TFChain-typed ERC20Address into
+// the ERC20Address overwritten type used in this project.
+func AsERC20Address(uh tftypes.ERC20Address) ERC20Address {
+	return ERC20Address{ERC20Address: uh}
+}
+
+// String implements fmt.Stringer.String
+func (addr ERC20Address) String() string {
+	return addr.ERC20Address.String()
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+func (addr ERC20Address) MarshalJSON() ([]byte, error) {
+	return addr.ERC20Address.MarshalJSON()
+}
+
+// UnmarshalJSON implements json.Marshaler.UnmarshalJSON
+func (addr ERC20Address) UnmarshalJSON(data []byte) error {
+	return addr.ERC20Address.UnmarshalJSON(data)
+}
+
+// EncodeMsg implements msgp.Encodable.EncodeMsg
+func (addr ERC20Address) EncodeMsg(w *msgp.Writer) error {
+	err := w.WriteBytes(rivbin.Marshal(addr))
+	if err != nil {
+		return fmt.Errorf("failed to write ERC20Address as bytes: %v", err)
+	}
+	return nil
+}
+
+// DecodeMsg implements msgp.Decodable.DecodeMsg
+func (addr *ERC20Address) DecodeMsg(r *msgp.Reader) error {
+	b, err := r.ReadBytes(nil)
+	if err != nil {
+		return fmt.Errorf("failed to read ERC20Address as bytes: %v", err)
+	}
+	err = rivbin.Unmarshal(b, addr)
+	if err != nil {
+		return fmt.Errorf("failed to load ERC20Address-bytes as ERC20Address: %v", err)
+	}
+	return nil
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (addr ERC20Address) Msgsize() int {
+	length := tftypes.ERC20AddressLength
+	return length + binaryMsgpPrefixSize(length)
 }
 
 // AsCoinOutputID returns a Rivine-typed CoinOutputID into

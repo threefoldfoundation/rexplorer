@@ -23,6 +23,7 @@ message PBNetworkStats {
     optional uint64 three_bot_update_transaction_count = 17;
     optional uint64 foundation_fee_count = 18;
     optional bytes foundation_fees = 19;
+    required uint64 coin_burn_tx_count = 20;
 }
 
 
