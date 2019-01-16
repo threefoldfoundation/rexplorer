@@ -182,6 +182,11 @@ Following _public_ keys are reserved:
     * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/ProtoBuf
     * example key: `a:032b61`
     * fields have the format `<72_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c3ab5c374947ab4eca68ee987d3f736b360e530`
+* `e:<6_random_hex_chars>`:
+    * used by all registered ERC20 Address, containing the mapped TFT wallet address as value
+    * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/ProtoBuf
+    * example key: `e:512b61`
+    * fields have the format `<34_random_hex_chars>`, an example: `389e7f103288371830c632439fe709044c`
 * `b:<1+_random_digits>`:
     * used by all 3Bots, containing a hashmap of maximum 100 3bot records;
     * format value: [Redis HASHMAP][redistypes], where each field's value is a JSON/MessagePack/Protobuf of a 3Bot record
@@ -234,6 +239,7 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 	"blockHeight": 103481,
 	"txCount": 103830,
 	"coinCreationTxCount": 2,
+	"coinBurnTxCount": 2,
 	"coinCreatorDefinitionTxCount": 1,
 	"botRegistrationTxCount": 3402,
 	"botUpdateTxCount": 100,
@@ -243,8 +249,10 @@ Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][en
 	"coinInputCount": 1884,
 	"minerPayoutCount": 103481,
 	"txFeeCount": 306,
+    "foundationFeeCount": 500,
 	"minerPayouts": "1034810000000000",
 	"txFees": "36100000071",
+    "foundationFees": "5230100000000",
 	"coins": "101054810300000000",
 	"lockedCoins": "8045200000000"
 }
@@ -763,26 +771,29 @@ and you can run it yourself as follows:
 ```
 $ go run ./examples/getstats/main.go --redis-db 1
 tfchain network has:
-  * a total of 100001800 TFT, of which 100001700 TFT is liquid,
-    100 TFT is locked, 1800 TFT is paid out as miner payouts
-    and 16 TFT is paid out as tx fees
-  * 99.99990% liquid coins of a total of 100001800 TFT coins
-  * 00.00010% locked coins of a total of 100001800 TFT coins
-  * a total of 197 transactions, of which 0 wallet-value transactions,
-    0 coin creation transactions, 0 coin creator definition transactions,
-    2 3Bot registration transactions, 14 3Bot update transactions
-    and 181 are pure block creation transactions
-  * a block height of 180, with the time of the highest block
-    being 2018-10-26 19:45:42 +0200 CEST (1540575942)
-  * a total of 181 blocks, 16 value transactions and 16 coin inputs
-  * a total of 229 coin outputs, of which 219 are liquid, 10 are locked,
-    33 transfer value, 180 are miner payouts and 16 are tx fees
-  * a total of 17 unique addresses that have been used
-  * an average of 02.06250% value coin outputs per value transaction
-  * an average of 00.08840% value transactions per block
-  * 95.63319% liquid outputs of a total of 229 coin outputs
-  * 04.36681% locked outputs of a total of 229 coin outputs
-  * 08.12183% value transactions of a total of 197 transactions
+  * a total of 99885898.21 TFT, of which 99885756.21 TFT is liquid,
+    142 TFT is locked, 35700 TFT is paid out as miner payouts,
+    21 TFT is paid out as tx fees and 321 TFT is paid out as foundation fees
+  * 99.99986% liquid coins of a total of 99885898.21 TFT coins
+  * 00.00014% locked coins of a total of 99885898.21 TFT coins
+  * a total of 3591 transactions, of which 16 wallet-value transactions,
+    3 coin creation transactions, 0 coin creator definition transactions,
+    1 3Bot registration transactions, 1 3Bot update transactions
+    and 3570 are pure block creation transactions
+  * a block height of 3570, with the time of the highest block
+    being 2019-01-12 04:20:13 +0100 CET (1547263213)
+  * a total of 3571 blocks, 18 value transactions and 18 coin inputs
+  * a total of 3623 coin outputs, of which 3612 are liquid, 11 are locked,
+    32 transfer value, 3570 are miner payouts, 21 are tx fees
+    and 6 are foundation fees
+  * a total of 15 unique addresses that have been used
+  * an average of 01.77778% value coin outputs per value transaction
+  * an average of 00.00504% value transactions per block
+  * 99.69638% liquid outputs of a total of 3623 coin outputs
+  * 00.30362% locked outputs of a total of 3623 coin outputs
+  * 00.50125% value transactions of a total of 3591 transactions
+  * 00.08354% coin creation transactions of a total of 3591 transactions
+  * 00.19493% coin burn transactions of a total of 3591 transactions
 ```
 
 You can run the same example directly from the shell —using `redis-cli`— as well:
