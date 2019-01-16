@@ -26,7 +26,7 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/rivine/rivine"
+  name = "github.com/threefoldtech/rivine"
 
 [[constraint]]
   name = "github.com/spf13/cobra"

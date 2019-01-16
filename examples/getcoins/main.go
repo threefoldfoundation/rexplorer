@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rivine/rivine/pkg/client"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
+	"github.com/threefoldtech/rivine/pkg/client"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/database"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"

@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	rivineencoding "github.com/rivine/rivine/encoding"
-	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
-	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
 	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
+	"github.com/threefoldtech/rivine/types"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -274,7 +274,7 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	if n := len(wallet.MultiSignAddresses); n > 0 {
 		pb.MultisignAddresses = make([][]byte, n)
 		for idx, uh := range wallet.MultiSignAddresses {
-			pb.MultisignAddresses[idx] = rivineencoding.Marshal(uh)
+			pb.MultisignAddresses[idx] = siabin.Marshal(uh)
 		}
 	}
 	// add optional MultiSignData only if available
@@ -284,7 +284,7 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 			Owners:             make([][]byte, len(wallet.MultiSignData.Owners)),
 		}
 		for idx, uh := range wallet.MultiSignData.Owners {
-			pb.MultisignData.Owners[idx] = rivineencoding.Marshal(uh)
+			pb.MultisignData.Owners[idx] = siabin.Marshal(uh)
 		}
 	}
 	// Marshal the entire wallet into the given ProtocolBufferWriter
@@ -576,7 +576,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	if n := len(pb.MultisignAddresses); n > 0 {
 		wallet.MultiSignAddresses = make([]UnlockHash, n)
 		for i, b := range pb.MultisignAddresses {
-			err = rivineencoding.Unmarshal(b, &wallet.MultiSignAddresses[i])
+			err = siabin.Unmarshal(b, &wallet.MultiSignAddresses[i])
 			if err != nil {
 				return fmt.Errorf("Wallet: MultiSignAddresses: address #%d: %v", i, err)
 			}
@@ -593,7 +593,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 		// assign all owners
 		wallet.MultiSignData.Owners = make([]UnlockHash, len(pb.MultisignData.Owners))
 		for i, b := range pb.MultisignData.Owners {
-			err = rivineencoding.Unmarshal(b, &wallet.MultiSignData.Owners[i])
+			err = siabin.Unmarshal(b, &wallet.MultiSignData.Owners[i])
 			if err != nil {
 				return fmt.Errorf("Wallet: MultiSignData: owner #%d: %v", i, err)
 			}
@@ -706,10 +706,10 @@ func (record BotRecord) TfchainRecord() tftypes.BotRecord {
 func (record *BotRecord) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
 	err := w.Marshal(&PBThreeBotRecord{
 		Id:               uint32(record.ID.TfchainBotID()),
-		NetworkAddresses: tfencoding.Marshal(record.Addresses),
-		Names:            tfencoding.Marshal(record.Names),
-		ExpirationTime:   tfencoding.Marshal(record.Expiration),
-		PublicKey:        tfencoding.Marshal(record.PublicKey),
+		NetworkAddresses: rivbin.Marshal(record.Addresses),
+		Names:            rivbin.Marshal(record.Names),
+		ExpirationTime:   rivbin.Marshal(record.Expiration),
+		PublicKey:        rivbin.Marshal(record.PublicKey),
 	})
 	if err != nil {
 		return fmt.Errorf("BotRecord: %v", err)
@@ -731,19 +731,19 @@ func (record *BotRecord) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader
 	record.ID = NewBotIDFromTfchainBotID(tftypes.BotID(pb.Id))
 
 	// unmarshal all values that requires decoding
-	err = tfencoding.Unmarshal(pb.NetworkAddresses, &record.Addresses)
+	err = rivbin.Unmarshal(pb.NetworkAddresses, &record.Addresses)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Addresses: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.Names, &record.Names)
+	err = rivbin.Unmarshal(pb.Names, &record.Names)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Names: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.ExpirationTime, &record.Expiration)
+	err = rivbin.Unmarshal(pb.ExpirationTime, &record.Expiration)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Expiration: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.PublicKey, &record.PublicKey)
+	err = rivbin.Unmarshal(pb.PublicKey, &record.PublicKey)
 	if err != nil {
 		return fmt.Errorf("BotRecord: PublicKey: %v", err)
 	}

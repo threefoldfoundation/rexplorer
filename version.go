@@ -1,6 +1,6 @@
 package main
 
-import "github.com/rivine/rivine/build"
+import "github.com/threefoldtech/rivine/build"
 
 var (
 	rawVersion = "v0.3.0"

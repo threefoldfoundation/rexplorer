@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldtech/rivine/types"
 	"github.com/tinylib/msgp/msgp"
 )
 

@@ -7,10 +7,10 @@ import (
 	dtypes "github.com/threefoldfoundation/rexplorer/pkg/database/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	"github.com/rivine/rivine/modules"
-	rivinetypes "github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/tfchain/pkg/persist"
 	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	"github.com/threefoldtech/rivine/modules"
+	rivinetypes "github.com/threefoldtech/rivine/types"
 )
 
 // Explorer defines the custom (internal) explorer module,

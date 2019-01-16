@@ -192,7 +192,7 @@ Rivine (Primitive) Value Encodings:
 
 String/Text encodings used for [JSON][encoding-json] encoding:
 * addresses are Hex-encoded and the exact format (and how it is created) is described in:
-  <https://github.com/rivine/rivine/blob/master/doc/transactions/unlockhash.md#textstring-encoding>
+  <https://github.com/threefoldtech/rivine/blob/master/doc/transactions/unlockhash.md#textstring-encoding>
 * currencies are encoded as described in <https://godoc.org/math/big#Int.Text>
   using base 10, and using the smallest coin unit as value (e.g. 10^-9 TFT)
 
@@ -201,7 +201,7 @@ String/Text encodings used for all encodings:
 
 Binary encodings used for [MessagePack][encoding-msgp] and [Protocol Buffers][encoding-pb]:
 * addresses are binary encoded and the exact format (and how it is created) is described in:
-  <https://github.com/rivine/rivine/blob/master/doc/transactions/unlockhash.md#binary-encoding>
+  <https://github.com/threefoldtech/rivine/blob/master/doc/transactions/unlockhash.md#binary-encoding>
 * currencies are encoded as described in <https://godoc.org/math/big#Int.Bytes>
   using base 10, in Big-Endian order, and using the smallest coin unit as value (e.g. 10^-9 TFT)
 
@@ -959,7 +959,7 @@ validatevalues test —using encoding msgp— on block height 103625 passed :)
 > ```
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
-[rivine]: https://github.com/rivine/rivine
+[rivine]: https://github.com/threefoldtech/rivine
 [redistypes]: https://redis.io/topics/data-types
 [msgp-spec]: https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family
 

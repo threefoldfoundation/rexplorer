@@ -10,13 +10,13 @@ import (
 	"strconv"
 	"strings"
 
-	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
 	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
 
-	"github.com/rivine/rivine/crypto"
-	"github.com/rivine/rivine/encoding"
-	"github.com/rivine/rivine/modules"
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldtech/rivine/crypto"
+	"github.com/threefoldtech/rivine/modules"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
+	"github.com/threefoldtech/rivine/types"
 
 	"github.com/tinylib/msgp/msgp"
 )
@@ -272,7 +272,7 @@ func (uh *UnlockHash) UnmarshalJSON(data []byte) error {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (uh UnlockHash) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(encoding.Marshal(uh))
+	err := w.WriteBytes(siabin.Marshal(uh))
 	if err != nil {
 		return fmt.Errorf("failed to write UnlockHash as string: %v", err)
 	}
@@ -285,7 +285,7 @@ func (uh *UnlockHash) DecodeMsg(r *msgp.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to read UnlockHash as string: %v", err)
 	}
-	err = encoding.Unmarshal(b, uh)
+	err = siabin.Unmarshal(b, uh)
 	if err != nil {
 		return fmt.Errorf("failed to load UnlockHash-string as UnlockHash: %v", err)
 	}
@@ -437,15 +437,15 @@ func (lv *LockValue) LoadString(str string) error {
 	return nil
 }
 
-// MarshalSia implements rivine/encoding.MarshalSia
+// MarshalSia implements rivine/siabin.MarshalSia
 func (lv LockValue) MarshalSia(w io.Writer) error {
-	return encoding.NewEncoder(w).Encode(uint64(lv))
+	return siabin.NewEncoder(w).Encode(uint64(lv))
 }
 
-// UnmarshalSia implements rivine/encoding.UnmarshalSia
+// UnmarshalSia implements rivine/siabin.UnmarshalSia
 func (lv *LockValue) UnmarshalSia(r io.Reader) error {
 	var raw uint64
-	err := encoding.NewDecoder(r).Decode(&raw)
+	err := siabin.NewDecoder(r).Decode(&raw)
 	if err != nil {
 		return err
 	}
@@ -502,7 +502,7 @@ type (
 	// PublicKey overwrites the Tfchain PublicKey type,
 	// encapsulating it internally for practical reasons.
 	PublicKey struct {
-		tftypes.PublicKey
+		types.PublicKey
 	}
 )
 
@@ -519,7 +519,7 @@ func (nass NetworkAddressSortedSet) TfchainNetworkAddressSortedSet() tftypes.Net
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (nass NetworkAddressSortedSet) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(tfencoding.Marshal(nass.NetworkAddressSortedSet))
+	err := w.WriteBytes(rivbin.Marshal(nass.NetworkAddressSortedSet))
 	if err != nil {
 		return fmt.Errorf("failed to write network address sorted set as bytes: %v", err)
 	}
@@ -532,7 +532,7 @@ func (nass *NetworkAddressSortedSet) DecodeMsg(r *msgp.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to read network address sorted set as bytes: %v", err)
 	}
-	err = tfencoding.Unmarshal(b, &nass.NetworkAddressSortedSet)
+	err = rivbin.Unmarshal(b, &nass.NetworkAddressSortedSet)
 	if err != nil {
 		return fmt.Errorf("failed to byte-decode network address sorted set: %v", err)
 	}
@@ -669,7 +669,7 @@ func (bnss BotNameSortedSet) TfchainBotNameSortedSet() tftypes.BotNameSortedSet 
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (bnss BotNameSortedSet) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(tfencoding.Marshal(bnss.BotNameSortedSet))
+	err := w.WriteBytes(rivbin.Marshal(bnss.BotNameSortedSet))
 	if err != nil {
 		return fmt.Errorf("failed to write bot name sorted setas bytes: %v", err)
 	}
@@ -682,7 +682,7 @@ func (bnss *BotNameSortedSet) DecodeMsg(r *msgp.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to read bot name sorted set as bytes: %v", err)
 	}
-	err = tfencoding.Unmarshal(b, &bnss.BotNameSortedSet)
+	err = rivbin.Unmarshal(b, &bnss.BotNameSortedSet)
 	if err != nil {
 		return fmt.Errorf("failed to byte-decode bot name sorted set: %v", err)
 	}
@@ -697,18 +697,18 @@ func (bnss BotNameSortedSet) Msgsize() int {
 
 // NewPublicKeyFromTfchainPublicKey returns a tfchain-typed PublicKey into
 // the PublicKey overwritten type used in this project.
-func NewPublicKeyFromTfchainPublicKey(pk tftypes.PublicKey) PublicKey {
+func NewPublicKeyFromTfchainPublicKey(pk types.PublicKey) PublicKey {
 	return PublicKey{PublicKey: pk}
 }
 
 // TfchainPublicKey returns the tfchain-typed PublicKey, embedded by this type.
-func (pk PublicKey) TfchainPublicKey() tftypes.PublicKey {
+func (pk PublicKey) TfchainPublicKey() types.PublicKey {
 	return pk.PublicKey
 }
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (pk PublicKey) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(tfencoding.Marshal(pk.PublicKey))
+	err := w.WriteBytes(rivbin.Marshal(pk.PublicKey))
 	if err != nil {
 		return fmt.Errorf("failed to write public key as bytes: %v", err)
 	}
@@ -721,7 +721,7 @@ func (pk *PublicKey) DecodeMsg(r *msgp.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to read public key as bytes: %v", err)
 	}
-	err = tfencoding.Unmarshal(b, &pk.PublicKey)
+	err = rivbin.Unmarshal(b, &pk.PublicKey)
 	if err != nil {
 		return fmt.Errorf("failed to byte-decode public key: %v", err)
 	}
@@ -732,9 +732,9 @@ func (pk *PublicKey) DecodeMsg(r *msgp.Reader) error {
 func (pk PublicKey) Msgsize() int {
 	l := 1 // 1 byte for the algorithm prefix
 	switch pk.Algorithm {
-	case tftypes.SignatureAlgoEd25519:
+	case types.SignatureAlgoEd25519:
 		l += crypto.PublicKeySize
-	case tftypes.SignatureAlgoNil:
+	case types.SignatureAlgoNil:
 		// add nothing
 	default:
 		l += 64 // should 32 bytes ever stop being sufficient, 64 is a likely choice
