@@ -3,8 +3,8 @@ package rflag
 import (
 	"fmt"
 
-	"github.com/rivine/rivine/modules"
 	"github.com/spf13/pflag"
+	"github.com/threefoldtech/rivine/modules"
 )
 
 // NetAddressArrayFlagVar defines a []modules.NetAddress flag with specified name and usage string.

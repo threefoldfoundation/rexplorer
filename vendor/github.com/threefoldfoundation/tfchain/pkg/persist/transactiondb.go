@@ -8,16 +8,16 @@ import (
 	"os"
 	"path"
 
-	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
 	"github.com/threefoldfoundation/tfchain/pkg/persist/internal"
 	"github.com/threefoldfoundation/tfchain/pkg/types"
 
-	"github.com/rivine/rivine/build"
-	"github.com/rivine/rivine/encoding"
-	"github.com/rivine/rivine/modules"
-	"github.com/rivine/rivine/persist"
-	rivinesync "github.com/rivine/rivine/sync"
-	rivinetypes "github.com/rivine/rivine/types"
+	"github.com/threefoldtech/rivine/build"
+	"github.com/threefoldtech/rivine/modules"
+	"github.com/threefoldtech/rivine/persist"
+	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
+	rivinesync "github.com/threefoldtech/rivine/sync"
+	rivinetypes "github.com/threefoldtech/rivine/types"
 
 	bolt "github.com/rivine/bbolt"
 )
@@ -47,14 +47,6 @@ const (
 //   names/records/identifiers/publickeys
 //   (for mint condition I do not think it is required, as interaction with minting is minimal)
 
-// TODO:
-//    facilitate :id/transactions (how to handle nicely from the explorer POV)
-//		BotTransaction{
-//			NewExpirationTime (?)
-//			Names{add+remove}
-//			Address{add+remove}
-//		}
-
 // internal bucket database keys used for the transactionDB
 var (
 	bucketInternal         = []byte("internal")
@@ -70,6 +62,11 @@ var (
 	bucketBotNameToIDMapping       = []byte("botnames")        // Name => ID
 	bucketBotRecordImplicitUpdates = []byte("botimplupdates")  // txID => implicitBotRecordUpdate
 	bucketBotTransactions          = []byte("bottransactions") // ID => []txID
+
+	// buckets for the ERC20-bridge feature
+	bucketERC20ToTFTAddresses = []byte("addresses_erc20_to_tft") // erc20 => TFT
+	bucketTFTToERC20Addresses = []byte("addresses_tft_to_erc20") // TFT => erc20
+	bucketERC20TransactionIDs = []byte("erc20_transactionids")   // stores all unique ERC20 transaction ids used for erc20=>TFT exchanges
 )
 
 type (
@@ -111,8 +108,10 @@ type (
 var (
 	// ensure TransactionDB implements the MintConditionGetter interface
 	_ types.MintConditionGetter = (*TransactionDB)(nil)
-	// enssure TransactionDB implements the BotRecordReadRegistry interface
+	// ensure TransactionDB implements the BotRecordReadRegistry interface
 	_ types.BotRecordReadRegistry = (*TransactionDB)(nil)
+	// ensure TransactionDB implements the ERC20Registry interface
+	_ types.ERC20Registry = (*TransactionDB)(nil)
 )
 
 // NewTransactionDB creates a new TransactionDB, using the given file (path) to store the (single) persistent BoltDB file.
@@ -132,6 +131,11 @@ func NewTransactionDB(rootDir string, genesisMintCondition rivinetypes.UnlockCon
 		return nil, fmt.Errorf("failed to open the transaction DB: %v", err)
 	}
 	return txdb, nil
+}
+
+// Retrieves the Last ConsensusChangeID stored.
+func (txdb *TransactionDB) GetLastConsensusChangeID() modules.ConsensusChangeID {
+	return txdb.stats.ConsensusChangeID
 }
 
 // SubscribeToConsensusSet subscribes the TransactionDB to the given ConsensusSet,
@@ -179,7 +183,7 @@ func (txdb *TransactionDB) GetActiveMintCondition() (rivinetypes.UnlockCondition
 	}
 
 	var mintCondition rivinetypes.UnlockConditionProxy
-	err = encoding.Unmarshal(b, &mintCondition)
+	err = siabin.Unmarshal(b, &mintCondition)
 	if err != nil {
 		return rivinetypes.UnlockConditionProxy{}, fmt.Errorf("corrupt transaction DB: failed to decode found mint condition: %v", err)
 	}
@@ -224,7 +228,7 @@ func (txdb *TransactionDB) GetMintConditionAt(height rivinetypes.BlockHeight) (r
 	}
 
 	var mintCondition rivinetypes.UnlockConditionProxy
-	err = encoding.Unmarshal(b, &mintCondition)
+	err = siabin.Unmarshal(b, &mintCondition)
 	if err != nil {
 		return rivinetypes.UnlockConditionProxy{}, fmt.Errorf("corrupt transaction DB: failed to decode found mint condition: %v", err)
 	}
@@ -248,13 +252,13 @@ func getRecordForID(tx *bolt.Tx, id types.BotID) (*types.BotRecord, error) {
 		return nil, errors.New("corrupt transaction DB: bot record bucket does not exist")
 	}
 
-	b := recordBucket.Get(tfencoding.Marshal(id))
+	b := recordBucket.Get(rivbin.Marshal(id))
 	if len(b) == 0 {
 		return nil, types.ErrBotNotFound
 	}
 
 	record := new(types.BotRecord)
-	err := tfencoding.Unmarshal(b, record)
+	err := rivbin.Unmarshal(b, record)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +266,7 @@ func getRecordForID(tx *bolt.Tx, id types.BotID) (*types.BotRecord, error) {
 }
 
 // GetRecordForKey returns the record mapped to the given Key.
-func (txdb *TransactionDB) GetRecordForKey(key types.PublicKey) (record *types.BotRecord, err error) {
+func (txdb *TransactionDB) GetRecordForKey(key rivinetypes.PublicKey) (record *types.BotRecord, err error) {
 	err = txdb.db.View(func(tx *bolt.Tx) error {
 		id, err := getBotIDForPublicKey(tx, key)
 		if err != nil {
@@ -275,19 +279,19 @@ func (txdb *TransactionDB) GetRecordForKey(key types.PublicKey) (record *types.B
 	return
 }
 
-func getBotIDForPublicKey(tx *bolt.Tx, key types.PublicKey) (types.BotID, error) {
+func getBotIDForPublicKey(tx *bolt.Tx, key rivinetypes.PublicKey) (types.BotID, error) {
 	keyBucket := tx.Bucket(bucketBotKeyToIDMapping)
 	if keyBucket == nil {
 		return 0, errors.New("corrupt transaction DB: bot key bucket does not exist")
 	}
 
-	b := keyBucket.Get(tfencoding.Marshal(key))
+	b := keyBucket.Get(rivbin.Marshal(key))
 	if len(b) == 0 {
 		return 0, types.ErrBotKeyNotFound
 	}
 
 	var id types.BotID
-	err := tfencoding.Unmarshal(b, &id)
+	err := rivbin.Unmarshal(b, &id)
 	return id, err
 }
 
@@ -299,13 +303,13 @@ func (txdb *TransactionDB) GetRecordForName(name types.BotName) (record *types.B
 			return errors.New("corrupt transaction DB: bot name bucket does not exist")
 		}
 
-		b := nameBucket.Get(tfencoding.Marshal(name))
+		b := nameBucket.Get(rivbin.Marshal(name))
 		if len(b) == 0 {
 			return types.ErrBotNameNotFound
 		}
 
 		var id types.BotID
-		err := tfencoding.Unmarshal(b, &id)
+		err := rivbin.Unmarshal(b, &id)
 		if err != nil {
 			return err
 		}
@@ -329,6 +333,36 @@ func (txdb *TransactionDB) GetRecordForName(name types.BotName) (record *types.B
 func (txdb *TransactionDB) GetBotTransactionIdentifiers(id types.BotID) (ids []rivinetypes.TransactionID, err error) {
 	err = txdb.db.View(func(tx *bolt.Tx) (err error) {
 		ids, err = getBotTransactions(tx, id)
+		return
+	})
+	return
+}
+
+// GetERC20AddressForTFTAddress returns the mapped ERC20 address for the given TFT Address,
+// iff the TFT Address has registered an ERC20 address explicitly.
+func (txdb *TransactionDB) GetERC20AddressForTFTAddress(uh rivinetypes.UnlockHash) (addr types.ERC20Address, found bool, err error) {
+	err = txdb.db.View(func(tx *bolt.Tx) (err error) {
+		addr, found, err = getERC20AddressForTFTAddress(tx, uh)
+		return
+	})
+	return
+}
+
+// GetTFTAddressForERC20Address returns the mapped TFT address for the given ERC20 Address,
+// iff the TFT Address has registered an ERC20 address explicitly.
+func (txdb *TransactionDB) GetTFTAddressForERC20Address(addr types.ERC20Address) (uh rivinetypes.UnlockHash, found bool, err error) {
+	err = txdb.db.View(func(tx *bolt.Tx) (err error) {
+		uh, found, err = getTFTAddressForERC20Address(tx, addr)
+		return
+	})
+	return
+}
+
+// GetTFTTransactionIDForERC20TransactionID returns the mapped TFT TransactionID for the given ERC20 TransactionID,
+// iff the ERC20 TransactionID has been used to fund an ERC20 CoinCreation Tx and has been registered as such, a nil TransactionID is returned otherwise.
+func (txdb *TransactionDB) GetTFTTransactionIDForERC20TransactionID(id types.ERC20Hash) (txid rivinetypes.TransactionID, found bool, err error) {
+	err = txdb.db.View(func(tx *bolt.Tx) (err error) {
+		txid, found, err = getTfchainTransactionIDForERC20TransactionID(tx, id)
 		return
 	})
 	return
@@ -367,7 +401,7 @@ func (txdb *TransactionDB) openDB(filename string, genesisMintCondition rivinety
 	var (
 		dbMetadata = persist.Metadata{
 			Header:  "TFChain Transaction Database",
-			Version: "1.1.2",
+			Version: "1.1.2.1",
 		}
 	)
 
@@ -376,56 +410,12 @@ func (txdb *TransactionDB) openDB(filename string, genesisMintCondition rivinety
 		if err != persist.ErrBadVersion {
 			return fmt.Errorf("error opening tfchain transaction database: %v", err)
 		}
-		// try to open the DB using the original version
-		originalDBMetadata := persist.Metadata{
-			Header:  "TFChain Transaction Database",
-			Version: "1.1.0",
-		}
-		txdb.db, err = persist.OpenDatabase(originalDBMetadata, filename)
+		// try to migrate the DB
+		err = txdb.migrateDB(filename)
 		if err != nil {
-			return fmt.Errorf("error opening tfchain transaction database using v1.1.0: %v", err)
+			return err
 		}
-		// create added buckets
-		err = txdb.db.Update(func(tx *bolt.Tx) (err error) {
-			// Enumerate and create the new database buckets.
-			buckets := [][]byte{
-				bucketBotRecords,
-				bucketBotKeyToIDMapping,
-				bucketBotNameToIDMapping,
-				bucketBotRecordImplicitUpdates,
-				bucketBotTransactions,
-			}
-			for _, bucket := range buckets {
-				_, err = tx.CreateBucket(bucket)
-				if err != nil {
-					return err
-				}
-			}
-			// update the stats bucket
-			var oldStats struct {
-				ConsensusChangeID modules.ConsensusChangeID
-				BlockHeight       rivinetypes.BlockHeight
-				Synced            bool
-			}
-			internalBucket := tx.Bucket(bucketInternal)
-			b := internalBucket.Get(bucketInternalKeyStats)
-			if len(b) == 0 {
-				return errors.New("structured stats value could not be found in existing transaction db")
-			}
-			err = encoding.Unmarshal(b, &oldStats)
-			if err != nil {
-				return fmt.Errorf("failed to unmarshal structured stats value from existing transaction db: %v", err)
-			}
-			return internalBucket.Put(bucketInternalKeyStats, encoding.Marshal(transactionDBStats{
-				ConsensusChangeID: oldStats.ConsensusChangeID,
-				BlockHeight:       oldStats.BlockHeight,
-				ChainTime:         0, // will fix itself on the first block it receives
-				Synced:            oldStats.Synced,
-			}))
-		})
-		if err != nil {
-			return fmt.Errorf("error adding v1.1.2 buckets to tfchain transaction database: %v", err)
-		}
+		// save the new metadata
 		txdb.db.Metadata = dbMetadata
 		err = txdb.db.SaveMetadata()
 		if err != nil {
@@ -440,7 +430,7 @@ func (txdb *TransactionDB) openDB(filename string, genesisMintCondition rivinety
 			if len(b) == 0 {
 				return errors.New("structured stats value could not be found in existing transaction db")
 			}
-			err = encoding.Unmarshal(b, &txdb.stats)
+			err = siabin.Unmarshal(b, &txdb.stats)
 			if err != nil {
 				return fmt.Errorf("failed to unmarshal structured stats value from existing transaction db: %v", err)
 			}
@@ -452,7 +442,7 @@ func (txdb *TransactionDB) openDB(filename string, genesisMintCondition rivinety
 				return errors.New("genesis mint condition could not be found in existing transaction db")
 			}
 			var storedMintCondition rivinetypes.UnlockConditionProxy
-			err = encoding.Unmarshal(b, &storedMintCondition)
+			err = siabin.Unmarshal(b, &storedMintCondition)
 			if err != nil {
 				return fmt.Errorf("failed to unmarshal genesis mint condition from existing transaction db: %v", err)
 			}
@@ -470,6 +460,99 @@ func (txdb *TransactionDB) openDB(filename string, genesisMintCondition rivinety
 		}
 		return nil
 	})
+}
+
+func (txdb *TransactionDB) migrateDB(filename string) error {
+	// try to open the DB using the original version
+	dbMetadata := persist.Metadata{
+		Header:  "TFChain Transaction Database",
+		Version: "1.1.0",
+	}
+	var err error
+	txdb.db, err = persist.OpenDatabase(dbMetadata, filename)
+	if err == nil {
+		// migrate from a v1.1.0 DB
+		return txdb.db.Update(txdb.migrateV110DB)
+	}
+	if err != persist.ErrBadVersion {
+		return fmt.Errorf("error opening tfchain transaction v1.1.0 database: %v", err)
+	}
+
+	// try to open the initial v1.2.0 DB (never released, but already out in field for dev purposes)
+	dbMetadata.Version = "1.2.0"
+	txdb.db, err = persist.OpenDatabase(dbMetadata, filename)
+	if err == nil {
+		// migrate from a v1.2.0 DB
+		return txdb.db.Update(txdb.migrateV120DB)
+	}
+	if err == persist.ErrBadVersion {
+		return fmt.Errorf("error opening tfchain transaction database with unknown version: %v", err)
+	}
+	return fmt.Errorf("error opening tfchain transaction v1.2.0 database: %v", err)
+}
+
+func (txdb *TransactionDB) migrateV110DB(tx *bolt.Tx) error {
+	// Enumerate and create the new database buckets.
+	buckets := [][]byte{
+		bucketBotRecords,
+		bucketBotKeyToIDMapping,
+		bucketBotNameToIDMapping,
+		bucketBotRecordImplicitUpdates,
+		bucketBotTransactions,
+	}
+	var err error
+	for _, bucket := range buckets {
+		_, err = tx.CreateBucket(bucket)
+		if err != nil {
+			return err
+		}
+	}
+	// update the stats bucket
+	var oldStats struct {
+		ConsensusChangeID modules.ConsensusChangeID
+		BlockHeight       rivinetypes.BlockHeight
+		Synced            bool
+	}
+	internalBucket := tx.Bucket(bucketInternal)
+	b := internalBucket.Get(bucketInternalKeyStats)
+	if len(b) == 0 {
+		return errors.New("structured stats value could not be found in existing transaction db")
+	}
+	err = siabin.Unmarshal(b, &oldStats)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal structured stats value from existing transaction db: %v", err)
+	}
+	err = internalBucket.Put(bucketInternalKeyStats, siabin.Marshal(transactionDBStats{
+		ConsensusChangeID: oldStats.ConsensusChangeID,
+		BlockHeight:       oldStats.BlockHeight,
+		ChainTime:         0, // will fix itself on the first block it receives
+		Synced:            oldStats.Synced,
+	}))
+	if err != nil {
+		return err
+	}
+
+	// Continue the migration process towards the newest version
+	return txdb.migrateV120DB(tx)
+}
+
+func (txdb *TransactionDB) migrateV120DB(tx *bolt.Tx) error {
+	// Enumerate and create the new database buckets.
+	buckets := [][]byte{
+		bucketERC20ToTFTAddresses,
+		bucketTFTToERC20Addresses,
+		bucketERC20TransactionIDs,
+	}
+	var err error
+	for _, bucket := range buckets {
+		_, err = tx.CreateBucket(bucket)
+		if err != nil {
+			return err
+		}
+	}
+
+	// migration process is finished
+	return nil
 }
 
 // dbInitialized returns true if the database appears to be initialized, false
@@ -491,6 +574,9 @@ func (txdb *TransactionDB) createDB(tx *bolt.Tx, genesisMintCondition rivinetype
 		bucketBotNameToIDMapping,
 		bucketBotRecordImplicitUpdates,
 		bucketBotTransactions,
+		bucketERC20ToTFTAddresses,
+		bucketTFTToERC20Addresses,
+		bucketERC20TransactionIDs,
 	}
 	for _, bucket := range buckets {
 		_, err = tx.CreateBucket(bucket)
@@ -503,7 +589,7 @@ func (txdb *TransactionDB) createDB(tx *bolt.Tx, genesisMintCondition rivinetype
 	txdb.stats.BlockHeight = 0
 	txdb.stats.ConsensusChangeID = modules.ConsensusChangeBeginning
 	internalBucket := tx.Bucket(bucketInternal)
-	err = internalBucket.Put(bucketInternalKeyStats, encoding.Marshal(txdb.stats))
+	err = internalBucket.Put(bucketInternalKeyStats, siabin.Marshal(txdb.stats))
 	if err != nil {
 		return fmt.Errorf("failed to store transaction db (height=%d; changeID=%x) as a stat: %v",
 			txdb.stats.BlockHeight, txdb.stats.ConsensusChangeID, err)
@@ -511,7 +597,7 @@ func (txdb *TransactionDB) createDB(tx *bolt.Tx, genesisMintCondition rivinetype
 
 	// store the genesis mint condition
 	mintConditionsBucket := tx.Bucket(bucketMintConditions)
-	err = mintConditionsBucket.Put(internal.EncodeBlockheight(0), encoding.Marshal(genesisMintCondition))
+	err = mintConditionsBucket.Put(internal.EncodeBlockheight(0), siabin.Marshal(genesisMintCondition))
 	if err != nil {
 		return fmt.Errorf("failed to store genesis mint condition: %v", err)
 	}
@@ -560,7 +646,7 @@ func (txdb *TransactionDB) processConsensusChange(css modules.ConsensusChange) {
 
 		// store stats
 		internalBucket := tx.Bucket(bucketInternal)
-		err = internalBucket.Put(bucketInternalKeyStats, encoding.Marshal(txdb.stats))
+		err = internalBucket.Put(bucketInternalKeyStats, siabin.Marshal(txdb.stats))
 		if err != nil {
 			return fmt.Errorf("failed to store transaction db (height=%d; changeID=%x; synced=%v) as a stat: %v",
 				txdb.stats.BlockHeight, txdb.stats.ConsensusChangeID, txdb.stats.Synced, err)
@@ -607,6 +693,12 @@ func (txdb *TransactionDB) revertBlocks(tx *bolt.Tx, blocks []rivinetypes.Block)
 				err = txdb.revertRecordUpdateTx(tx, ctx, rtx)
 			case types.TransactionVersionBotNameTransfer:
 				err = txdb.revertBotNameTransferTx(tx, ctx, rtx)
+
+			case types.TransactionVersionERC20CoinCreation:
+				err = txdb.revertERC20CoinCreationTx(tx, ctx, rtx)
+			case types.TransactionVersionERC20AddressRegistration:
+				err = txdb.revertERC20AddressRegistrationTx(tx, ctx, rtx)
+
 			case types.TransactionVersionMinterDefinition:
 				err = txdb.revertMintConditionTx(tx, rtx)
 			}
@@ -661,6 +753,12 @@ func (txdb *TransactionDB) applyBlocks(tx *bolt.Tx, blocks []rivinetypes.Block) 
 				err = txdb.applyRecordUpdateTx(tx, ctx, rtx)
 			case types.TransactionVersionBotNameTransfer:
 				err = txdb.applyBotNameTransferTx(tx, ctx, rtx)
+
+			case types.TransactionVersionERC20CoinCreation:
+				err = txdb.applyERC20CoinCreationTx(tx, ctx, rtx)
+			case types.TransactionVersionERC20AddressRegistration:
+				err = txdb.applyERC20AddressRegistrationTx(tx, ctx, rtx)
+
 			case types.TransactionVersionMinterDefinition:
 				err = txdb.applyMintConditionTx(tx, rtx)
 			}
@@ -683,7 +781,7 @@ func (txdb *TransactionDB) applyMintConditionTx(tx *bolt.Tx, rtx *rivinetypes.Tr
 	if err != nil {
 		return fmt.Errorf("unexpected error while unpacking the minter def. tx type: %v" + err.Error())
 	}
-	err = mintConditionsBucket.Put(internal.EncodeBlockheight(txdb.stats.BlockHeight), encoding.Marshal(mdtx.MintCondition))
+	err = mintConditionsBucket.Put(internal.EncodeBlockheight(txdb.stats.BlockHeight), siabin.Marshal(mdtx.MintCondition))
 	if err != nil {
 		return fmt.Errorf(
 			"failed to put mint condition for block height %d: %v",
@@ -750,7 +848,7 @@ func (txdb *TransactionDB) applyBotRegistrationTx(tx *bolt.Tx, ctx transactionCo
 	}
 	// store the record, and the other mappings, assuming the consensus validated that
 	// the registration Tx is completely valid
-	err = recordBucket.Put(tfencoding.Marshal(id), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(id), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while storing record for bot %d with public key %v: %v", id, brtx.Identification.PublicKey, err)
 	}
@@ -788,7 +886,7 @@ func (txdb *TransactionDB) revertBotRegistrationTx(tx *bolt.Tx, ctx transactionC
 	rbSequence := recordBucket.Sequence()
 	id := types.BotID(rbSequence)
 	// delete the record
-	err = recordBucket.Delete(tfencoding.Marshal(id))
+	err = recordBucket.Delete(rivbin.Marshal(id))
 	if err != nil {
 		return fmt.Errorf("error while deleting record for bot %d with public key %v: %v",
 			id, brtx.Identification.PublicKey, err)
@@ -832,12 +930,12 @@ func (txdb *TransactionDB) applyRecordUpdateTx(tx *bolt.Tx, ctx transactionConte
 	}
 
 	// get the bot record
-	b := recordBucket.Get(tfencoding.Marshal(brutx.Identifier))
+	b := recordBucket.Get(rivbin.Marshal(brutx.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified identifier")
 	}
 	var record types.BotRecord
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found bot record: %v", err)
 	}
@@ -867,7 +965,7 @@ func (txdb *TransactionDB) applyRecordUpdateTx(tx *bolt.Tx, ctx transactionConte
 	}
 
 	// save it
-	err = recordBucket.Put(tfencoding.Marshal(brutx.Identifier), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(brutx.Identifier), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while updating record for bot %d: %v", brutx.Identifier, err)
 	}
@@ -920,12 +1018,12 @@ func (txdb *TransactionDB) revertRecordUpdateTx(tx *bolt.Tx, ctx transactionCont
 	}
 
 	// get the bot record
-	b := recordBucket.Get(tfencoding.Marshal(brutx.Identifier))
+	b := recordBucket.Get(rivbin.Marshal(brutx.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified identifier")
 	}
 	var record types.BotRecord
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found bot record: %v", err)
 	}
@@ -978,7 +1076,7 @@ func (txdb *TransactionDB) revertRecordUpdateTx(tx *bolt.Tx, ctx transactionCont
 	}
 
 	// save it
-	err = recordBucket.Put(tfencoding.Marshal(brutx.Identifier), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(brutx.Identifier), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while updating record for bot %d: %v", brutx.Identifier, err)
 	}
@@ -1021,12 +1119,12 @@ func (txdb *TransactionDB) applyBotNameTransferTx(tx *bolt.Tx, ctx transactionCo
 	}
 
 	// get the sender bot record
-	b := recordBucket.Get(tfencoding.Marshal(bnttx.Sender.Identifier))
+	b := recordBucket.Get(rivbin.Marshal(bnttx.Sender.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified sender bot identifier")
 	}
 	var record types.BotRecord
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found record of sender bot %d: %v", bnttx.Sender.Identifier, err)
 	}
@@ -1036,7 +1134,7 @@ func (txdb *TransactionDB) applyBotNameTransferTx(tx *bolt.Tx, ctx transactionCo
 		return fmt.Errorf("failed to update record of sender bot %d: %v", record.ID, err)
 	}
 	// save the record of the sender bot
-	err = recordBucket.Put(tfencoding.Marshal(record.ID), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(record.ID), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while saving the updated record for sender bot %d: %v", record.ID, err)
 	}
@@ -1048,11 +1146,11 @@ func (txdb *TransactionDB) applyBotNameTransferTx(tx *bolt.Tx, ctx transactionCo
 	}
 
 	// get the receiver bot record
-	b = recordBucket.Get(tfencoding.Marshal(bnttx.Receiver.Identifier))
+	b = recordBucket.Get(rivbin.Marshal(bnttx.Receiver.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified receiver bot identifier")
 	}
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found record of receiver bot %d: %v", bnttx.Receiver.Identifier, err)
 	}
@@ -1062,7 +1160,7 @@ func (txdb *TransactionDB) applyBotNameTransferTx(tx *bolt.Tx, ctx transactionCo
 		return fmt.Errorf("failed to update record of receiver bot %d: %v", record.ID, err)
 	}
 	// save the record of the receiver bot
-	err = recordBucket.Put(tfencoding.Marshal(record.ID), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(record.ID), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while saving the updated record for receiver bot %d: %v", record.ID, err)
 	}
@@ -1095,12 +1193,12 @@ func (txdb *TransactionDB) revertBotNameTransferTx(tx *bolt.Tx, ctx transactionC
 	}
 
 	// get the receiver bot record
-	b := recordBucket.Get(tfencoding.Marshal(bnttx.Receiver.Identifier))
+	b := recordBucket.Get(rivbin.Marshal(bnttx.Receiver.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified receiver bot identifier")
 	}
 	var record types.BotRecord
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found record of receiver bot %d: %v", bnttx.Receiver.Identifier, err)
 	}
@@ -1110,7 +1208,7 @@ func (txdb *TransactionDB) revertBotNameTransferTx(tx *bolt.Tx, ctx transactionC
 		return fmt.Errorf("failed to update record of receiver bot %d: %v", record.ID, err)
 	}
 	// save the record of the receiver bot
-	err = recordBucket.Put(tfencoding.Marshal(record.ID), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(record.ID), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while saving the reverted (update of the) receiver bot %d: %v", record.ID, err)
 	}
@@ -1122,11 +1220,11 @@ func (txdb *TransactionDB) revertBotNameTransferTx(tx *bolt.Tx, ctx transactionC
 	}
 
 	// get the sender bot record
-	b = recordBucket.Get(tfencoding.Marshal(bnttx.Sender.Identifier))
+	b = recordBucket.Get(rivbin.Marshal(bnttx.Sender.Identifier))
 	if len(b) == 0 {
 		return errors.New("no bot record found for the specified sender bot identifier")
 	}
-	err = tfencoding.Unmarshal(b, &record)
+	err = rivbin.Unmarshal(b, &record)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal found record of sender bot %d: %v", bnttx.Sender.Identifier, err)
 	}
@@ -1136,7 +1234,7 @@ func (txdb *TransactionDB) revertBotNameTransferTx(tx *bolt.Tx, ctx transactionC
 		return fmt.Errorf("failed to revert record of sender bot %d: %v", record.ID, err)
 	}
 	// save the record of the sender bot
-	err = recordBucket.Put(tfencoding.Marshal(record.ID), tfencoding.Marshal(record))
+	err = recordBucket.Put(rivbin.Marshal(record.ID), rivbin.Marshal(record))
 	if err != nil {
 		return fmt.Errorf("error while saving the reverted record for sender bot %d: %v", record.ID, err)
 	}
@@ -1159,20 +1257,60 @@ func (txdb *TransactionDB) revertBotNameTransferTx(tx *bolt.Tx, ctx transactionC
 	return nil
 }
 
-// apply/revert the Key->ID mapping for a 3bot
-func applyKeyToIDMapping(tx *bolt.Tx, key types.PublicKey, id types.BotID) error {
-	mappingBucket := tx.Bucket(bucketBotKeyToIDMapping)
-	if mappingBucket == nil {
-		return errors.New("corrupt transaction DB: bot key bucket does not exist")
+func (txdb *TransactionDB) applyERC20AddressRegistrationTx(tx *bolt.Tx, ctx transactionContext, rtx *rivinetypes.Transaction) error {
+	etartx, err := types.ERC20AddressRegistrationTransactionFromTransaction(*rtx)
+	if err != nil {
+		return fmt.Errorf("unexpected error while unpacking the ERC20 Address Registration tx type: %v", err)
 	}
-	return mappingBucket.Put(tfencoding.Marshal(key), tfencoding.Marshal(id))
+
+	tftaddr := rivinetypes.NewPubKeyUnlockHash(etartx.PublicKey)
+	erc20addr := types.ERC20AddressFromUnlockHash(tftaddr)
+
+	return applyERC20AddressMapping(tx, tftaddr, erc20addr)
 }
-func revertKeyToIDMapping(tx *bolt.Tx, key types.PublicKey) error {
+
+func (txdb *TransactionDB) revertERC20AddressRegistrationTx(tx *bolt.Tx, ctx transactionContext, rtx *rivinetypes.Transaction) error {
+	etartx, err := types.ERC20AddressRegistrationTransactionFromTransaction(*rtx)
+	if err != nil {
+		return fmt.Errorf("unexpected error while unpacking the ERC20 Address Registration tx type: %v", err)
+	}
+
+	tftaddr := rivinetypes.NewPubKeyUnlockHash(etartx.PublicKey)
+	erc20addr := types.ERC20AddressFromUnlockHash(tftaddr)
+
+	return revertERC20AddressMapping(tx, tftaddr, erc20addr)
+}
+
+func (txdb *TransactionDB) applyERC20CoinCreationTx(tx *bolt.Tx, ctx transactionContext, rtx *rivinetypes.Transaction) error {
+	etcctx, err := types.ERC20CoinCreationTransactionFromTransaction(*rtx)
+	if err != nil {
+		return fmt.Errorf("unexpected error while unpacking the ERC20 Coin Creation Tx type: %v", err)
+	}
+	return applyERC20TransactionID(tx, etcctx.TransactionID, rtx.ID())
+}
+
+func (txdb *TransactionDB) revertERC20CoinCreationTx(tx *bolt.Tx, ctx transactionContext, rtx *rivinetypes.Transaction) error {
+	etcctx, err := types.ERC20CoinCreationTransactionFromTransaction(*rtx)
+	if err != nil {
+		return fmt.Errorf("unexpected error while unpacking the ERC20 Coin Creation Tx type: %v", err)
+	}
+	return revertERC20TransactionID(tx, etcctx.TransactionID)
+}
+
+// apply/revert the Key->ID mapping for a 3bot
+func applyKeyToIDMapping(tx *bolt.Tx, key rivinetypes.PublicKey, id types.BotID) error {
 	mappingBucket := tx.Bucket(bucketBotKeyToIDMapping)
 	if mappingBucket == nil {
 		return errors.New("corrupt transaction DB: bot key bucket does not exist")
 	}
-	return mappingBucket.Delete(tfencoding.Marshal(key))
+	return mappingBucket.Put(rivbin.Marshal(key), rivbin.Marshal(id))
+}
+func revertKeyToIDMapping(tx *bolt.Tx, key rivinetypes.PublicKey) error {
+	mappingBucket := tx.Bucket(bucketBotKeyToIDMapping)
+	if mappingBucket == nil {
+		return errors.New("corrupt transaction DB: bot key bucket does not exist")
+	}
+	return mappingBucket.Delete(rivbin.Marshal(key))
 }
 
 // apply/revert the Name->ID mapping for a 3bot
@@ -1181,26 +1319,26 @@ func applyNameToIDMapping(tx *bolt.Tx, name types.BotName, id types.BotID) error
 	if mappingBucket == nil {
 		return errors.New("corrupt transaction DB: bot name bucket does not exist")
 	}
-	return mappingBucket.Put(tfencoding.Marshal(name), tfencoding.Marshal(id))
+	return mappingBucket.Put(rivbin.Marshal(name), rivbin.Marshal(id))
 }
 func revertNameToIDMapping(tx *bolt.Tx, name types.BotName) error {
 	mappingBucket := tx.Bucket(bucketBotNameToIDMapping)
 	if mappingBucket == nil {
 		return errors.New("corrupt transaction DB: bot name bucket does not exist")
 	}
-	return mappingBucket.Delete(tfencoding.Marshal(name))
+	return mappingBucket.Delete(rivbin.Marshal(name))
 }
 func revertNameToIDMappingIfOwnedByBot(tx *bolt.Tx, name types.BotName, id types.BotID) error {
 	mappingBucket := tx.Bucket(bucketBotNameToIDMapping)
 	if mappingBucket == nil {
 		return errors.New("corrupt transaction DB: bot name bucket does not exist")
 	}
-	b := mappingBucket.Get(tfencoding.Marshal(name))
+	b := mappingBucket.Get(rivbin.Marshal(name))
 	if len(b) == 0 {
 		return nil // might be deleted by another bot, who took over ownership
 	}
 	var mappedID types.BotID
-	err := tfencoding.Unmarshal(b, &mappedID)
+	err := rivbin.Unmarshal(b, &mappedID)
 	if err != nil {
 		return fmt.Errorf("corrupt BotID used as key in mapping of bot name %v", name)
 	}
@@ -1208,18 +1346,18 @@ func revertNameToIDMappingIfOwnedByBot(tx *bolt.Tx, name types.BotName, id types
 		return nil // ID no longer owned by this bot, ignore removal request in the mapping context
 	}
 	// delete name (mapping), as it was still owned by this bot
-	return mappingBucket.Delete(tfencoding.Marshal(name))
+	return mappingBucket.Delete(rivbin.Marshal(name))
 }
 func applyNameToIDMappingIfAvailable(tx *bolt.Tx, name types.BotName, id types.BotID) error {
 	mappingBucket := tx.Bucket(bucketBotNameToIDMapping)
 	if mappingBucket == nil {
 		return errors.New("corrupt transaction DB: bot name bucket does not exist")
 	}
-	b := mappingBucket.Get(tfencoding.Marshal(name))
+	b := mappingBucket.Get(rivbin.Marshal(name))
 	if len(b) != 0 {
 		return nil // already taken
 	}
-	return mappingBucket.Put(tfencoding.Marshal(name), tfencoding.Marshal(id))
+	return mappingBucket.Put(rivbin.Marshal(name), rivbin.Marshal(id))
 }
 
 // sortableTransactionShortID wraps around the rivinetypes.TransactionShortID,
@@ -1230,8 +1368,20 @@ func newSortableTransactionShortID(height rivinetypes.BlockHeight, txSequenceID 
 	return sortableTransactionShortID(rivinetypes.NewTransactionShortID(height, txSequenceID))
 }
 
-// MarshalSia implements SiaMarshaler.MarshalSia
+// MarshalSia implements SiaMarshaler.MarshalSia,
+// alias of MarshalRivine for backwards-compatibility reasons.
 func (sid sortableTransactionShortID) MarshalSia(w io.Writer) error {
+	return sid.MarshalRivine(w)
+}
+
+// UnmarshalSia implements SiaMarshaler.UnmarshalSia,
+// alias of UnmarshalRivine for backwards-compatibility reasons.
+func (sid *sortableTransactionShortID) UnmarshalSia(r io.Reader) error {
+	return sid.UnmarshalRivine(r)
+}
+
+// MarshalRivine implements RivineMarshaler.MarshalRivine
+func (sid sortableTransactionShortID) MarshalRivine(w io.Writer) error {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(sid))
 	n, err := w.Write(b[:])
@@ -1244,8 +1394,8 @@ func (sid sortableTransactionShortID) MarshalSia(w io.Writer) error {
 	return nil
 }
 
-// UnmarshalSia implements SiaMarshaler.UnmarshalSia
-func (sid *sortableTransactionShortID) UnmarshalSia(r io.Reader) error {
+// UnmarshalRivine implements RivineUnmarshaler.UnmarshalRivine
+func (sid *sortableTransactionShortID) UnmarshalRivine(r io.Reader) error {
 	var b [8]byte
 	n, err := r.Read(b[:])
 	if err != nil {
@@ -1263,36 +1413,36 @@ func applyBotTransaction(tx *bolt.Tx, id types.BotID, shortTxID sortableTransact
 	if txBucket == nil {
 		return errors.New("corrupt transaction DB: implicit bot transactions bucket does not exist")
 	}
-	botBucket, err := txBucket.CreateBucketIfNotExists(tfencoding.Marshal(id))
+	botBucket, err := txBucket.CreateBucketIfNotExists(rivbin.Marshal(id))
 	if err != nil {
 		return fmt.Errorf("corrupt transaction DB: failed to create/get bot %d inner bucket: %v", id, err)
 	}
-	return botBucket.Put(tfencoding.Marshal(shortTxID), tfencoding.Marshal(txID))
+	return botBucket.Put(rivbin.Marshal(shortTxID), rivbin.Marshal(txID))
 }
 func revertBotTransaction(tx *bolt.Tx, id types.BotID, shortTxID sortableTransactionShortID) error {
 	txBucket := tx.Bucket(bucketBotTransactions)
 	if txBucket == nil {
 		return errors.New("corrupt transaction DB: implicit bot transactions bucket does not exist")
 	}
-	botBucket := txBucket.Bucket(tfencoding.Marshal(id))
+	botBucket := txBucket.Bucket(rivbin.Marshal(id))
 	if botBucket != nil {
 		return fmt.Errorf("corrupt transaction DB: bot %d inner bucket does not exist", id)
 	}
-	return botBucket.Delete(tfencoding.Marshal(shortTxID))
+	return botBucket.Delete(rivbin.Marshal(shortTxID))
 }
 func getBotTransactions(tx *bolt.Tx, id types.BotID) ([]rivinetypes.TransactionID, error) {
 	txBucket := tx.Bucket(bucketBotTransactions)
 	if txBucket == nil {
 		return nil, errors.New("corrupt transaction DB: implicit bot transactions bucket does not exist")
 	}
-	botBucket := txBucket.Bucket(tfencoding.Marshal(id))
+	botBucket := txBucket.Bucket(rivbin.Marshal(id))
 	if botBucket == nil {
 		return nil, nil // no transactions is acceptable
 	}
 	var txIDs []rivinetypes.TransactionID
 	err := botBucket.ForEach(func(_, v []byte) (err error) {
 		var txID rivinetypes.TransactionID
-		err = tfencoding.Unmarshal(v, &txID)
+		err = rivbin.Unmarshal(v, &txID)
 		txIDs = append(txIDs, txID)
 		return
 	})
@@ -1307,14 +1457,14 @@ func applyImplicitBotRecordUpdate(tx *bolt.Tx, txID rivinetypes.TransactionID, u
 	if updateBucket == nil {
 		return errors.New("corrupt transaction DB: implicit bot record update bucket does not exist")
 	}
-	return updateBucket.Put(tfencoding.Marshal(txID), tfencoding.Marshal(update))
+	return updateBucket.Put(rivbin.Marshal(txID), rivbin.Marshal(update))
 }
 func revertImplicitBotRecordUpdate(tx *bolt.Tx, txID rivinetypes.TransactionID) error {
 	updateBucket := tx.Bucket(bucketBotRecordImplicitUpdates)
 	if updateBucket == nil {
 		return errors.New("corrupt transaction DB: implicit bot record update bucket does not exist")
 	}
-	return updateBucket.Delete(tfencoding.Marshal(txID))
+	return updateBucket.Delete(rivbin.Marshal(txID))
 }
 func getImplicitBotRecordUpdate(tx *bolt.Tx, txID rivinetypes.TransactionID) (implicitBotRecordUpdate, error) {
 	var update implicitBotRecordUpdate
@@ -1323,11 +1473,11 @@ func getImplicitBotRecordUpdate(tx *bolt.Tx, txID rivinetypes.TransactionID) (im
 	if updateBucket == nil {
 		return update, errors.New("corrupt transaction DB: implicit bot record update bucket does not exist")
 	}
-	b := updateBucket.Get(tfencoding.Marshal(txID))
+	b := updateBucket.Get(rivbin.Marshal(txID))
 	if len(b) == 0 {
 		return update, nil
 	}
-	err := tfencoding.Unmarshal(b, &update)
+	err := rivbin.Unmarshal(b, &update)
 	if err != nil {
 		return update, fmt.Errorf("failed to fetch implicit record update for tx %v: %v", txID, err)
 	}
@@ -1343,8 +1493,20 @@ type implicitBotRecordUpdate struct {
 	InactiveNamesRemoved   []types.BotName
 }
 
-// MarshalSia implements SiaMarshaler.MarshalSia
+// MarshalSia implements SiaMarshaler.MarshalSia,
+// alias of MarshalRivine for backwards-compatibility reasons.
 func (ibru implicitBotRecordUpdate) MarshalSia(w io.Writer) error {
+	return ibru.MarshalRivine(w)
+}
+
+// UnmarshalSia implements SiaUnmarshaler.UnmarshalSia,
+// alias of UnmarshalRivine for backwards-compatibility reasons.
+func (ibru *implicitBotRecordUpdate) UnmarshalSia(r io.Reader) error {
+	return ibru.UnmarshalRivine(r)
+}
+
+// MarshalRivine implements RivineMarshaler.MarshalRivine
+func (ibru implicitBotRecordUpdate) MarshalRivine(w io.Writer) error {
 	// write the info prefix byte first, containing
 	// flags and length information
 	var infoPrefixByte uint8
@@ -1358,14 +1520,14 @@ func (ibru implicitBotRecordUpdate) MarshalSia(w io.Writer) error {
 	// next 3 bits indicate the length of names that were implicitly removed
 	infoPrefixByte |= uint8(lenNamesRemoved) << 1
 	// write the info prefix byte
-	err := tfencoding.MarshalUint8(w, infoPrefixByte)
+	err := rivbin.MarshalUint8(w, infoPrefixByte)
 	if err != nil {
 		return fmt.Errorf("failed to write the info (implicit bot record update) prefix byte: %v", err)
 	}
 
 	// write the previous expiration time if non-0
 	if ibru.PreviousExpirationTime != 0 {
-		err = ibru.PreviousExpirationTime.MarshalSia(w)
+		err = ibru.PreviousExpirationTime.MarshalRivine(w)
 		if err != nil {
 			return fmt.Errorf("implicitBotRecordUpdate: %v", err)
 		}
@@ -1373,7 +1535,7 @@ func (ibru implicitBotRecordUpdate) MarshalSia(w io.Writer) error {
 
 	// write all names one by one
 	for _, name := range ibru.InactiveNamesRemoved {
-		err = name.MarshalSia(w)
+		err = name.MarshalRivine(w)
 		if err != nil {
 			return fmt.Errorf("implicitBotRecordUpdate: %v", err)
 		}
@@ -1383,15 +1545,15 @@ func (ibru implicitBotRecordUpdate) MarshalSia(w io.Writer) error {
 	return nil
 }
 
-// UnmarshalSia implements SiaUnmarshaler.UnmarshalSia
-func (ibru *implicitBotRecordUpdate) UnmarshalSia(r io.Reader) error {
-	infoPrefixByte, err := tfencoding.UnmarshalUint8(r)
+// UnmarshalRivine implements RivineUnmarshaler.UnmarshalRivine
+func (ibru *implicitBotRecordUpdate) UnmarshalRivine(r io.Reader) error {
+	infoPrefixByte, err := rivbin.UnmarshalUint8(r)
 	if err != nil {
 		return fmt.Errorf("implicitBotRecordUpdate: %v", err)
 	}
 	// read or reset the PreviousExpirationTime
 	if infoPrefixByte&1 != 0 {
-		err = ibru.PreviousExpirationTime.UnmarshalSia(r)
+		err = ibru.PreviousExpirationTime.UnmarshalRivine(r)
 		if err != nil {
 			return fmt.Errorf("implicitBotRecordUpdate: %v", err)
 		}
@@ -1410,7 +1572,7 @@ func (ibru *implicitBotRecordUpdate) UnmarshalSia(r io.Reader) error {
 	ibru.InactiveNamesRemoved = make([]types.BotName, 0, length)
 	for i := uint8(0); i < length; i++ {
 		var name types.BotName
-		err = name.UnmarshalSia(r)
+		err = name.UnmarshalRivine(r)
 		if err != nil {
 			return fmt.Errorf("implicitBotRecordUpdate: %v", err)
 		}
@@ -1419,4 +1581,130 @@ func (ibru *implicitBotRecordUpdate) UnmarshalSia(r io.Reader) error {
 
 	// all read succesfully
 	return nil
+}
+
+func applyERC20AddressMapping(tx *bolt.Tx, tftaddr rivinetypes.UnlockHash, erc20addr types.ERC20Address) error {
+	btft, berc20 := rivbin.Marshal(tftaddr), rivbin.Marshal(erc20addr)
+
+	// store ERC20->TFT mapping
+	bucket := tx.Bucket(bucketERC20ToTFTAddresses)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: ERC20->TFT bucket does not exist")
+	}
+	err := bucket.Put(berc20, btft)
+	if err != nil {
+		return fmt.Errorf("error while storing ERC20->TFT address mapping: %v", err)
+	}
+
+	// store TFT->ERC20 mapping
+	bucket = tx.Bucket(bucketTFTToERC20Addresses)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: TFT->ERC20 bucket does not exist")
+	}
+	err = bucket.Put(btft, berc20)
+	if err != nil {
+		return fmt.Errorf("error while storing TFT->ERC20 address mapping: %v", err)
+	}
+
+	// done
+	return nil
+}
+func revertERC20AddressMapping(tx *bolt.Tx, tftaddr rivinetypes.UnlockHash, erc20addr types.ERC20Address) error {
+	btft, berc20 := rivbin.Marshal(tftaddr), rivbin.Marshal(erc20addr)
+
+	// delete ERC20->TFT mapping
+	bucket := tx.Bucket(bucketERC20ToTFTAddresses)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: ERC20->TFT bucket does not exist")
+	}
+	err := bucket.Delete(berc20)
+	if err != nil {
+		return fmt.Errorf("error while deleting ERC20->TFT address mapping: %v", err)
+	}
+
+	// delete TFT->ERC20 mapping
+	bucket = tx.Bucket(bucketTFTToERC20Addresses)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: TFT->ERC20 bucket does not exist")
+	}
+	err = bucket.Delete(btft)
+	if err != nil {
+		return fmt.Errorf("error while deleting TFT->ERC20 address mapping: %v", err)
+	}
+
+	// done
+	return nil
+}
+
+func getERC20AddressForTFTAddress(tx *bolt.Tx, uh rivinetypes.UnlockHash) (types.ERC20Address, bool, error) {
+	bucket := tx.Bucket(bucketTFTToERC20Addresses)
+	if bucket == nil {
+		return types.ERC20Address{}, false, errors.New("corrupt transaction DB: TFT->ERC20 bucket does not exist")
+	}
+	b := bucket.Get(rivbin.Marshal(uh))
+	if len(b) == 0 {
+		return types.ERC20Address{}, false, nil
+	}
+	var addr types.ERC20Address
+	err := rivbin.Unmarshal(b, &addr)
+	if err != nil {
+		return types.ERC20Address{}, false, fmt.Errorf("failed to fetch ERC20 Address for TFT address %v: %v", uh, err)
+	}
+	return addr, true, nil
+}
+
+func getTFTAddressForERC20Address(tx *bolt.Tx, addr types.ERC20Address) (rivinetypes.UnlockHash, bool, error) {
+	bucket := tx.Bucket(bucketERC20ToTFTAddresses)
+	if bucket == nil {
+		return rivinetypes.UnlockHash{}, false, errors.New("corrupt transaction DB: ERC20->TFT bucket does not exist")
+	}
+	b := bucket.Get(rivbin.Marshal(addr))
+	if len(b) == 0 {
+		return rivinetypes.UnlockHash{}, false, nil
+	}
+	var uh rivinetypes.UnlockHash
+	err := rivbin.Unmarshal(b, &uh)
+	if err != nil {
+		return rivinetypes.UnlockHash{}, false, fmt.Errorf("failed to fetch TFT Address for ERC20 address %v: %v", addr, err)
+	}
+	return uh, true, nil
+}
+
+func applyERC20TransactionID(tx *bolt.Tx, erc20id types.ERC20Hash, tftid rivinetypes.TransactionID) error {
+	bucket := tx.Bucket(bucketERC20TransactionIDs)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: ERC20 TransactionIDs bucket does not exist")
+	}
+	err := bucket.Put(rivbin.Marshal(erc20id), rivbin.Marshal(tftid))
+	if err != nil {
+		return fmt.Errorf("error while storing ERC20 TransactionID %v: %v", erc20id, err)
+	}
+	return nil
+}
+func revertERC20TransactionID(tx *bolt.Tx, id types.ERC20Hash) error {
+	bucket := tx.Bucket(bucketERC20TransactionIDs)
+	if bucket == nil {
+		return errors.New("corrupt transaction DB: ERC20 TransactionIDs bucket does not exist")
+	}
+	err := bucket.Delete(rivbin.Marshal(id))
+	if err != nil {
+		return fmt.Errorf("error while deleting ERC20 TransactionID %v: %v", id, err)
+	}
+	return nil
+}
+func getTfchainTransactionIDForERC20TransactionID(tx *bolt.Tx, id types.ERC20Hash) (rivinetypes.TransactionID, bool, error) {
+	bucket := tx.Bucket(bucketERC20TransactionIDs)
+	if bucket == nil {
+		return rivinetypes.TransactionID{}, false, errors.New("corrupt transaction DB: ERC20 TransactionIDs bucket does not exist")
+	}
+	b := bucket.Get(rivbin.Marshal(id))
+	if len(b) == 0 {
+		return rivinetypes.TransactionID{}, false, nil
+	}
+	var txid rivinetypes.TransactionID
+	err := rivbin.Unmarshal(b, &txid)
+	if err != nil {
+		return rivinetypes.TransactionID{}, false, fmt.Errorf("corrupt transaction DB: invalid tfchain TransactionID fetched for ERC20 TxID %v: %v", id, err)
+	}
+	return txid, true, nil
 }

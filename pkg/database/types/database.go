@@ -6,7 +6,7 @@ import (
 
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	"github.com/rivine/rivine/encoding"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
 )
 
 type (
@@ -41,10 +41,10 @@ func (co *CoinOutput) LoadString(str string) error {
 }
 
 // Bytes returns a binary representation of a CoinOutput,
-// using Rivine's binary encoding package (github.com/rivine/rivine/encoding).
+// using Rivine's binary encoding package (github.com/threefoldtech/rivine/pkg/encoding/siabin).
 func (co CoinOutput) Bytes() []byte {
 	buf := bytes.NewBuffer(nil)
-	encoder := encoding.NewEncoder(buf)
+	encoder := siabin.NewEncoder(buf)
 	encoder.EncodeAll(
 		co.State,
 		co.UnlockHash,
@@ -57,10 +57,10 @@ func (co CoinOutput) Bytes() []byte {
 }
 
 // LoadBytes decodes the given bytes using the binary representation of a CoinOutput,
-// making use of Rivine's binary encoding package (github.com/rivine/rivine/encoding) to decode,
+// making use of Rivine's binary encoding package (github.com/threefoldtech/rivine/pkg/encoding/siabin) to decode,
 // the previously encoded CoinOutput.
 func (co *CoinOutput) LoadBytes(b []byte) error {
-	decoder := encoding.NewDecoder(bytes.NewReader(b))
+	decoder := siabin.NewDecoder(bytes.NewReader(b))
 	err := decoder.DecodeAll(
 		&co.State,
 		&co.UnlockHash,

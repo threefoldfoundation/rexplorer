@@ -6,12 +6,11 @@ import (
 	"math/big"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/database"
-
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	"github.com/rivine/rivine/pkg/client"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
+	"github.com/threefoldtech/rivine/pkg/client"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -49,10 +48,10 @@ func main() {
 
 	fmt.Println("tfchain network has:")
 	liquidCoins := stats.Coins.Sub(stats.LockedCoins)
-	fmt.Printf("  * a total of %s, of which %s is liquid,\n    %s is locked, %s is paid out as miner payouts\n    and %s is paid out as tx fees\n",
+	fmt.Printf("  * a total of %s, of which %s is liquid,\n    %s is locked, %s is paid out as miner payouts,\n    %s is paid out as tx fees and %s is paid out as foundation fees\n",
 		cc.ToCoinStringWithUnit(stats.Coins.Currency), cc.ToCoinStringWithUnit(liquidCoins.Currency),
 		cc.ToCoinStringWithUnit(stats.LockedCoins.Currency), cc.ToCoinStringWithUnit(stats.MinerPayouts.Currency),
-		cc.ToCoinStringWithUnit(stats.TransactionFees.Currency))
+		cc.ToCoinStringWithUnit(stats.TransactionFees.Currency), cc.ToCoinStringWithUnit(stats.FoundationFees.Currency))
 	if !liquidCoins.IsZero() {
 		lcpb := big.NewFloat(0).Quo(big.NewFloat(0).SetInt(liquidCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
 		lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
@@ -77,9 +76,9 @@ func main() {
 		stats.BlockHeight.BlockHeight+1, stats.ValueTransactionCount, stats.CoinInputCount)
 	liquidCoinOutputCount := stats.CoinOutputCount - stats.LockedCoinOutputCount
 	valueCoinOutputs := stats.CoinOutputCount - stats.MinerPayoutCount - stats.TransactionFeeCount
-	fmt.Printf("  * a total of %d coin outputs, of which %d are liquid, %d are locked,\n    %d transfer value, %d are miner payouts and %d are tx fees\n",
+	fmt.Printf("  * a total of %d coin outputs, of which %d are liquid, %d are locked,\n    %d transfer value, %d are miner payouts, %d are tx fees\n    and %d are foundation fees\n",
 		stats.CoinOutputCount, liquidCoinOutputCount, stats.LockedCoinOutputCount,
-		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount)
+		valueCoinOutputs, stats.MinerPayoutCount, stats.TransactionFeeCount, stats.FoundationFeeCount)
 	fmt.Printf("  * a total of %d unique addresses that have been used\n", uniqueAddressCount)
 	if stats.ValueTransactionCount > 0 {
 		if valueCoinOutputs > 0 {
@@ -104,6 +103,10 @@ func main() {
 	if stats.CoinCreationTransactionCount > 0 {
 		fmt.Printf("  * %08.5f%% coin creation transactions of a total of %d transactions\n",
 			float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100, stats.TransactionCount)
+	}
+	if stats.CoinBurnTransactionCount > 0 {
+		fmt.Printf("  * %08.5f%% coin burn transactions of a total of %d transactions\n",
+			float64(stats.CoinBurnTransactionCount)/float64(stats.TransactionCount)*100, stats.TransactionCount)
 	}
 	if stats.CoinCreatorDefinitionTransactionCount > 0 {
 		fmt.Printf("  * %08.5f%% coin creator definition transactions of a total of %d transactions\n",

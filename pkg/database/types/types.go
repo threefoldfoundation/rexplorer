@@ -9,8 +9,8 @@ import (
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	rivineencoding "github.com/rivine/rivine/encoding"
-	"github.com/rivine/rivine/modules"
+	"github.com/threefoldtech/rivine/modules"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
 )
 
 // message pack (using github.com/tinylib/msgp)
@@ -57,7 +57,7 @@ func NewExplorerState() ExplorerState {
 // using the generated code based on the PBExplorerState Message defined in ./types.proto
 func (state ExplorerState) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
 	err := w.Marshal(&PBExplorerState{
-		CurrentConsensusChangeId: rivineencoding.Marshal(state.CurrentChangeID),
+		CurrentConsensusChangeId: siabin.Marshal(state.CurrentChangeID),
 		NextThreebotId:           state.NextThreeBotID.UInt32(),
 	})
 	if err != nil {
@@ -74,7 +74,7 @@ func (state *ExplorerState) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRea
 	if err != nil {
 		return fmt.Errorf("ExplorerState: %v", err)
 	}
-	err = rivineencoding.Unmarshal(pb.CurrentConsensusChangeId, &state.CurrentChangeID)
+	err = siabin.Unmarshal(pb.CurrentConsensusChangeId, &state.CurrentChangeID)
 	if err != nil {
 		return fmt.Errorf("ExplorerState: CurrentChangeID: %v", err)
 	}

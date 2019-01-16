@@ -12,9 +12,9 @@ import (
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	"github.com/rivine/rivine/crypto"
-	rivineencoding "github.com/rivine/rivine/encoding"
-	rivinetypes "github.com/rivine/rivine/types"
+	"github.com/threefoldtech/rivine/crypto"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
+	rivinetypes "github.com/threefoldtech/rivine/types"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -42,6 +42,9 @@ type Database interface {
 	CreateBotRecord(record types.BotRecord) error
 	UpdateBotRecord(id types.BotID, fn func(*types.BotRecord) error) error
 	DeleteBotRecord(id types.BotID) error
+
+	AddERC20AddressRegistration(erc20Address types.ERC20Address, tftAddress types.UnlockHash) error
+	DeleteERC20AddressRegistration(erc20Address types.ERC20Address) error
 
 	Close() error
 }
@@ -78,19 +81,20 @@ type (
 	//	  lcos.time:<timestamp-(timestamp%7200)>										(custom) all locked coin outputs for a given timestamp range
 	//
 	//	  public keys:
-	//	  stats																			(JSON/MsgPack) used for global network statistics
+	//	  stats																			(JSON/MsgPack/Proto) used for global network statistics
 	//    coincreators																	(SET) set of unique wallet addresses of the coin creator(s)
 	//	  addresses																		(SET) set of unique wallet addresses used (even if reverted) in the network
-	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack) used by all contract and wallet addresses, storing all content of the wallet/contract
+	//    a:<01|02|03><4_random_hex_chars>												(JSON/MsgPack/Proto) used by all contract and wallet addresses, storing all content of the wallet/contract
+	//    e:<6_random_hex_chars>														(JSON/MsgPack/Proto) used by all ERC20 Address, storing the mapping to a TFT address
 	//
 	// Rivine Value Encodings:
 	//	 + addresses are Hex-encoded and the exact format (and how it is created) is described in:
-	//     https://github.com/rivine/rivine/blob/master/doc/transactions/unlockhash.md#textstring-encoding
+	//     https://github.com/threefoldtech/rivine/blob/master/doc/transactions/unlockhash.md#textstring-encoding
 	//   + currencies are encoded as described in https://godoc.org/math/big#Int.Text
 	//     using base 10, and using the smallest coin unit as value (e.g. 10^-9 TFT)
 	//   + coin outputs are stored in the Rivine-defined JSON format, described in:
-	//     https://github.com/rivine/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v0-transactions (v0 tx) and
-	//     https://github.com/rivine/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v1-transactions (v1 tx)
+	//     https://github.com/threefoldtech/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v0-transactions (v0 tx) and
+	//     https://github.com/threefoldtech/rivine/blob/master/doc/transactions/transaction.md#json-encoding-of-outputs-in-v1-transactions (v1 tx)
 	//
 	// JSON formats of value types defined by this module:
 	//
@@ -101,6 +105,7 @@ type (
 	//        "txCount": 103830,
 	//        "coinCreationTxCount": 2,
 	//        "coinCreatorDefinitionTxCount": 1,
+	//		  "coinBurnTxCount": 1,
 	//        "botRegistrationTxCount": 3402,
 	//        "botUpdateTxCount": 100,
 	//        "valueTxCount": 348,
@@ -109,8 +114,10 @@ type (
 	//        "coinInputCount": 1884,
 	//        "minerPayoutCount": 103481,
 	//        "txFeeCount": 306,
+	//        "foundationFeeCount": 10,
 	//        "minerPayouts": "1034810000000000",
 	//        "txFees": "36100000071",
+	//        "foundationFees": "410003200",
 	//        "coins": "101054810300000000",
 	//        "lockedCoins": "8045200000000"
 	//    }
@@ -220,7 +227,7 @@ func (cor *DatabaseCoinOutputResult) LoadBytes(b []byte) error {
 	}
 
 	// load returned CoinOutput values
-	decoder := rivineencoding.NewDecoder(bytes.NewReader(b[coinOutputIDStringSize:]))
+	decoder := siabin.NewDecoder(bytes.NewReader(b[coinOutputIDStringSize:]))
 	err = decoder.DecodeAll(
 		&cor.UnlockHash,
 		&cor.CoinValue,
@@ -1234,6 +1241,26 @@ func (rdb *RedisDatabase) DeleteBotRecord(id types.BotID) error {
 	err := RedisError(rdb.conn.Do("HDEL", key, field))
 	if err != nil {
 		return fmt.Errorf("failed to delete bot record from 3Bot %v: %v", id, err)
+	}
+	return nil
+}
+
+// AddERC20AddressRegistration implements Database.AddERC20AddressRegistration
+func (rdb *RedisDatabase) AddERC20AddressRegistration(erc20Address types.ERC20Address, tftAddress types.UnlockHash) error {
+	key, field := database.GetERC20AddressKeyAndField(erc20Address)
+	err := RedisError(rdb.conn.Do("HSETNX", key, field, rdb.marshalData(&tftAddress)))
+	if err != nil {
+		return fmt.Errorf("failed to create ERC20 Address Registration for address %v: %v", erc20Address, err)
+	}
+	return nil
+}
+
+// DeleteERC20AddressRegistration implements Database.DeleteERC20AddressRegistration
+func (rdb *RedisDatabase) DeleteERC20AddressRegistration(erc20Address types.ERC20Address) error {
+	key, field := database.GetERC20AddressKeyAndField(erc20Address)
+	err := RedisError(rdb.conn.Do("HDEL", key, field))
+	if err != nil {
+		return fmt.Errorf("failed to delete ERC20 Address Registration for addr %v: %v", erc20Address, err)
 	}
 	return nil
 }

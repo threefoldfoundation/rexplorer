@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	rivineencoding "github.com/rivine/rivine/encoding"
-	"github.com/rivine/rivine/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
-	tfencoding "github.com/threefoldfoundation/tfchain/pkg/encoding"
 	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
+	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
+	"github.com/threefoldtech/rivine/types"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -28,6 +28,7 @@ type (
 		BlockHeight                           BlockHeight `json:"blockHeight" msg:"cbh"`
 		TransactionCount                      uint64      `json:"txCount" msg:"txc"`
 		CoinCreationTransactionCount          uint64      `json:"coinCreationTxCount" msg:"cctxc"`
+		CoinBurnTransactionCount              uint64      `json:"coinBurnTxCount" msg:"cbtxc"`
 		CoinCreatorDefinitionTransactionCount uint64      `json:"coinCreatorDefinitionTxCount" msg:"ccdtxc"`
 		ThreeBotRegistrationTransactionCount  uint64      `json:"threeBotRegistrationTransactionCount" msg:"tbrtxc"`
 		ThreeBotUpdateTransactionCount        uint64      `json:"threeBotUpdateTransactionCount" msg:"tbutxc"`
@@ -37,8 +38,10 @@ type (
 		CoinInputCount                        uint64      `json:"coinInputCount" msg:"cic"`
 		MinerPayoutCount                      uint64      `json:"minerPayoutCount" msg:"mpc"`
 		TransactionFeeCount                   uint64      `json:"txFeeCount" msg:"txfc"`
+		FoundationFeeCount                    uint64      `json:"foundationFeeCount" msg:"ffc"`
 		MinerPayouts                          Currency    `json:"minerPayouts" msg:"mpt"`
 		TransactionFees                       Currency    `json:"txFees" msg:"txft"`
+		FoundationFees                        Currency    `json:"foundationFees" msg:"fft"`
 		Coins                                 Currency    `json:"coins" msg:"ct"`
 		LockedCoins                           Currency    `json:"lockedCoins" msg:"lct"`
 	}
@@ -170,6 +173,7 @@ func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter
 		Blockheight:                          uint64(stats.BlockHeight.BlockHeight),
 		TxCount:                              stats.TransactionCount,
 		CoinCreationTxCount:                  stats.CoinCreationTransactionCount,
+		CoinBurnTxCount:                      stats.CoinBurnTransactionCount,
 		CoinCreatorDefTxCount:                stats.CoinCreatorDefinitionTransactionCount,
 		ThreeBotRegistrationTransactionCount: stats.ThreeBotRegistrationTransactionCount,
 		ThreeBotUpdateTransactionCount:       stats.ThreeBotUpdateTransactionCount,
@@ -179,8 +183,10 @@ func (stats *NetworkStats) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter
 		CoinInputCount:                       stats.CoinInputCount,
 		MinerPayoutCount:                     stats.MinerPayoutCount,
 		TxFeeCount:                           stats.TransactionFeeCount,
+		FoundationFeeCount:                   stats.FoundationFeeCount,
 		MinerPayouts:                         stats.MinerPayouts.Bytes(),
 		TxFees:                               stats.TransactionFees.Bytes(),
+		FoundationFees:                       stats.FoundationFees.Bytes(),
 		Coins:                                stats.Coins.Bytes(),
 		LockedCoins:                          stats.LockedCoins.Bytes(),
 	})
@@ -205,6 +211,7 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.BlockHeight = AsBlockHeight(types.BlockHeight(pb.Blockheight))
 	stats.TransactionCount = pb.TxCount
 	stats.CoinCreationTransactionCount = pb.CoinCreationTxCount
+	stats.CoinBurnTransactionCount = pb.CoinBurnTxCount
 	stats.CoinCreatorDefinitionTransactionCount = pb.CoinCreatorDefTxCount
 	stats.ThreeBotRegistrationTransactionCount = pb.ThreeBotRegistrationTransactionCount
 	stats.ThreeBotUpdateTransactionCount = pb.ThreeBotUpdateTransactionCount
@@ -214,6 +221,7 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	stats.CoinInputCount = pb.CoinInputCount
 	stats.MinerPayoutCount = pb.MinerPayoutCount
 	stats.TransactionFeeCount = pb.TxFeeCount
+	stats.FoundationFeeCount = pb.FoundationFeeCount
 
 	// unmarshal all required Currency values
 	err = stats.MinerPayouts.LoadBytes(pb.MinerPayouts)
@@ -223,6 +231,10 @@ func (stats *NetworkStats) ProtocolBufferUnmarshal(r encoding.ProtocolBufferRead
 	err = stats.TransactionFees.LoadBytes(pb.TxFees)
 	if err != nil {
 		return fmt.Errorf("NetworkStats: TransactionFees: %v", err)
+	}
+	err = stats.FoundationFees.LoadBytes(pb.FoundationFees)
+	if err != nil {
+		return fmt.Errorf("NetworkStats: FoundationFees: %v", err)
 	}
 	err = stats.LockedCoins.LoadBytes(pb.LockedCoins)
 	if err != nil {
@@ -274,7 +286,7 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	if n := len(wallet.MultiSignAddresses); n > 0 {
 		pb.MultisignAddresses = make([][]byte, n)
 		for idx, uh := range wallet.MultiSignAddresses {
-			pb.MultisignAddresses[idx] = rivineencoding.Marshal(uh)
+			pb.MultisignAddresses[idx] = siabin.Marshal(uh)
 		}
 	}
 	// add optional MultiSignData only if available
@@ -284,7 +296,7 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 			Owners:             make([][]byte, len(wallet.MultiSignData.Owners)),
 		}
 		for idx, uh := range wallet.MultiSignData.Owners {
-			pb.MultisignData.Owners[idx] = rivineencoding.Marshal(uh)
+			pb.MultisignData.Owners[idx] = siabin.Marshal(uh)
 		}
 	}
 	// Marshal the entire wallet into the given ProtocolBufferWriter
@@ -576,7 +588,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 	if n := len(pb.MultisignAddresses); n > 0 {
 		wallet.MultiSignAddresses = make([]UnlockHash, n)
 		for i, b := range pb.MultisignAddresses {
-			err = rivineencoding.Unmarshal(b, &wallet.MultiSignAddresses[i])
+			err = siabin.Unmarshal(b, &wallet.MultiSignAddresses[i])
 			if err != nil {
 				return fmt.Errorf("Wallet: MultiSignAddresses: address #%d: %v", i, err)
 			}
@@ -593,7 +605,7 @@ func (wallet *Wallet) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader) e
 		// assign all owners
 		wallet.MultiSignData.Owners = make([]UnlockHash, len(pb.MultisignData.Owners))
 		for i, b := range pb.MultisignData.Owners {
-			err = rivineencoding.Unmarshal(b, &wallet.MultiSignData.Owners[i])
+			err = siabin.Unmarshal(b, &wallet.MultiSignData.Owners[i])
 			if err != nil {
 				return fmt.Errorf("Wallet: MultiSignData: owner #%d: %v", i, err)
 			}
@@ -706,10 +718,10 @@ func (record BotRecord) TfchainRecord() tftypes.BotRecord {
 func (record *BotRecord) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
 	err := w.Marshal(&PBThreeBotRecord{
 		Id:               uint32(record.ID.TfchainBotID()),
-		NetworkAddresses: tfencoding.Marshal(record.Addresses),
-		Names:            tfencoding.Marshal(record.Names),
-		ExpirationTime:   tfencoding.Marshal(record.Expiration),
-		PublicKey:        tfencoding.Marshal(record.PublicKey),
+		NetworkAddresses: rivbin.Marshal(record.Addresses),
+		Names:            rivbin.Marshal(record.Names),
+		ExpirationTime:   rivbin.Marshal(record.Expiration),
+		PublicKey:        rivbin.Marshal(record.PublicKey),
 	})
 	if err != nil {
 		return fmt.Errorf("BotRecord: %v", err)
@@ -731,19 +743,19 @@ func (record *BotRecord) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader
 	record.ID = NewBotIDFromTfchainBotID(tftypes.BotID(pb.Id))
 
 	// unmarshal all values that requires decoding
-	err = tfencoding.Unmarshal(pb.NetworkAddresses, &record.Addresses)
+	err = rivbin.Unmarshal(pb.NetworkAddresses, &record.Addresses)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Addresses: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.Names, &record.Names)
+	err = rivbin.Unmarshal(pb.Names, &record.Names)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Names: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.ExpirationTime, &record.Expiration)
+	err = rivbin.Unmarshal(pb.ExpirationTime, &record.Expiration)
 	if err != nil {
 		return fmt.Errorf("BotRecord: Expiration: %v", err)
 	}
-	err = tfencoding.Unmarshal(pb.PublicKey, &record.PublicKey)
+	err = rivbin.Unmarshal(pb.PublicKey, &record.PublicKey)
 	if err != nil {
 		return fmt.Errorf("BotRecord: PublicKey: %v", err)
 	}

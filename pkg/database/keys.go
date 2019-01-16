@@ -14,9 +14,10 @@ const (
 
 	CoinCreatorsKey = "coincreators"
 
-	AddressKeyPrefix    = "a:"
-	CoinOutputKeyPrefix = "c:"
-	ThreeBotKeyPrefix   = "b:"
+	AddressKeyPrefix      = "a:"
+	CoinOutputKeyPrefix   = "c:"
+	ThreeBotKeyPrefix     = "b:"
+	ERC20AddressKeyPrefix = "e:"
 )
 
 // GetAddressKeyAndField gets the key and field hash for an unlock hash.
@@ -46,4 +47,10 @@ func GetThreeBotKeyAndField(id types.BotID) (string, string) {
 	}
 	key := ThreeBotKeyPrefix + str[:cop]
 	return key, field
+}
+
+// GetERC20AddressKeyAndField gets the key and field hash for an ERC20 Address.
+func GetERC20AddressKeyAndField(addr types.ERC20Address) (string, string) {
+	str := addr.String()
+	return ERC20AddressKeyPrefix + str[:6], str[6:]
 }

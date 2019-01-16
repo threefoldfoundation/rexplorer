@@ -3,7 +3,7 @@ package rflag
 import (
 	"testing"
 
-	"github.com/rivine/rivine/modules"
+	"github.com/threefoldtech/rivine/modules"
 )
 
 func TestNetAddressArrayFlag(t *testing.T) {

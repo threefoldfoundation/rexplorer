@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/rivine/rivine/build"
-	"github.com/rivine/rivine/modules"
-	"github.com/rivine/rivine/types"
+	"github.com/threefoldtech/rivine/build"
+	"github.com/threefoldtech/rivine/modules"
+	"github.com/threefoldtech/rivine/types"
 )
 
 var (
-	rawVersion = "v1.1.2-alpha"
+	rawVersion = "v1.1.2-rc1"
 	// Version of the tfchain binaries.
 	//
 	// Value is defined by a private build flag,
@@ -357,6 +357,13 @@ func GetTestnetBootstrapPeers() []modules.NetAddress {
 		"bootstrap3.testnet.threefoldtoken.com:23112",
 		"bootstrap4.testnet.threefoldtoken.com:24112",
 		"bootstrap5.testnet.threefoldtoken.com:23112",
+	}
+}
+
+// GetDevnetBootstrapPeers sets the default devnet bootstrap node addresses
+func GetDevnetBootstrapPeers() []modules.NetAddress {
+	return []modules.NetAddress{
+		"localhost:23112",
 	}
 }
 

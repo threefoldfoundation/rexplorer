@@ -126,27 +126,6 @@
   revision = "19c3af6fd3cefb5dc9c05dfc84122e8f74f92927"
 
 [[projects]]
-  branch = "master"
-  digest = "1:ae9ba98017a21387c7d5bf39db573bf6eaa1067297c66bc5920ffad61cebd24b"
-  name = "github.com/rivine/rivine"
-  packages = [
-    "build",
-    "crypto",
-    "encoding",
-    "modules",
-    "modules/consensus",
-    "modules/gateway",
-    "persist",
-    "pkg/api",
-    "pkg/cli",
-    "pkg/client",
-    "sync",
-    "types",
-  ]
-  pruneopts = "NUT"
-  revision = "b09c4d270ea92918b208b6e28c28c858bbc203ce"
-
-[[projects]]
   digest = "1:3186aade954ad7beb5a94a678d9d108de9f7ac7127de34255f3feed64cfca525"
   name = "github.com/rivine/smux"
   packages = ["."]
@@ -172,17 +151,38 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:bbd00a05af22c3785820a58a14296ff8abdb0927f48b52875f11b54c1e5ecd8d"
+  digest = "1:2a4740e0c066b3c9e63b7042cec3a6d344218ba7318c19bb70386d0de719a78b"
   name = "github.com/threefoldfoundation/tfchain"
   packages = [
     "pkg/config",
-    "pkg/encoding",
     "pkg/persist",
     "pkg/persist/internal",
     "pkg/types",
   ]
   pruneopts = "NUT"
-  revision = "b3213e17176fcf9eeead73892836ba326ec58e1a"
+  revision = "123d8a78b6fa34826a5183b4233e3c50cb8265ec"
+
+[[projects]]
+  branch = "master"
+  digest = "1:ecbb76ae2d24e754586156e63179abcc2f858af6a4db4bf7a3374d2f8cee4d0b"
+  name = "github.com/threefoldtech/rivine"
+  packages = [
+    "build",
+    "crypto",
+    "modules",
+    "modules/consensus",
+    "modules/gateway",
+    "persist",
+    "pkg/api",
+    "pkg/cli",
+    "pkg/client",
+    "pkg/encoding/rivbin",
+    "pkg/encoding/siabin",
+    "sync",
+    "types",
+  ]
+  pruneopts = "NUT"
+  revision = "739b81e1a4c43b95059abc3c9da83f5addf83e7a"
 
 [[projects]]
   digest = "1:eaa6698f44de8f2977e93c9b946e60a8af75f565058658aad2df8032b55c84e5"
@@ -296,20 +296,20 @@
     "github.com/gobwas/glob",
     "github.com/gogo/protobuf/proto",
     "github.com/gomodule/redigo/redis",
-    "github.com/rivine/rivine/build",
-    "github.com/rivine/rivine/crypto",
-    "github.com/rivine/rivine/encoding",
-    "github.com/rivine/rivine/modules",
-    "github.com/rivine/rivine/modules/consensus",
-    "github.com/rivine/rivine/modules/gateway",
-    "github.com/rivine/rivine/pkg/client",
-    "github.com/rivine/rivine/types",
     "github.com/spf13/cobra",
     "github.com/spf13/pflag",
     "github.com/threefoldfoundation/tfchain/pkg/config",
-    "github.com/threefoldfoundation/tfchain/pkg/encoding",
     "github.com/threefoldfoundation/tfchain/pkg/persist",
     "github.com/threefoldfoundation/tfchain/pkg/types",
+    "github.com/threefoldtech/rivine/build",
+    "github.com/threefoldtech/rivine/crypto",
+    "github.com/threefoldtech/rivine/modules",
+    "github.com/threefoldtech/rivine/modules/consensus",
+    "github.com/threefoldtech/rivine/modules/gateway",
+    "github.com/threefoldtech/rivine/pkg/client",
+    "github.com/threefoldtech/rivine/pkg/encoding/rivbin",
+    "github.com/threefoldtech/rivine/pkg/encoding/siabin",
+    "github.com/threefoldtech/rivine/types",
     "github.com/tinylib/msgp/msgp",
   ]
   solver-name = "gps-cdcl"
