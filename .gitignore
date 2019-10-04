@@ -20,3 +20,5 @@ release/
 # Python
 *.pyc
 __pycache__
+tfchain/standard
+rexplorer
