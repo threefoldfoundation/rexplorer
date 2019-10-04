@@ -166,7 +166,7 @@ func (s *service) indexVarsFromStats(stats types.NetworkStats, uniqueAddresses u
 	i.CoinCreatorDefinitionTransactionCount = stats.CoinCreatorDefinitionTransactionCount
 	i.ThreeBotRegistrationTransactionCount = stats.ThreeBotRegistrationTransactionCount
 	i.ThreeBotUpdateTransactionCount = stats.ThreeBotUpdateTransactionCount
-	i.BlockCreationTransactionCount = stats.ValueTransactionCount - stats.CoinCreationTransactionCount - stats.CoinCreatorDefinitionTransactionCount
+	i.BlockCreationTransactionCount = stats.TransactionCount - stats.ValueTransactionCount - stats.CoinCreationTransactionCount - stats.CoinCreatorDefinitionTransactionCount
 	i.BlockHeight = stats.BlockHeight
 	i.Timestamp = stats.Timestamp
 	i.CoinInputCount = stats.CoinInputCount
@@ -189,15 +189,15 @@ func (s *service) indexVarsFromStats(stats types.NetworkStats, uniqueAddresses u
 	lcp, _ = lcpb.Float64()
 	i.PercentageLocked = fmt.Sprintf("%08.5f", lcp)
 
-	i.PercentageValueTransactions = fmt.Sprintf("%08.5f", float64(stats.ValueTransactionCount)/float64(stats.TransactionCount))
-	i.PercentageCoinCreationTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount))
-	i.PercentageCoinCreatorDefinitionTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreatorDefinitionTransactionCount)/float64(stats.TransactionCount))
-	i.PercentageThreeBotRegistrationTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotRegistrationTransactionCount)/float64(stats.TransactionCount))
-	i.PercentageThreeBotUpdateTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotUpdateTransactionCount)/float64(stats.TransactionCount))
-	i.PercentageBlockCreationTransactions = fmt.Sprintf("%08.5f", float64(i.BlockCreationTransactionCount)/float64(stats.TransactionCount))
+	i.PercentageValueTransactions = fmt.Sprintf("%08.5f", float64(stats.ValueTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageCoinCreationTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageCoinCreatorDefinitionTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreatorDefinitionTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageThreeBotRegistrationTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotRegistrationTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageThreeBotUpdateTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotUpdateTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageBlockCreationTransactions = fmt.Sprintf("%08.5f", float64(i.BlockCreationTransactionCount)/float64(stats.TransactionCount)*100)
 
-	i.PercentageLiquidOutputs = fmt.Sprintf("%08.5f", float64(i.LiquidCoinOutputCount)/float64(stats.CoinOutputCount))
-	i.PercentageLockedOutputs = fmt.Sprintf("%08.5f", float64(i.LockedCoinOutputCount)/float64(stats.CoinOutputCount))
+	i.PercentageLiquidOutputs = fmt.Sprintf("%08.5f", float64(i.LiquidCoinOutputCount)/float64(stats.CoinOutputCount)*100)
+	i.PercentageLockedOutputs = fmt.Sprintf("%08.5f", float64(i.LockedCoinOutputCount)/float64(stats.CoinOutputCount)*100)
 
 	return i
 }
