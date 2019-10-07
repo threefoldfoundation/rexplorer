@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
@@ -31,16 +32,16 @@ type (
 		cc client.CurrencyConvertor
 	}
 
-	// IndexVars to render the index.html
-	IndexVars struct {
-		TotalCoins                                  string            `json:"total_coins"`
-		LiquidCoins                                 string            `json:"liquid_coins"`
-		LockedCoins                                 string            `json:"locked_coins"`
+	// ChainStats to render the index.html
+	ChainStats struct {
+		TotalCoins                                  types.Currency    `json:"total_coins"`
+		LiquidCoins                                 types.Currency    `json:"liquid_coins"`
+		LockedCoins                                 types.Currency    `json:"locked_coins"`
 		PercentageLiquid                            string            `json:"-"`
 		PercentageLocked                            string            `json:"-"`
-		MinerPayouts                                string            `json:"miner_payouts"`
-		TransactionFees                             string            `json:"transaction_fees"`
-		FoundationFees                              string            `json:"foundation_fees"`
+		MinerPayouts                                types.Currency    `json:"miner_payouts"`
+		TransactionFees                             types.Currency    `json:"transaction_fees"`
+		FoundationFees                              types.Currency    `json:"foundation_fees"`
 		TransactionCount                            uint64            `json:"transaction_count"`
 		ValueTransactionCount                       uint64            `json:"value_transaction_count"`
 		CoinCreationTransactionCount                uint64            `json:"coin_creation_transaction_count"`
@@ -113,6 +114,7 @@ func main() {
 	}
 
 	http.HandleFunc("/", service.ShowStats)
+	http.HandleFunc("/api/v1/stats", service.Stats)
 
 	server := http.Server{Addr: ":8080"}
 	defer func() {
@@ -142,8 +144,13 @@ func (s *service) ShowStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateVars := s.indexVarsFromStats(stats, uniqueAddresses)
-	err = indexTemplate.ExecuteTemplate(w, "index.html", templateVars)
+	templateVars := buildStats(stats, uniqueAddresses)
+	// inject the currencyconvertor so the template can use it to properly format currency types
+	args := struct {
+		ChainStats
+		client.CurrencyConvertor
+	}{templateVars, s.cc}
+	err = indexTemplate.ExecuteTemplate(w, "index.html", args)
 	if err != nil {
 		// we Can't write the header a this point as it is already set by ExecuteTemplate
 		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
@@ -151,15 +158,40 @@ func (s *service) ShowStats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *service) indexVarsFromStats(stats types.NetworkStats, uniqueAddresses uint64) IndexVars {
-	liquidCoins := stats.Coins.Currency.Sub(stats.LockedCoins.Currency)
-	i := IndexVars{}
-	i.TotalCoins = s.cc.ToCoinStringWithUnit(stats.Coins.Currency)
-	i.LiquidCoins = s.cc.ToCoinStringWithUnit(liquidCoins)
-	i.LockedCoins = s.cc.ToCoinStringWithUnit(stats.LockedCoins.Currency)
-	i.MinerPayouts = s.cc.ToCoinStringWithUnit(stats.MinerPayouts.Currency)
-	i.TransactionFees = s.cc.ToCoinStringWithUnit(stats.TransactionFees.Currency)
-	i.FoundationFees = s.cc.ToCoinStringWithUnit(stats.FoundationFees.Currency)
+func (s *service) Stats(w http.ResponseWriter, r *http.Request) {
+
+	stats, err := s.cl.getGlobalStats()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+		return
+	}
+
+	uniqueAddresses, err := s.cl.getUniqueAddressCount()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+		return
+	}
+
+	resp := buildStats(stats, uniqueAddresses)
+	w.Header().Set("Content-Type", "Application/json")
+	if err = json.NewEncoder(w).Encode(resp); err != nil {
+		// Can't write the header as it is already set by the encoder
+		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+		return
+	}
+}
+
+func buildStats(stats types.NetworkStats, uniqueAddresses uint64) ChainStats {
+	liquidCoins := stats.Coins.Sub(stats.LockedCoins)
+	i := ChainStats{}
+	i.TotalCoins = stats.Coins
+	i.LiquidCoins = liquidCoins
+	i.LockedCoins = stats.LockedCoins
+	i.MinerPayouts = stats.MinerPayouts
+	i.TransactionFees = stats.TransactionFees
+	i.FoundationFees = stats.FoundationFees
 	i.TransactionCount = stats.TransactionCount
 	i.ValueTransactionCount = stats.ValueTransactionCount - stats.ThreeBotRegistrationTransactionCount - stats.ThreeBotUpdateTransactionCount
 	i.CoinCreationTransactionCount = stats.CoinCreationTransactionCount
@@ -182,22 +214,22 @@ func (s *service) indexVarsFromStats(stats types.NetworkStats, uniqueAddresses u
 	lcpb := big.NewFloat(0).Quo(big.NewFloat(0).SetInt(liquidCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
 	lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
 	lcp, _ := lcpb.Float64()
-	i.PercentageLiquid = fmt.Sprintf("%08.5f", lcp)
+	i.PercentageLiquid = fmt.Sprintf("%.5g", lcp)
 
 	lcpb = big.NewFloat(0).Quo(big.NewFloat(0).SetInt(stats.LockedCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
 	lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
 	lcp, _ = lcpb.Float64()
-	i.PercentageLocked = fmt.Sprintf("%08.5f", lcp)
+	i.PercentageLocked = fmt.Sprintf("%.5g", lcp)
 
-	i.PercentageValueTransactions = fmt.Sprintf("%08.5f", float64(stats.ValueTransactionCount)/float64(stats.TransactionCount)*100)
-	i.PercentageCoinCreationTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100)
-	i.PercentageCoinCreatorDefinitionTransactions = fmt.Sprintf("%08.5f", float64(stats.CoinCreatorDefinitionTransactionCount)/float64(stats.TransactionCount)*100)
-	i.PercentageThreeBotRegistrationTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotRegistrationTransactionCount)/float64(stats.TransactionCount)*100)
-	i.PercentageThreeBotUpdateTransactions = fmt.Sprintf("%08.5f", float64(stats.ThreeBotUpdateTransactionCount)/float64(stats.TransactionCount)*100)
-	i.PercentageBlockCreationTransactions = fmt.Sprintf("%08.5f", float64(i.BlockCreationTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageValueTransactions = fmt.Sprintf("%.5g", float64(stats.ValueTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageCoinCreationTransactions = fmt.Sprintf("%.5g", float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageCoinCreatorDefinitionTransactions = fmt.Sprintf("%.5g", float64(stats.CoinCreatorDefinitionTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageThreeBotRegistrationTransactions = fmt.Sprintf("%.5g", float64(stats.ThreeBotRegistrationTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageThreeBotUpdateTransactions = fmt.Sprintf("%.5g", float64(stats.ThreeBotUpdateTransactionCount)/float64(stats.TransactionCount)*100)
+	i.PercentageBlockCreationTransactions = fmt.Sprintf("%.5g", float64(i.BlockCreationTransactionCount)/float64(stats.TransactionCount)*100)
 
-	i.PercentageLiquidOutputs = fmt.Sprintf("%08.5f", float64(i.LiquidCoinOutputCount)/float64(stats.CoinOutputCount)*100)
-	i.PercentageLockedOutputs = fmt.Sprintf("%08.5f", float64(i.LockedCoinOutputCount)/float64(stats.CoinOutputCount)*100)
+	i.PercentageLiquidOutputs = fmt.Sprintf("%.5g", float64(i.LiquidCoinOutputCount)/float64(stats.CoinOutputCount)*100)
+	i.PercentageLockedOutputs = fmt.Sprintf("%.5g", float64(i.LockedCoinOutputCount)/float64(stats.CoinOutputCount)*100)
 
 	return i
 }
@@ -252,14 +284,14 @@ var indexTemplate = mustTemplate("index.html", `
 <body>
 	<h2>Tfchain network has:</h2>
 	<ul>
-		<li>A total of {{ .TotalCoins }}</li>
+		<li>A total of {{ .ToCoinStringWithUnit .TotalCoins.Currency }}</li>
 		<ul>
-			<li>{{ .LiquidCoins }} ({{ .PercentageLiquid }}%) liquid</li>
-			<li>{{ .LockedCoins }} ({{ .PercentageLocked }}%) locked</li>
+			<li>{{ .ToCoinStringWithUnit .LiquidCoins.Currency }} ({{ .PercentageLiquid }}%) liquid</li>
+			<li>{{ .ToCoinStringWithUnit .LockedCoins.Currency }} ({{ .PercentageLocked }}%) locked</li>
 		</ul>
-		<li>{{ .MinerPayouts }} is paid out as miner payout</li>
-		<li>{{ .TransactionFees }} has been collected as transaction fees</li>
-		<li>{{ .FoundationFees }} is paid out as foundation fees</li>
+		<li>{{ .ToCoinStringWithUnit .MinerPayouts.Currency }} is paid out as miner payout</li>
+		<li>{{ .ToCoinStringWithUnit .TransactionFees.Currency }} has been collected as transaction fees</li>
+		<li>{{ .ToCoinStringWithUnit .FoundationFees.Currency }} is paid out as foundation fees</li>
 		<li>A total of {{ .TransactionCount }} transactions</li>
 		<ul>
 			<li>{{ .ValueTransactionCount }} ({{ .PercentageValueTransactions }}%) value transactions</li>
@@ -269,7 +301,7 @@ var indexTemplate = mustTemplate("index.html", `
 			<li>{{ .ThreeBotUpdateTransactionCount }} ({{ .PercentageThreeBotUpdateTransactions }}%) 3Bot update transactions</li>
 			<li>{{ .BlockCreationTransactionCount }} ({{ .PercentageBlockCreationTransactions }}%) pure block creation transactions</li>
 		</ul>
-		<li>A block height of {{ .BlockHeight }}</li>
+		<li>A block height of {{ .BlockHeight }} , with the last block at time {{ .Timestamp }}</li>
 		<li>A total of {{ .ValueTransactionCount }} transactions using {{ .CoinInputCount }} coin inputs</li>
 		<li>A total of {{ .CoinOutputCount }} coin outputs</li>
 		<ul>
