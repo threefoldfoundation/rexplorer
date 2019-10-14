@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html/template"
 	"math/big"
 	"net/http"
+	"text/template"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/threefoldfoundation/rexplorer/pkg/database"
@@ -14,6 +15,7 @@ import (
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
 	"github.com/threefoldtech/rivine/pkg/client"
+	"github.com/wcharczuk/go-chart"
 )
 
 type (
@@ -37,8 +39,8 @@ type (
 		TotalCoins                                  types.Currency    `json:"total_coins"`
 		LiquidCoins                                 types.Currency    `json:"liquid_coins"`
 		LockedCoins                                 types.Currency    `json:"locked_coins"`
-		PercentageLiquid                            string            `json:"-"`
-		PercentageLocked                            string            `json:"-"`
+		PercentageLiquid                            float64           `json:"-"`
+		PercentageLocked                            float64           `json:"-"`
 		MinerPayouts                                types.Currency    `json:"miner_payouts"`
 		TransactionFees                             types.Currency    `json:"transaction_fees"`
 		FoundationFees                              types.Currency    `json:"foundation_fees"`
@@ -132,6 +134,7 @@ func main() {
 func (s *service) ShowStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.cl.getGlobalStats()
 	if err != nil {
+		fmt.Println("Couldn't get stats:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
 		return
@@ -139,19 +142,37 @@ func (s *service) ShowStats(w http.ResponseWriter, r *http.Request) {
 
 	uniqueAddresses, err := s.cl.getUniqueAddressCount()
 	if err != nil {
+		fmt.Println("Couldn't get unique addresses:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
 		return
 	}
 
 	templateVars := buildStats(stats, uniqueAddresses)
+
+	graph := chart.PieChart{
+		Title:  "Coin distribution",
+		Values: []chart.Value{{Label: "locked", Value: templateVars.PercentageLocked}, {Label: "Unlocked", Value: templateVars.PercentageLiquid}},
+		Width:  200,
+		Height: 200,
+	}
+	buf := bytes.NewBuffer(nil)
+	if err := graph.Render(chart.SVG, buf); err != nil {
+		fmt.Println("Couldn't render graph:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+		return
+	}
+
 	// inject the currencyconvertor so the template can use it to properly format currency types
 	args := struct {
 		ChainStats
 		client.CurrencyConvertor
-	}{templateVars, s.cc}
+		CoinDistributionGraph string
+	}{ChainStats: templateVars, CurrencyConvertor: s.cc, CoinDistributionGraph: string(buf.Bytes())}
 	err = indexTemplate.ExecuteTemplate(w, "index.html", args)
 	if err != nil {
+		fmt.Println("Couldn't render template:", err)
 		// we Can't write the header a this point as it is already set by ExecuteTemplate
 		_, _ = w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
 		return
@@ -159,7 +180,6 @@ func (s *service) ShowStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) Stats(w http.ResponseWriter, r *http.Request) {
-
 	stats, err := s.cl.getGlobalStats()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -213,13 +233,11 @@ func buildStats(stats types.NetworkStats, uniqueAddresses uint64) ChainStats {
 
 	lcpb := big.NewFloat(0).Quo(big.NewFloat(0).SetInt(liquidCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
 	lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
-	lcp, _ := lcpb.Float64()
-	i.PercentageLiquid = fmt.Sprintf("%.5g", lcp)
+	i.PercentageLiquid, _ = lcpb.Float64()
 
 	lcpb = big.NewFloat(0).Quo(big.NewFloat(0).SetInt(stats.LockedCoins.Big()), big.NewFloat(0).SetInt(stats.Coins.Big()))
 	lcpb = lcpb.Mul(lcpb, big.NewFloat(100))
-	lcp, _ = lcpb.Float64()
-	i.PercentageLocked = fmt.Sprintf("%.5g", lcp)
+	i.PercentageLocked, _ = lcpb.Float64()
 
 	i.PercentageValueTransactions = fmt.Sprintf("%.5g", float64(stats.ValueTransactionCount)/float64(stats.TransactionCount)*100)
 	i.PercentageCoinCreationTransactions = fmt.Sprintf("%.5g", float64(stats.CoinCreationTransactionCount)/float64(stats.TransactionCount)*100)
@@ -285,10 +303,13 @@ var indexTemplate = mustTemplate("index.html", `
 	<h2>Tfchain network has:</h2>
 	<ul>
 		<li>A total of {{ .ToCoinStringWithUnit .TotalCoins.Currency }}</li>
-		<ul>
-			<li>{{ .ToCoinStringWithUnit .LiquidCoins.Currency }} ({{ .PercentageLiquid }}%) liquid</li>
-			<li>{{ .ToCoinStringWithUnit .LockedCoins.Currency }} ({{ .PercentageLocked }}%) locked</li>
-		</ul>
+		<div style="display: inline-flex; align-items: center;">
+			<ul>
+				<li>{{ .ToCoinStringWithUnit .LiquidCoins.Currency }} ({{ printf "%.5g" .PercentageLiquid }}%) liquid</li>
+				<li>{{ .ToCoinStringWithUnit .LockedCoins.Currency }} ({{ printf "%.5g" .PercentageLocked }}%) locked</li>
+			</ul>
+			{{ .CoinDistributionGraph }}
+		</div>
 		<li>{{ .ToCoinStringWithUnit .MinerPayouts.Currency }} is paid out as miner payout</li>
 		<li>{{ .ToCoinStringWithUnit .TransactionFees.Currency }} has been collected as transaction fees</li>
 		<li>{{ .ToCoinStringWithUnit .FoundationFees.Currency }} is paid out as foundation fees</li>

@@ -86,6 +86,17 @@
   version = "v1.1.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:62c57507df491b657e9ae2645f30958d9964c8eeb380600469eedc951ebb3a0e"
+  name = "github.com/golang/freetype"
+  packages = [
+    "raster",
+    "truetype",
+  ]
+  pruneopts = "NUT"
+  revision = "e2365dfdc4a05e4b8299a783240d4a7d5a65d4e4"
+
+[[projects]]
   digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
   name = "github.com/gomodule/redigo"
   packages = [
@@ -215,6 +226,21 @@
   revision = "dbb3b84ba2ef14e894f5e33d6c6e43641e665738"
 
 [[projects]]
+  digest = "1:e00ad94b959d05dbe2a154b1f5ebb82786ef7dfafeae25f1ba02d3aec64d352d"
+  name = "github.com/wcharczuk/go-chart"
+  packages = [
+    ".",
+    "drawing",
+    "matrix",
+    "roboto",
+    "seq",
+    "util",
+  ]
+  pruneopts = "NUT"
+  revision = "7c3982fe3d8ab0c9eea9ab5d2aced51e45d447bc"
+  version = "v2.0.1"
+
+[[projects]]
   branch = "master"
   digest = "1:95cee5860be057f2a6e41b7995deb0d5efc21bdc6e69d5e9bd50bd4c4aaa13fd"
   name = "gitlab.com/NebulousLabs/fastrand"
@@ -250,6 +276,19 @@
   ]
   pruneopts = "NUT"
   revision = "e84da0312774c21d64ee2317962ef669b27ffb41"
+
+[[projects]]
+  branch = "master"
+  digest = "1:8aa52c7f7476f9ce660f5db479eb0e19681b58783442f33459954757fc6732fe"
+  name = "golang.org/x/image"
+  packages = [
+    "draw",
+    "font",
+    "math/f64",
+    "math/fixed",
+  ]
+  pruneopts = "NUT"
+  revision = "e7c1f5e7dbb87d8921928a6d9fc52fb31ce73b24"
 
 [[projects]]
   branch = "master"
@@ -323,6 +362,7 @@
     "github.com/threefoldtech/rivine/pkg/encoding/siabin",
     "github.com/threefoldtech/rivine/types",
     "github.com/tinylib/msgp/msgp",
+    "github.com/wcharczuk/go-chart",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
