@@ -1,3 +1,4 @@
-Prints all used addresses on the commandline
+Prints all used addresses on the commandline.
 
-Execute `go run main.go` in this folder 
+## Usage 
+Execute `go run main.go` in this folder.

@@ -22,3 +22,4 @@ release/
 __pycache__
 tfchain/standard
 rexplorer
+examples/getstats/getstats
