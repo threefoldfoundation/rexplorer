@@ -981,7 +981,6 @@ validatevalues test —using encoding msgp— on block height 103625 passed :)
 
 * Rob Van Mieghem ([@robvanmieghem](https://github.com/robvanmieghem))
 * Lee Smet ([@leesmet](https://github.com/leesmet))
-* Glen De Cauwsemaecker ([@glendc](https://github.com/glendc))
 
 [tfchain]: https://github.com/threefoldfoundation/tfchain
 [rivine]: https://github.com/threefoldtech/rivine
