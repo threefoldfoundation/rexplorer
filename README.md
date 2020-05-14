@@ -134,7 +134,7 @@ Use "rexplorer [command] --help" for more information about a command.
 ## Using it in 1, 2, 3!
 
 1. download rexplorer: `go get -u github.com/threefoldfoundation/rexplorer`
-2. start a redis server on the default port: `redis-server`
+2. start a redis server on the default port: `redis-server` or `docker run --name rexplorer-redis -d -p 127.0.0.1:6379:6379 redis`
 3. start rexplorer in the folder where you want your persistent data to be stored: `rexplorer`
 4. open another shell, go to `$GOPATH/src/github.com/threefoldfoundation/rexplorer`
 5. run: `watch go run ./examples/getstats/main.go`, you'll see the global statistics update by themself :)
