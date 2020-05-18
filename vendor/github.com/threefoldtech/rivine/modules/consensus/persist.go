@@ -6,11 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
+	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/build"
 	"github.com/threefoldtech/rivine/modules"
 	"github.com/threefoldtech/rivine/persist"
-
-	"github.com/rivine/bbolt"
 )
 
 const (
@@ -44,11 +43,11 @@ func (cs *ConsensusSet) loadDB() error {
 		// Check that the genesis block is correct - typically only incorrect
 		// in the event of developer binaries vs. release binaires.
 		genesisID, err := getPath(tx, 0)
-		if build.DEBUG && err != nil {
-			panic(err)
+		if err != nil {
+			build.Severe(err)
 		}
 		if genesisID != cs.blockRoot.Block.ID() {
-			return errors.New("Blockchain has wrong genesis block, exiting.")
+			return errors.New("blockchain has wrong genesis block, exiting")
 		}
 		return nil
 	})
@@ -56,7 +55,7 @@ func (cs *ConsensusSet) loadDB() error {
 
 // initPersist initializes the persistence structures of the consensus set, in
 // particular loading the database and preparing to manage subscribers.
-func (cs *ConsensusSet) initPersist() error {
+func (cs *ConsensusSet) initPersist(verbose bool) error {
 	// Create the consensus directory.
 	err := os.MkdirAll(cs.persistDir, 0700)
 	if err != nil {
@@ -65,7 +64,7 @@ func (cs *ConsensusSet) initPersist() error {
 
 	// Initialize the logger.
 	cs.log, err = persist.NewFileLogger(cs.bcInfo,
-		filepath.Join(cs.persistDir, logFile))
+		filepath.Join(cs.persistDir, logFile), verbose)
 	if err != nil {
 		return err
 	}
@@ -86,6 +85,7 @@ func (cs *ConsensusSet) initPersist() error {
 	}
 	// Set up the closing of the database.
 	cs.tg.AfterStop(func() {
+		cs.pluginsWaitGroup.Wait()
 		err := cs.db.Close()
 		if err != nil {
 			cs.log.Println("ERROR: Unable to close consensus set database at shutdown:", err)

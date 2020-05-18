@@ -37,6 +37,8 @@ func (s insufficientVersionError) Error() string {
 type peer struct {
 	modules.Peer
 	sess streamSession
+	// rate limiting channel
+	token chan struct{}
 }
 
 // sessionHeader is sent as the initial exchange between peers.
@@ -75,6 +77,7 @@ func (p *peer) accept() (modules.PeerConn, error) {
 // to handle its requests and increments the remotePeers accordingly
 func (g *Gateway) addPeer(p *peer) {
 	g.peers[p.NetAddress] = p
+	g.log.Debugln("Added peer on address", p.NetAddress)
 	go g.threadedListenPeer(p)
 }
 
@@ -178,7 +181,12 @@ func (g *Gateway) managedAcceptConnPeer(conn net.Conn, remoteInfo remoteInfo) er
 			NetAddress: remoteAddr,
 			Version:    remoteInfo.Version,
 		},
-		sess: newSmuxServer(conn),
+		sess:  newSmuxServer(conn),
+		token: make(chan struct{}, g.concurrentRPCPerPeer),
+	}
+	for i := 0; uint64(i) < g.concurrentRPCPerPeer; i++ {
+		// Fill the channel wit htokens
+		peer.token <- struct{}{}
 	}
 
 	g.mu.Lock()
@@ -197,8 +205,8 @@ func (g *Gateway) managedAcceptConnPeer(conn net.Conn, remoteInfo remoteInfo) er
 			err := g.pingNode(remoteAddr)
 			if err == nil {
 				g.mu.Lock()
+				defer g.mu.Unlock()
 				g.addNode(remoteAddr)
-				g.mu.Unlock()
 			}
 		}()
 	}
@@ -586,14 +594,16 @@ func (g *Gateway) acceptConnSessionHandshakeV102(conn net.Conn) (remoteAddress m
 	err = siabin.ReadObject(conn, &remoteAddress, modules.MaxEncodedNetAddressLength)
 	if err != nil {
 		err = errors.New("accept: could not read remote address: " + err.Error())
+		return
 	}
 	// validate the address
 	err = remoteAddress.IsStdValid()
 	if err != nil {
-		if err := siabin.WriteObject(conn, "reject"); err != nil {
-			g.log.Println("WARN: failed to write reject address:", err)
+		if rerr := siabin.WriteObject(conn, "reject"); rerr != nil {
+			g.log.Println("WARN: failed to write reject address:", rerr)
 		}
 		err = fmt.Errorf("peer's address (%v) is invalid: %v", remoteAddress, err)
+		return
 	}
 	// write now our net address
 	g.mu.RLock()
@@ -660,15 +670,22 @@ func (g *Gateway) managedConnect(addr modules.NetAddress) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	g.addPeer(&peer{
+	peer := &peer{
 		Peer: modules.Peer{
 			Inbound:    false,
 			Local:      addr.IsLocal(),
 			NetAddress: addr,
 			Version:    remoteInfo.Version,
 		},
-		sess: newSmuxClient(conn),
-	})
+		sess:  newSmuxClient(conn),
+		token: make(chan struct{}, g.concurrentRPCPerPeer),
+	}
+	for i := 0; uint64(i) < g.concurrentRPCPerPeer; i++ {
+		// Fill the channel with tokens
+		peer.token <- struct{}{}
+	}
+
+	g.addPeer(peer)
 	g.addNode(addr)
 	g.nodes[addr].WasOutboundPeer = true
 
@@ -729,6 +746,7 @@ func (g *Gateway) Disconnect(addr modules.NetAddress) error {
 	delete(g.nodes, addr)
 	g.mu.Unlock()
 
+	g.log.Debugln("Disconnected from peer:", addr)
 	g.log.Println("INFO: disconnected from peer", addr)
 	return nil
 }

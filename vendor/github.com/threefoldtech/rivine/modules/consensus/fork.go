@@ -3,10 +3,10 @@ package consensus
 import (
 	"errors"
 
+	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/build"
 	"github.com/threefoldtech/rivine/modules"
-
-	"github.com/rivine/bbolt"
+	"github.com/threefoldtech/rivine/types"
 )
 
 var (
@@ -28,15 +28,15 @@ func backtrackToCurrentPath(tx *bolt.Tx, pb *processedBlock) []*processedBlock {
 		}
 		// Sanity check - an error should only indicate that pb.Height >
 		// blockHeight(tx).
-		if build.DEBUG && err != nil && pb.Height <= blockHeight(tx) {
-			panic(err)
+		if err != nil && pb.Height <= blockHeight(tx) {
+			build.Severe(err)
 		}
 
 		// Prepend the next block to the list of blocks leading from the
 		// current path to the input block.
 		pb, err = getBlockMap(tx, pb.Block.ParentID)
-		if build.DEBUG && err != nil {
-			panic(err)
+		if err != nil {
+			build.Severe(err)
 		}
 		path = append([]*processedBlock{pb}, path...)
 	}
@@ -49,14 +49,17 @@ func backtrackToCurrentPath(tx *bolt.Tx, pb *processedBlock) []*processedBlock {
 func (cs *ConsensusSet) revertToBlock(tx *bolt.Tx, pb *processedBlock) (revertedBlocks []*processedBlock) {
 	// Sanity check - make sure that pb is in the current path.
 	currentPathID, err := getPath(tx, pb.Height)
-	if build.DEBUG && (err != nil || currentPathID != pb.Block.ID()) {
-		panic(errExternalRevert)
+	if err != nil || currentPathID != pb.Block.ID() {
+		build.Severe(errExternalRevert)
 	}
 
 	// Rewind blocks until 'pb' is the current block.
 	for currentBlockID(tx) != pb.Block.ID() {
 		block := currentProcessedBlock(tx)
-		cs.rewindBlock(tx, block)
+		err = cs.rewindBlock(tx, block)
+		if err != nil {
+			build.Severe(err)
+		}
 		revertedBlocks = append(revertedBlocks, block)
 
 		// Sanity check - after removing a block, check that the consensus set
@@ -79,7 +82,10 @@ func (cs *ConsensusSet) applyUntilBlock(tx *bolt.Tx, pb *processedBlock) (applie
 		// If the diffs for this block have already been generated, apply diffs
 		// directly instead of generating them. This is much faster.
 		if block.DiffsGenerated {
-			cs.forwardBlock(tx, block)
+			err := cs.forwardBlock(tx, block)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			err := cs.generateAndApplyDiff(tx, block)
 			if err != nil {
@@ -102,19 +108,75 @@ func (cs *ConsensusSet) applyUntilBlock(tx *bolt.Tx, pb *processedBlock) (applie
 }
 
 // rewindBlock rewinds a single block from the consensus set. This method assumes that pb is the current top op the chain, i.e. the active fork
-func (cs *ConsensusSet) rewindBlock(tx *bolt.Tx, pb *processedBlock) {
+func (cs *ConsensusSet) rewindBlock(tx *bolt.Tx, pb *processedBlock) error {
 	cs.log.Debugf("[CS] rewinding block %d\n", pb.Height)
 	createDCOBucket(tx, pb.Height)
 	commitDiffSet(tx, pb, modules.DiffRevert)
 	deleteDCOBucket(tx, pb.Height+cs.chainCts.MaturityDelay)
+	return cs.rewindBlockForPlugins(tx, pb)
+}
+
+func (cs *ConsensusSet) rewindBlockForPlugins(tx *bolt.Tx, pb *processedBlock) error {
+	cBlock := modules.ConsensusBlock{
+		Block:                  pb.Block,
+		Height:                 pb.Height,
+		SpentCoinOutputs:       make(map[types.CoinOutputID]types.CoinOutput),
+		SpentBlockStakeOutputs: make(map[types.BlockStakeOutputID]types.BlockStakeOutput),
+	}
+	for _, diff := range pb.CoinOutputDiffs {
+		cBlock.SpentCoinOutputs[diff.ID] = diff.CoinOutput
+	}
+	for _, diff := range pb.DelayedCoinOutputDiffs {
+		cBlock.SpentCoinOutputs[diff.ID] = diff.CoinOutput
+	}
+	for _, diff := range pb.BlockStakeOutputDiffs {
+		cBlock.SpentBlockStakeOutputs[diff.ID] = diff.BlockStakeOutput
+	}
+
+	for name, plugin := range cs.plugins {
+		bucket := cs.bucketForPlugin(tx, name)
+		err := plugin.RevertBlock(cBlock, bucket)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // forwardBlock adds a single block to the chain. It assumes that pb is the block at "currentHeight + 1"
-func (cs *ConsensusSet) forwardBlock(tx *bolt.Tx, pb *processedBlock) {
+func (cs *ConsensusSet) forwardBlock(tx *bolt.Tx, pb *processedBlock) error {
 	cs.log.Debugf("[CS] reapplying block %d\n", pb.Height)
 	createDCOBucket(tx, pb.Height+cs.chainCts.MaturityDelay)
 	commitDiffSet(tx, pb, modules.DiffApply)
 	deleteDCOBucket(tx, pb.Height)
+	return cs.forwardBlockForPlugins(tx, pb)
+}
+
+func (cs *ConsensusSet) forwardBlockForPlugins(tx *bolt.Tx, pb *processedBlock) error {
+	cBlock := modules.ConsensusBlock{
+		Block:                  pb.Block,
+		Height:                 pb.Height,
+		SpentCoinOutputs:       make(map[types.CoinOutputID]types.CoinOutput),
+		SpentBlockStakeOutputs: make(map[types.BlockStakeOutputID]types.BlockStakeOutput),
+	}
+	for _, diff := range pb.CoinOutputDiffs {
+		cBlock.SpentCoinOutputs[diff.ID] = diff.CoinOutput
+	}
+	for _, diff := range pb.DelayedCoinOutputDiffs {
+		cBlock.SpentCoinOutputs[diff.ID] = diff.CoinOutput
+	}
+	for _, diff := range pb.BlockStakeOutputDiffs {
+		cBlock.SpentBlockStakeOutputs[diff.ID] = diff.BlockStakeOutput
+	}
+
+	for name, plugin := range cs.plugins {
+		bucket := cs.bucketForPlugin(tx, name)
+		err := plugin.ApplyBlock(cBlock, bucket)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // forkBlockchain will move the consensus set onto the 'newBlock' fork. An

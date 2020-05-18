@@ -10,7 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	threebottypes "github.com/threefoldfoundation/tfchain/extensions/threebot/types"
+	erc20types "github.com/threefoldtech/rivine-extension-erc20/types"
 	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
 
 	"github.com/threefoldtech/rivine/crypto"
@@ -46,7 +47,7 @@ type (
 	// ERC20Address overwrites the TFChain ERC20Address type,
 	// encapsulating it internally for practical reasons.
 	ERC20Address struct {
-		tftypes.ERC20Address
+		erc20types.ERC20Address
 	}
 
 	// CoinOutputID overwrites the Rivine CoinOutputID type,
@@ -277,7 +278,11 @@ func (uh *UnlockHash) UnmarshalJSON(data []byte) error {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (uh UnlockHash) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(siabin.Marshal(uh))
+	binaryUnlockHash, err := siabin.Marshal(uh)
+	if err != nil {
+		return fmt.Errorf("failed to marshall UnlockHash as string: %v", err)
+	}
+	err = w.WriteBytes(binaryUnlockHash)
 	if err != nil {
 		return fmt.Errorf("failed to write UnlockHash as string: %v", err)
 	}
@@ -305,7 +310,7 @@ func (uh UnlockHash) Msgsize() int {
 
 // AsERC20Address returns a TFChain-typed ERC20Address into
 // the ERC20Address overwritten type used in this project.
-func AsERC20Address(uh tftypes.ERC20Address) ERC20Address {
+func AsERC20Address(uh erc20types.ERC20Address) ERC20Address {
 	return ERC20Address{ERC20Address: uh}
 }
 
@@ -326,7 +331,11 @@ func (addr ERC20Address) UnmarshalJSON(data []byte) error {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (addr ERC20Address) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(rivbin.Marshal(addr))
+	encodedERC20Address, err := rivbin.Marshal(addr)
+	if err != nil {
+		return fmt.Errorf("failed to encode ERC20Address as bytes: %v", err)
+	}
+	err = w.WriteBytes(encodedERC20Address)
 	if err != nil {
 		return fmt.Errorf("failed to write ERC20Address as bytes: %v", err)
 	}
@@ -348,7 +357,7 @@ func (addr *ERC20Address) DecodeMsg(r *msgp.Reader) error {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (addr ERC20Address) Msgsize() int {
-	length := tftypes.ERC20AddressLength
+	length := erc20types.ERC20AddressLength
 	return length + binaryMsgpPrefixSize(length)
 }
 
@@ -537,22 +546,22 @@ type (
 	// NetworkAddressSortedSet overwrites the Tfchain NetworkAddressSortedSet type,
 	// encapsulating it internally for practical reasons.
 	NetworkAddressSortedSet struct {
-		tftypes.NetworkAddressSortedSet
+		threebottypes.NetworkAddressSortedSet
 	}
 	// CompactTimestamp overwrites the Tfchain CompactTimestamp type,
 	// encapsulating it internally for practical reasons.
 	CompactTimestamp struct {
-		tftypes.CompactTimestamp
+		threebottypes.CompactTimestamp
 	}
 	// BotID overwrites the Tfchain BotID type,
 	// encapsulating it internally for practical reasons.
 	BotID struct {
-		tftypes.BotID
+		threebottypes.BotID
 	}
 	// BotNameSortedSet overwrites the Tfchain BotNameSortedSet type,
 	// encapsulating it internally for practical reasons.
 	BotNameSortedSet struct {
-		tftypes.BotNameSortedSet
+		threebottypes.BotNameSortedSet
 	}
 	// PublicKey overwrites the Tfchain PublicKey type,
 	// encapsulating it internally for practical reasons.
@@ -563,18 +572,22 @@ type (
 
 // NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet returns a tfchain-typed NetworkAddressSortedSet into
 // the NetworkAddressSortedSet overwritten type used in this project.
-func NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet(nass tftypes.NetworkAddressSortedSet) NetworkAddressSortedSet {
+func NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet(nass threebottypes.NetworkAddressSortedSet) NetworkAddressSortedSet {
 	return NetworkAddressSortedSet{NetworkAddressSortedSet: nass}
 }
 
 // TfchainNetworkAddressSortedSet returns the tfchain-typed NetworkAddressSortedSet, embedded by this type.
-func (nass NetworkAddressSortedSet) TfchainNetworkAddressSortedSet() tftypes.NetworkAddressSortedSet {
+func (nass NetworkAddressSortedSet) TfchainNetworkAddressSortedSet() threebottypes.NetworkAddressSortedSet {
 	return nass.NetworkAddressSortedSet
 }
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (nass NetworkAddressSortedSet) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(rivbin.Marshal(nass.NetworkAddressSortedSet))
+	encoded, err := rivbin.Marshal(nass.NetworkAddressSortedSet)
+	if err != nil {
+		return fmt.Errorf("failed to encode network address sorted set as bytes: %v", err)
+	}
+	err = w.WriteBytes(encoded)
 	if err != nil {
 		return fmt.Errorf("failed to write network address sorted set as bytes: %v", err)
 	}
@@ -602,12 +615,12 @@ func (nass NetworkAddressSortedSet) Msgsize() int {
 
 // NewCompactTimeStampFromTfchainCompactTimestamp returns a tfchain-typed CompactTimestamp into
 // the CompactTimestamp overwritten type used in this project.
-func NewCompactTimeStampFromTfchainCompactTimestamp(cts tftypes.CompactTimestamp) CompactTimestamp {
+func NewCompactTimeStampFromTfchainCompactTimestamp(cts threebottypes.CompactTimestamp) CompactTimestamp {
 	return CompactTimestamp{CompactTimestamp: cts}
 }
 
 // TfchainCompactTimestamp returns the tfchain-typed CompactTimestamp, embedded by this type.
-func (cts CompactTimestamp) TfchainCompactTimestamp() tftypes.CompactTimestamp {
+func (cts CompactTimestamp) TfchainCompactTimestamp() threebottypes.CompactTimestamp {
 	return cts.CompactTimestamp
 }
 
@@ -647,12 +660,12 @@ func (cts *CompactTimestamp) UnmarshalJSON(data []byte) error {
 
 // NewBotIDFromTfchainBotID returns a tfchain-typed BotID into
 // the BotID overwritten type used in this project.
-func NewBotIDFromTfchainBotID(id tftypes.BotID) BotID {
+func NewBotIDFromTfchainBotID(id threebottypes.BotID) BotID {
 	return BotID{BotID: id}
 }
 
 // TfchainBotID returns the tfchain-typed BotID, embedded by this type.
-func (id BotID) TfchainBotID() tftypes.BotID {
+func (id BotID) TfchainBotID() threebottypes.BotID {
 	return id.BotID
 }
 
@@ -671,7 +684,7 @@ func (id *BotID) DecodeMsg(r *msgp.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to read Bot ID as uint32: %v", err)
 	}
-	id.BotID = tftypes.BotID(u)
+	id.BotID = threebottypes.BotID(u)
 	return nil
 }
 
@@ -698,7 +711,7 @@ func (id BotID) UInt32() uint32 {
 // SetUInt32 sets the internal value of this BotID
 // equal to the given uint32-typed value.
 func (id *BotID) SetUInt32(x uint32) {
-	id.BotID = tftypes.BotID(x)
+	id.BotID = threebottypes.BotID(x)
 }
 
 // Increment the BotID by one.
@@ -713,20 +726,24 @@ func (id *BotID) Decrement() {
 
 // NewBotNameSortedSetFromTfchainBotNameSortedSet returns a tfchain-typed BotNameSortedSet into
 // the BotNameSortedSet overwritten type used in this project.
-func NewBotNameSortedSetFromTfchainBotNameSortedSet(bnss tftypes.BotNameSortedSet) BotNameSortedSet {
+func NewBotNameSortedSetFromTfchainBotNameSortedSet(bnss threebottypes.BotNameSortedSet) BotNameSortedSet {
 	return BotNameSortedSet{BotNameSortedSet: bnss}
 }
 
 // TfchainBotNameSortedSet returns the tfchain-typed BotNameSortedSet, embedded by this type.
-func (bnss BotNameSortedSet) TfchainBotNameSortedSet() tftypes.BotNameSortedSet {
+func (bnss BotNameSortedSet) TfchainBotNameSortedSet() threebottypes.BotNameSortedSet {
 	return bnss.BotNameSortedSet
 }
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (bnss BotNameSortedSet) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(rivbin.Marshal(bnss.BotNameSortedSet))
+	encoded, err := rivbin.Marshal(bnss.BotNameSortedSet)
 	if err != nil {
-		return fmt.Errorf("failed to write bot name sorted setas bytes: %v", err)
+		return fmt.Errorf("failed to emcode bot name sorted set as bytes: %v", err)
+	}
+	err = w.WriteBytes(encoded)
+	if err != nil {
+		return fmt.Errorf("failed to write bot name sorted set as bytes: %v", err)
 	}
 	return nil
 }
@@ -763,7 +780,11 @@ func (pk PublicKey) TfchainPublicKey() types.PublicKey {
 
 // EncodeMsg implements msgp.Encodable.EncodeMsg
 func (pk PublicKey) EncodeMsg(w *msgp.Writer) error {
-	err := w.WriteBytes(rivbin.Marshal(pk.PublicKey))
+	encoded, err := rivbin.Marshal(pk.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to encode public key as bytes: %v", err)
+	}
+	err = w.WriteBytes(encoded)
 	if err != nil {
 		return fmt.Errorf("failed to write public key as bytes: %v", err)
 	}

@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
-	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
+
+	threebottypes "github.com/threefoldfoundation/tfchain/extensions/threebot/types"
 	"github.com/threefoldtech/rivine/pkg/encoding/rivbin"
 	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
 	"github.com/threefoldtech/rivine/types"
@@ -286,7 +287,11 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 	if n := len(wallet.MultiSignAddresses); n > 0 {
 		pb.MultisignAddresses = make([][]byte, n)
 		for idx, uh := range wallet.MultiSignAddresses {
-			pb.MultisignAddresses[idx] = siabin.Marshal(uh)
+			marshalled, err := siabin.Marshal(uh)
+			if err != nil {
+				return err
+			}
+			pb.MultisignAddresses[idx] = marshalled
 		}
 	}
 	// add optional MultiSignData only if available
@@ -296,7 +301,11 @@ func (wallet *Wallet) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) err
 			Owners:             make([][]byte, len(wallet.MultiSignData.Owners)),
 		}
 		for idx, uh := range wallet.MultiSignData.Owners {
-			pb.MultisignData.Owners[idx] = siabin.Marshal(uh)
+			marshalled, err := siabin.Marshal(uh)
+			if err != nil {
+				return fmt.Errorf("Failed to marshall unlockhash: %v", err)
+			}
+			pb.MultisignData.Owners[idx] = marshalled
 		}
 	}
 	// Marshal the entire wallet into the given ProtocolBufferWriter
@@ -692,7 +701,7 @@ func (wallet *Wallet) AddUniqueMultisignAddress(address UnlockHash) bool {
 }
 
 // BotRecordFromTfchainRecord creates a BotRecord using a tf-typed bot record as source.
-func BotRecordFromTfchainRecord(record tftypes.BotRecord) BotRecord {
+func BotRecordFromTfchainRecord(record threebottypes.BotRecord) BotRecord {
 	return BotRecord{
 		ID:         NewBotIDFromTfchainBotID(record.ID),
 		Addresses:  NewNetworkAddressSortedSetFromTfchainNetworkAddressSortedSet(record.Addresses),
@@ -703,8 +712,8 @@ func BotRecordFromTfchainRecord(record tftypes.BotRecord) BotRecord {
 }
 
 // TfchainRecord creates a tf-typed BotRecord using this bot record as source.
-func (record BotRecord) TfchainRecord() tftypes.BotRecord {
-	return tftypes.BotRecord{
+func (record BotRecord) TfchainRecord() threebottypes.BotRecord {
+	return threebottypes.BotRecord{
 		ID:         record.ID.TfchainBotID(),
 		Addresses:  record.Addresses.TfchainNetworkAddressSortedSet(),
 		Names:      record.Names.TfchainBotNameSortedSet(),
@@ -716,13 +725,27 @@ func (record BotRecord) TfchainRecord() tftypes.BotRecord {
 // ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
 // using the generated code based on the PBNetworkStats Message defined in ./types.proto
 func (record *BotRecord) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
-	err := w.Marshal(&PBThreeBotRecord{
-		Id:               uint32(record.ID.TfchainBotID()),
-		NetworkAddresses: rivbin.Marshal(record.Addresses),
-		Names:            rivbin.Marshal(record.Names),
-		ExpirationTime:   rivbin.Marshal(record.Expiration),
-		PublicKey:        rivbin.Marshal(record.PublicKey),
-	})
+	pbThreebotRecord := PBThreeBotRecord{
+		Id: uint32(record.ID.TfchainBotID()),
+	}
+	var err error
+	pbThreebotRecord.NetworkAddresses, err = rivbin.Marshal(record.Addresses)
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+	pbThreebotRecord.Names, err = rivbin.Marshal(record.Names)
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+	pbThreebotRecord.ExpirationTime, err = rivbin.Marshal(record.Expiration)
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+	pbThreebotRecord.PublicKey, err = rivbin.Marshal(record.PublicKey)
+	if err != nil {
+		return fmt.Errorf("BotRecord: %v", err)
+	}
+	err = w.Marshal(&pbThreebotRecord)
 	if err != nil {
 		return fmt.Errorf("BotRecord: %v", err)
 	}
@@ -740,7 +763,7 @@ func (record *BotRecord) ProtocolBufferUnmarshal(r encoding.ProtocolBufferReader
 	}
 
 	// assign all values that can be assigned directly
-	record.ID = NewBotIDFromTfchainBotID(tftypes.BotID(pb.Id))
+	record.ID = NewBotIDFromTfchainBotID(threebottypes.BotID(pb.Id))
 
 	// unmarshal all values that requires decoding
 	err = rivbin.Unmarshal(pb.NetworkAddresses, &record.Addresses)

@@ -3,6 +3,7 @@ package persist
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"sync"
@@ -16,7 +17,8 @@ import (
 // attempts to close the underlying io.Writer.
 type Logger struct {
 	*log.Logger
-	w io.Writer
+	w       io.Writer
+	verbose bool
 }
 
 // Close logs a shutdown message and closes the Logger's underlying io.Writer,
@@ -41,7 +43,7 @@ func (l *Logger) Critical(v ...interface{}) {
 // Debug is equivalent to Logger.Print when build.DEBUG is true. Otherwise it
 // is a no-op.
 func (l *Logger) Debug(v ...interface{}) {
-	if build.DEBUG {
+	if l.verbose {
 		l.Output(2, fmt.Sprint(v...))
 	}
 }
@@ -49,7 +51,7 @@ func (l *Logger) Debug(v ...interface{}) {
 // Debugf is equivalent to Logger.Printf when build.DEBUG is true. Otherwise it
 // is a no-op.
 func (l *Logger) Debugf(format string, v ...interface{}) {
-	if build.DEBUG {
+	if l.verbose {
 		l.Output(2, fmt.Sprintf(format, v...))
 	}
 }
@@ -57,7 +59,7 @@ func (l *Logger) Debugf(format string, v ...interface{}) {
 // Debugln is equivalent to Logger.Println when build.DEBUG is true. Otherwise
 // it is a no-op.
 func (l *Logger) Debugln(v ...interface{}) {
-	if build.DEBUG {
+	if l.verbose {
 		l.Output(2, "[DEBUG] "+fmt.Sprintln(v...))
 	}
 }
@@ -74,13 +76,13 @@ func (l *Logger) Severe(v ...interface{}) {
 
 // NewLogger returns a logger that can be closed. Calls should not be made to
 // the logger after 'Close' has been called.
-func NewLogger(info types.BlockchainInfo, w io.Writer) *Logger {
+func NewLogger(info types.BlockchainInfo, w io.Writer, verbose bool) *Logger {
 	l := log.New(w, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile|log.LUTC)
 	// Call depth is 3 because NewLogger is usually called by NewFileLogger
 	l.Output(3, fmt.Sprintf(
 		"STARTUP: Logging has started. %s Version %s",
 		info.Name, info.ChainVersion.String()))
-	return &Logger{l, w}
+	return &Logger{l, w, verbose}
 }
 
 // closeableFile wraps an os.File to perform sanity checks on its Write and
@@ -122,11 +124,17 @@ func (cf *closeableFile) Write(b []byte) (int, error) {
 
 // NewFileLogger returns a logger that logs to logFilename. The file is opened
 // in append mode, and created if it does not exist.
-func NewFileLogger(info types.BlockchainInfo, logFilename string) (*Logger, error) {
+// If verbose is set, Debug log statements are printed as well.
+func NewFileLogger(info types.BlockchainInfo, logFilename string, verbose bool) (*Logger, error) {
 	logFile, err := os.OpenFile(logFilename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
 		return nil, err
 	}
 	cf := &closeableFile{File: logFile}
-	return NewLogger(info, cf), nil
+	return NewLogger(info, cf, verbose), nil
+}
+
+//NewDiscardLogger creates a logger on which all calls succceed but do nothing.
+func NewDiscardLogger() *Logger {
+	return NewLogger(types.BlockchainInfo{}, ioutil.Discard, false)
 }

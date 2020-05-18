@@ -156,52 +156,10 @@ func (t Transaction) SignatureHash(extraObjects ...interface{}) (crypto.Hash, er
 	return hash, nil
 }
 
-func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...interface{}) crypto.Hash {
-	h := crypto.NewHash()
-	enc := siabin.NewEncoder(h)
-
-	enc.Encode(inputIndex)
-	if len(extraObjects) > 0 {
-		enc.EncodeAll(extraObjects...)
-	}
-	for _, ci := range t.CoinInputs {
-		enc.EncodeAll(ci.ParentID, legacyUnlockHashFromFulfillment(ci.Fulfillment.Fulfillment))
-	}
-	// legacy transactions encoded unlock hashes in pure form
-	enc.Encode(len(t.CoinOutputs))
-	for _, co := range t.CoinOutputs {
-		enc.EncodeAll(
-			co.Value,
-			legacyUnlockHashCondition(co.Condition.Condition),
-		)
-	}
-	for _, bsi := range t.BlockStakeInputs {
-		enc.EncodeAll(bsi.ParentID, legacyUnlockHashFromFulfillment(bsi.Fulfillment.Fulfillment))
-	}
-	// legacy transactions encoded unlock hashes in pure form
-	enc.Encode(len(t.BlockStakeOutputs))
-	for _, bso := range t.BlockStakeOutputs {
-		enc.EncodeAll(
-			bso.Value,
-			legacyUnlockHashCondition(bso.Condition.Condition),
-		)
-	}
-	enc.EncodeAll(
-		t.MinerFees,
-		t.ArbitraryData,
-	)
-
-	var hash crypto.Hash
-	h.Sum(hash[:0])
-	return hash
-}
-
 func legacyUnlockHashCondition(uc UnlockCondition) UnlockHash {
 	uhc, ok := uc.(*UnlockHashCondition)
 	if !ok {
-		if build.DEBUG {
-			panic(fmt.Sprintf("unexpected condition %[1]v (%[1]T) encountered", uc))
-		}
+		build.Severe(fmt.Sprintf("unexpected condition %[1]v (%[1]T) encountered", uc))
 		return NilUnlockHash
 	}
 	return uhc.TargetUnlockHash
@@ -210,16 +168,15 @@ func legacyUnlockHashCondition(uc UnlockCondition) UnlockHash {
 func legacyUnlockHashFromFulfillment(uf UnlockFulfillment) UnlockHash {
 	switch tuf := uf.(type) {
 	case *SingleSignatureFulfillment:
-		return NewUnlockHash(UnlockTypePubKey,
-			crypto.HashObject(siabin.Marshal(tuf.PublicKey)))
+		pkb, _ := siabin.Marshal(tuf.PublicKey)
+		h, _ := crypto.HashObject(pkb)
+		return NewUnlockHash(UnlockTypePubKey, h)
 	case *LegacyAtomicSwapFulfillment:
-		return NewUnlockHash(UnlockTypeAtomicSwap,
-			crypto.HashObject(siabin.MarshalAll(
-				tuf.Sender, tuf.Receiver, tuf.HashedSecret, tuf.TimeLock)))
+		b, _ := siabin.MarshalAll(tuf.Sender, tuf.Receiver, tuf.HashedSecret, tuf.TimeLock)
+		h, _ := crypto.HashObject(b)
+		return NewUnlockHash(UnlockTypeAtomicSwap, h)
 	default:
-		if build.DEBUG {
-			panic(fmt.Sprintf("unexpected fulfillment %[1]v (%[1]T) encountered", uf))
-		}
+		build.Severe(fmt.Sprintf("unexpected fulfillment %[1]v (%[1]T) encountered", uf))
 		return NilUnlockHash
 	}
 }
@@ -238,10 +195,7 @@ func sortedUnique(elems []uint64, max int) bool {
 		}
 		biggest = elem
 	}
-	if biggest >= uint64(max) {
-		return false
-	}
-	return true
+	return biggest < uint64(max)
 }
 
 // MarshalSia implements SiaMarshaler.MarshalSia

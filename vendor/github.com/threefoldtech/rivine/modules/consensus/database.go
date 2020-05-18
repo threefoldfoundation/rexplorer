@@ -8,23 +8,20 @@ import (
 	"fmt"
 	"os"
 
+	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/build"
 	"github.com/threefoldtech/rivine/persist"
 	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
-
-	"github.com/rivine/bbolt"
 )
 
 var (
-	errRepeatInsert   = errors.New("attempting to add an already existing item to the consensus set")
-	errNilBucket      = errors.New("using a bucket that does not exist")
-	errNilItem        = errors.New("requested item does not exist")
-	errDBInconsistent = errors.New("database guard indicates inconsistency within database")
-	errNonEmptyBucket = errors.New("cannot remove a map with objects still in it")
+	errRepeatInsert = errors.New("attempting to add an already existing item to the consensus set")
+	errNilBucket    = errors.New("using a bucket that does not exist")
+	errNilItem      = errors.New("requested item does not exist")
 
 	dbMetadata = persist.Metadata{
 		Header:  "Consensus Set Database",
-		Version: "1.0.5",
+		Version: "1.1.0",
 	}
 )
 
@@ -109,7 +106,11 @@ func (cs *ConsensusSet) initDB(tx *bolt.Tx) error {
 
 	// Place a 'false' in the consistency bucket to indicate that no
 	// inconsistencies have been found.
-	err = tx.Bucket(Consistency).Put(Consistency, siabin.Marshal(false))
+	consBytes, err := siabin.Marshal(false)
+	if err != nil {
+		return fmt.Errorf("failed to (siabin) marshal bool (false): %v", err)
+	}
+	err = tx.Bucket(Consistency).Put(Consistency, consBytes)
 	if err != nil {
 		return err
 	}
@@ -121,8 +122,8 @@ func (cs *ConsensusSet) initDB(tx *bolt.Tx) error {
 func inconsistencyDetected(tx *bolt.Tx) (detected bool) {
 	inconsistencyBytes := tx.Bucket(Consistency).Get(Consistency)
 	err := siabin.Unmarshal(inconsistencyBytes, &detected)
-	if build.DEBUG && err != nil {
-		panic(err)
+	if err != nil {
+		build.Severe(err)
 	}
 	return detected
 }
@@ -132,9 +133,13 @@ func inconsistencyDetected(tx *bolt.Tx) (detected bool) {
 func markInconsistency(tx *bolt.Tx) {
 	// Place a 'true' in the consistency bucket to indicate that
 	// inconsistencies have been found.
-	err := tx.Bucket(Consistency).Put(Consistency, siabin.Marshal(true))
-	if build.DEBUG && err != nil {
-		panic(err)
+	consBytes, err := siabin.Marshal(true)
+	if err != nil {
+		build.Severe(err)
+	}
+	err = tx.Bucket(Consistency).Put(Consistency, consBytes)
+	if err != nil {
+		build.Severe(err)
 	}
 
 }

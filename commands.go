@@ -16,11 +16,16 @@ import (
 
 	"github.com/threefoldfoundation/rexplorer/pkg/encoding"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
+	tfconsensus "github.com/threefoldfoundation/tfchain/extensions/tfchain/consensus"
+	tftypes "github.com/threefoldfoundation/tfchain/pkg/types"
 
+	"github.com/threefoldfoundation/tfchain/extensions/threebot"
 	"github.com/threefoldfoundation/tfchain/pkg/config"
-	"github.com/threefoldfoundation/tfchain/pkg/persist"
-	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
 
+	erc20 "github.com/threefoldtech/rivine-extension-erc20"
+	erc20types "github.com/threefoldtech/rivine-extension-erc20/types"
+	"github.com/threefoldtech/rivine/extensions/authcointx"
+	"github.com/threefoldtech/rivine/extensions/minting"
 	"github.com/threefoldtech/rivine/modules"
 	"github.com/threefoldtech/rivine/modules/consensus"
 	"github.com/threefoldtech/rivine/modules/gateway"
@@ -36,6 +41,11 @@ type Commands struct {
 	ChainConstants rivinetypes.ChainConstants
 	BootstrapPeers []modules.NetAddress
 
+	DaemonNetworkConfig  config.DaemonNetworkConfig
+	GenesisAuthCondition rivinetypes.UnlockConditionProxy
+
+	Validators       []modules.TransactionValidationFunction
+	MappedValidators map[rivinetypes.TransactionVersion][]modules.TransactionValidationFunction
 	// the host:port to listen for RPC calls
 	RPCaddr string
 
@@ -61,10 +71,6 @@ type Commands struct {
 	// the parent directory where the individual module
 	// directories will be created
 	RootPersistentDir string
-
-	// TransactionDB manages extra info for the tfchain,
-	// which Rivine does not keep track off
-	transactionDB *persist.TransactionDB
 }
 
 // Root represents the root (`rexplorer`) command,
@@ -75,53 +81,35 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 	log.Println("loading network config, registering types and loading rivine transaction db (0/3)...")
 	switch cmd.BlockchainInfo.NetworkName {
 	case config.NetworkNameStandard:
-		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetStandardnetGenesisMintCondition())
-		if cmdErr != nil {
-			return fmt.Errorf("failed to create tfchain transaction DB for tfchain standard: %v", cmdErr)
-		}
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetStandardnetGenesis()
-		// Register the transaction controllers for all transaction versions
-		// supported on the standard network
-		tfchaintypes.RegisterTransactionTypesForStandardNetwork(cmd.transactionDB, tfchaintypes.NopERC20TransactionValidator{},
-			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetStandardDaemonNetworkConfig())
-		// Forbid the usage of MultiSignatureCondition (and thus the multisig feature),
-		// until the blockchain reached a height of 42000 blocks.
-		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(42000)
+		cmd.DaemonNetworkConfig = config.GetStandardDaemonNetworkConfig()
+		cmd.GenesisAuthCondition = config.GetStandardnetGenesisAuthCoinCondition()
+		cmd.Validators = tfconsensus.GetStandardTransactionValidators()
+		cmd.MappedValidators = tfconsensus.GetStandardTransactionVersionMappedValidators()
+
 		if len(cmd.BootstrapPeers) == 0 {
 			cmd.BootstrapPeers = config.GetStandardnetBootstrapPeers()
 		}
 
 	case config.NetworkNameTest:
-		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetTestnetGenesisMintCondition())
-		if cmdErr != nil {
-			return fmt.Errorf("failed to create tfchain transaction DB for tfchain testnet: %v", cmdErr)
-		}
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetTestnetGenesis()
-		// Register the transaction controllers for all transaction versions
-		// supported on the test network
-		tfchaintypes.RegisterTransactionTypesForTestNetwork(cmd.transactionDB, tfchaintypes.NopERC20TransactionValidator{},
-			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetTestnetDaemonNetworkConfig())
-		// Use our custom MultiSignatureCondition, just for testing purposes
-		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		cmd.DaemonNetworkConfig = config.GetTestnetDaemonNetworkConfig()
+		cmd.GenesisAuthCondition = config.GetTestnetGenesisAuthCoinCondition()
+		cmd.Validators = tfconsensus.GetTestnetTransactionValidators()
+		cmd.MappedValidators = tfconsensus.GetTestnetTransactionVersionMappedValidators()
 		if len(cmd.BootstrapPeers) == 0 {
 			cmd.BootstrapPeers = config.GetTestnetBootstrapPeers()
 		}
 
 	case config.NetworkNameDev:
-		cmd.transactionDB, cmdErr = persist.NewTransactionDB(cmd.rootPerDir(), config.GetDevnetGenesisMintCondition())
-		if cmdErr != nil {
-			return fmt.Errorf("failed to create tfchain transaction DB for tfchain devnet: %v", cmdErr)
-		}
 		// get chain constants and bootstrap peers
 		cmd.ChainConstants = config.GetDevnetGenesis()
-		// Register the transaction controllers for all transaction versions
-		// supported on the dev network
-		tfchaintypes.RegisterTransactionTypesForDevNetwork(cmd.transactionDB, tfchaintypes.NopERC20TransactionValidator{},
-			cmd.ChainConstants.CurrencyUnits.OneCoin, config.GetDevnetDaemonNetworkConfig())
-		// Use our custom MultiSignatureCondition, just for testing purposes
-		tfchaintypes.RegisterBlockHeightLimitedMultiSignatureCondition(0)
+		cmd.DaemonNetworkConfig = config.GetDevnetDaemonNetworkConfig()
+		cmd.GenesisAuthCondition = config.GetDevnetGenesisAuthCoinCondition()
+		cmd.Validators = tfconsensus.GetDevnetTransactionValidators()
+		cmd.MappedValidators = tfconsensus.GetDevnetTransactionVersionMappedValidators()
 		if len(cmd.BootstrapPeers) == 0 {
 			return errors.New("no bootstrap peers are defined while this is required for devnet (using the --bootstrap-peer flag)")
 		}
@@ -164,8 +152,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 
 		log.Println("loading rivine gateway module (1/3)...")
 		gateway, err := gateway.New(
-			cmd.RPCaddr, true, cmd.perDir("gateway"),
-			cmd.BlockchainInfo, cmd.ChainConstants, cmd.BootstrapPeers)
+			cmd.RPCaddr, true, 1, cmd.perDir("gateway"),
+			cmd.BlockchainInfo, cmd.ChainConstants, cmd.BootstrapPeers, false)
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create gateway module: %v", err)
 			log.Println("[ERROR] ", cmdErr)
@@ -181,15 +169,26 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 			}
 		}()
 
+		var mintingPlugin *minting.Plugin
+		var threebotPlugin *threebot.Plugin
+		var erc20TxValidator erc20types.ERC20TransactionValidator
+		var erc20Plugin *erc20.Plugin
+		var authCoinTxPlugin *authcointx.Plugin
+
 		log.Println("loading rivine consensus module (2/3)...")
 		cs, err := consensus.New(
 			gateway, true, cmd.perDir("consensus"),
-			cmd.BlockchainInfo, cmd.ChainConstants)
+			cmd.BlockchainInfo, cmd.ChainConstants, false, "")
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create consensus module: %v", err)
 			log.Println("[ERROR] ", cmdErr)
 			cancel()
 			return
+		}
+
+		cs.SetTransactionValidators(cmd.Validators...)
+		for txVersion, validators := range cmd.MappedValidators {
+			cs.SetTransactionVersionMappedValidators(txVersion, validators...)
 		}
 		defer func() {
 			log.Println("Closing consensus module...")
@@ -199,17 +198,121 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 				log.Println("[ERROR] Closing consensus module resulted in an error: ", err)
 			}
 		}()
-		err = cmd.transactionDB.SubscribeToConsensusSet(cs)
+
+		// create the minting extension plugin
+		mintingPlugin = minting.NewMintingPlugin(
+			cmd.DaemonNetworkConfig.GenesisMintingCondition,
+			tftypes.TransactionVersionMinterDefinition,
+			tftypes.TransactionVersionCoinCreation,
+			&minting.PluginOptions{
+				UseLegacySiaEncoding: true,
+				RequireMinerFees:     true,
+			},
+		)
+
+		// 3Bot and ERC20 is not yet to be used on network standard
+		if cmd.BlockchainInfo.NetworkName != config.NetworkNameStandard {
+			// create the 3Bot plugin
+			var tbPluginOpts *threebot.PluginOptions
+			if cmd.BlockchainInfo.NetworkName == config.NetworkNameTest {
+				tbPluginOpts = &threebot.PluginOptions{ // TODO: remove this hack once possible (e.g. a testnet network reset)
+					HackMinimumBlockHeightSinceDoubleRegistrationsAreForbidden: 350000,
+				}
+			}
+			threebotPlugin = threebot.NewPlugin(
+				cmd.DaemonNetworkConfig.FoundationPoolAddress,
+				cmd.ChainConstants.CurrencyUnits.OneCoin,
+				tbPluginOpts,
+			)
+
+			// create a non-validating ERC20 Tx Validator
+			erc20TxValidator = erc20types.NopERC20TransactionValidator{}
+
+			// create the ERC20 plugin
+			erc20Plugin = erc20.NewPlugin(
+				cmd.DaemonNetworkConfig.ERC20FeePoolAddress,
+				cmd.ChainConstants.CurrencyUnits.OneCoin,
+				erc20TxValidator,
+				erc20types.TransactionVersions{
+					ERC20Conversion:          tftypes.TransactionVersionERC20Conversion,
+					ERC20AddressRegistration: tftypes.TransactionVersionERC20AddressRegistration,
+					ERC20CoinCreation:        tftypes.TransactionVersionERC20CoinCreation,
+				},
+			)
+
+			// register the ERC20 Plugin
+			err = cs.RegisterPlugin(ctx, "erc20", erc20Plugin)
+			if err != nil {
+				cmdErr = fmt.Errorf("failed to register the ERC20 extension: %v", err)
+				log.Println("[ERROR] ", cmdErr)
+				err = erc20Plugin.Close() //make sure any resources are released
+				if err != nil {
+					fmt.Println("Error during closing of the erc20Plugin:", err)
+				}
+				cancel()
+				return
+			}
+			// register the Threebot Plugin
+			err = cs.RegisterPlugin(ctx, "threebot", threebotPlugin)
+			if err != nil {
+				cmdErr = fmt.Errorf("failed to register the threebot extension: %v", err)
+				log.Println("[ERROR] ", cmdErr)
+				err = threebotPlugin.Close() //make sure any resources are released
+				if err != nil {
+					fmt.Println("Error during closing of the threebotPlugin:", err)
+				}
+				cancel()
+				return
+			}
+		}
+
+		// register the Minting Plugin
+		err = cs.RegisterPlugin(ctx, "minting", mintingPlugin)
 		if err != nil {
-			cmdErr = fmt.Errorf("failed to subscribe earlier created transactionDB to the consensus created just now: %v", err)
+			cmdErr = fmt.Errorf("failed to register the threebot extension: %v", err)
 			log.Println("[ERROR] ", cmdErr)
+			err = mintingPlugin.Close() //make sure any resources are released
+			if err != nil {
+				fmt.Println("Error during closing of the mintingPlugin :", err)
+			}
+			cancel()
+			return
+		}
+
+		// create the auth coin tx plugin
+		// > NOTE: this also overwrites the standard tx controllers!!!!
+		authCoinTxPlugin = authcointx.NewPlugin(
+			cmd.GenesisAuthCondition,
+			tftypes.TransactionVersionAuthAddressUpdate,
+			tftypes.TransactionVersionAuthConditionUpdate,
+			&authcointx.PluginOpts{
+				UnauthorizedCoinTransactionExceptionCallback: func(tx modules.ConsensusTransaction, dedupAddresses []rivinetypes.UnlockHash, ctx rivinetypes.TransactionValidationContext) (bool, error) {
+					if tx.Version != rivinetypes.TransactionVersionZero && tx.Version != rivinetypes.TransactionVersionOne {
+						return false, nil
+					}
+					return (len(dedupAddresses) == 1 && len(tx.CoinOutputs) <= 2), nil
+				},
+				RequireMinerFees:    true,
+				AuthorizedByDefault: true,
+			},
+		)
+
+		// register the AuthCoin extension plugin
+		err = cs.RegisterPlugin(ctx, "authcointx", authCoinTxPlugin)
+		if err != nil {
+			cmdErr = fmt.Errorf("failed to register the auth coin tx extension: %v", err)
+			log.Println("[ERROR] ", cmdErr)
+			err = authCoinTxPlugin.Close() //make sure any resources are released
+			if err != nil {
+				fmt.Println("Error during closing of the authCoinTxPlugin :", err)
+			}
 			cancel()
 			return
 		}
 
 		log.Println("loading internal explorer module (3/3)...")
 		explorer, err := NewExplorer(
-			db, cs, cmd.transactionDB, cmd.BlockchainInfo, cmd.ChainConstants, ctx.Done())
+			db, cs, cmd.BlockchainInfo, cmd.ChainConstants, mintingPlugin, ctx.Done())
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create explorer module: %v", err)
 			log.Println("[ERROR] ", cmdErr)
@@ -224,6 +327,8 @@ func (cmd *Commands) Root(_ *cobra.Command, args []string) (cmdErr error) {
 				log.Println("[ERROR] Closing explorer module resulted in an error: ", err)
 			}
 		}()
+
+		cs.Start()
 
 		log.Println("rexplorer is up and running...")
 

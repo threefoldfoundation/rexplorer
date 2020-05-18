@@ -56,8 +56,12 @@ func NewExplorerState() ExplorerState {
 // ProtocolBufferMarshal implements encoding.ProtocolBufferMarshaler.ProtocolBufferMarshal
 // using the generated code based on the PBExplorerState Message defined in ./types.proto
 func (state ExplorerState) ProtocolBufferMarshal(w encoding.ProtocolBufferWriter) error {
-	err := w.Marshal(&PBExplorerState{
-		CurrentConsensusChangeId: siabin.Marshal(state.CurrentChangeID),
+	currentConsensusChangeID, err := siabin.Marshal(state.CurrentChangeID)
+	if err != nil {
+		return fmt.Errorf("ExplorerState currenchangeid marshalling: %v", err)
+	}
+	err = w.Marshal(&PBExplorerState{
+		CurrentConsensusChangeId: currentConsensusChangeID,
 		NextThreebotId:           state.NextThreeBotID.UInt32(),
 	})
 	if err != nil {

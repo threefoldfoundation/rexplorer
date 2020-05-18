@@ -7,8 +7,10 @@ import (
 	dtypes "github.com/threefoldfoundation/rexplorer/pkg/database/types"
 	"github.com/threefoldfoundation/rexplorer/pkg/types"
 
-	"github.com/threefoldfoundation/tfchain/pkg/persist"
+	threebottypes "github.com/threefoldfoundation/tfchain/extensions/threebot/types"
 	tfchaintypes "github.com/threefoldfoundation/tfchain/pkg/types"
+	erc20types "github.com/threefoldtech/rivine-extension-erc20/types"
+	minting "github.com/threefoldtech/rivine/extensions/minting"
 	"github.com/threefoldtech/rivine/modules"
 	rivinetypes "github.com/threefoldtech/rivine/types"
 )
@@ -20,18 +22,18 @@ type Explorer struct {
 	state dtypes.ExplorerState
 	stats types.NetworkStats
 
-	cs   modules.ConsensusSet
-	txdb *persist.TransactionDB
+	cs modules.ConsensusSet
 
-	bcInfo   rivinetypes.BlockchainInfo
-	chainCts rivinetypes.ChainConstants
+	bcInfo        rivinetypes.BlockchainInfo
+	chainCts      rivinetypes.ChainConstants
+	mintingplugin *minting.Plugin
 
 	mut sync.Mutex
 }
 
 // NewExplorer creates a new custom intenral explorer module.
 // See Explorer for more information.
-func NewExplorer(db Database, cs modules.ConsensusSet, txdb *persist.TransactionDB, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, cancel <-chan struct{}) (*Explorer, error) {
+func NewExplorer(db Database, cs modules.ConsensusSet, bcInfo rivinetypes.BlockchainInfo, chainCts rivinetypes.ChainConstants, mintingplugin *minting.Plugin, cancel <-chan struct{}) (*Explorer, error) {
 	state, err := db.GetExplorerState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get explorer state from db: %v", err)
@@ -41,13 +43,13 @@ func NewExplorer(db Database, cs modules.ConsensusSet, txdb *persist.Transaction
 		return nil, fmt.Errorf("failed to get network stats from db: %v", err)
 	}
 	explorer := &Explorer{
-		db:       db,
-		state:    state,
-		stats:    stats,
-		cs:       cs,
-		txdb:     txdb,
-		bcInfo:   bcInfo,
-		chainCts: chainCts,
+		db:            db,
+		state:         state,
+		stats:         stats,
+		cs:            cs,
+		bcInfo:        bcInfo,
+		chainCts:      chainCts,
+		mintingplugin: mintingplugin,
 	}
 	err = cs.ConsensusSetSubscribe(explorer, state.CurrentChangeID.ConsensusChangeID, cancel)
 	if err != nil {
@@ -104,7 +106,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			var isCoinCreationTransaction bool
 
 			switch tx.Version {
-			case tfchaintypes.TransactionVersionBotRegistration:
+			case threebottypes.TransactionVersionBotRegistration:
 				// decrease the 3bot reg tx count
 				explorer.stats.ThreeBotRegistrationTransactionCount--
 
@@ -116,12 +118,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				// decrement the sequential counter used for 3Bots in this explorer
 				explorer.state.NextThreeBotID.Decrement()
 
-			case tfchaintypes.TransactionVersionBotRecordUpdate:
+			case threebottypes.TransactionVersionBotRecordUpdate:
 				// decrease the 3bot update tx count
 				explorer.stats.ThreeBotUpdateTransactionCount--
 
 				// expose the 3bot record update data from the tx
-				butx, err := tfchaintypes.BotRecordUpdateTransactionFromTransaction(tx)
+				butx, err := threebottypes.BotRecordUpdateTransactionFromTransaction(tx)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v145 tx as a BotRecordUpdateTransaction: %v", err))
 				}
@@ -133,12 +135,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to revert BotRecordUpdateTransaction: %v", err))
 				}
 
-			case tfchaintypes.TransactionVersionBotNameTransfer:
+			case threebottypes.TransactionVersionBotNameTransfer:
 				// decrease the 3bot update tx count (also used for name transfers)
 				explorer.stats.ThreeBotUpdateTransactionCount--
 
 				// expose the 3bot record name transfer data from the tx
-				bnttx, err := tfchaintypes.BotNameTransferTransactionFromTransaction(tx)
+				bnttx, err := threebottypes.BotNameTransferTransactionFromTransaction(tx)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v146 tx as a BotNameTransferTransaction: %v", err))
 				}
@@ -160,7 +162,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.CoinBurnTransactionCount--
 
 				// expose the ERC20 Conversion Tx data from the Tx
-				erc20CTx, err := tfchaintypes.ERC20ConvertTransactionFromTransaction(tx)
+				erc20CTx, err := erc20types.ERC20ConvertTransactionFromTransaction(tx, tx.Version)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Conversion Tx: %v", err))
 				}
@@ -178,12 +180,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 
 			case tfchaintypes.TransactionVersionERC20AddressRegistration:
 				// expose the ERC20 Conversion Tx data from the Tx
-				erc20ARTx, err := tfchaintypes.ERC20AddressRegistrationTransactionFromTransaction(tx)
+				erc20ARTx, err := erc20types.ERC20AddressRegistrationTransactionFromTransaction(tx, tx.Version)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Address Registration Tx: %v", err))
 				}
-				tftAddress := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
-				erc20Address := tfchaintypes.ERC20AddressFromUnlockHash(tftAddress)
+				tftAddress, err := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
+				if err != nil {
+					panic(fmt.Sprintf("failed to create a rivine address from a ERC20 Address Registration Tx: %v", err))
+				}
+				erc20Address, err := erc20types.ERC20AddressFromUnlockHash(tftAddress)
+				if err != nil {
+					panic(fmt.Sprintf("failed to create an erc20 address from a ERC20 Address Registration Tx: %v", err))
+				}
 				err = explorer.db.DeleteERC20AddressRegistration(types.AsERC20Address(erc20Address))
 				if err != nil {
 					panic(fmt.Sprintf("failed to unregister ERC20 Address %s: %v", erc20Address.String(), err))
@@ -204,12 +212,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 
 				// set the previous mint condition as the current coin creators
 				previousMintConditionHeight := explorer.stats.BlockHeight.BlockHeight - 1
-				genesisMintCondition, err := explorer.txdb.GetMintConditionAt(previousMintConditionHeight)
+				previousMintCondition, err := explorer.mintingplugin.GetMintConditionAt(previousMintConditionHeight)
 				if err != nil {
 					panic(fmt.Sprintf("failed to get mint condition for height %d: %v", previousMintConditionHeight, err))
 				}
 				// set previous coin creators
-				err = explorer.setMintCondition(genesisMintCondition)
+				err = explorer.setMintCondition(previousMintCondition)
 				if err != nil {
 					panic(fmt.Sprintf("failed to set mint condition in the explorer db: %v", err))
 				}
@@ -281,7 +289,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			// no need to increase coin creator tx count, as this is not a coin creator tx
 
 			// get genesis mint condition
-			genesisMintCondition, err := explorer.txdb.GetMintConditionAt(0)
+			genesisMintCondition, err := explorer.mintingplugin.GetMintConditionAt(0)
 			if err != nil {
 				panic(fmt.Sprintf("failed to get genesis mint condition: %v", err))
 			}
@@ -343,12 +351,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 			isCoinCreationTransaction := isGenesisBlock
 
 			switch tx.Version {
-			case tfchaintypes.TransactionVersionBotRegistration:
+			case threebottypes.TransactionVersionBotRegistration:
 				// increase the 3bot reg tx count
 				explorer.stats.ThreeBotRegistrationTransactionCount++
 
 				// expose the 3bot record registration data from the tx
-				brtx, err := tfchaintypes.BotRegistrationTransactionFromTransaction(tx)
+				brtx, err := threebottypes.BotRegistrationTransactionFromTransaction(tx)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v144 tx as a BotRegistrationTransaction: %v", err))
 				}
@@ -357,11 +365,11 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				// just as tfchain does
 				explorer.state.NextThreeBotID.Increment()
 				// assemble our new tfchain 3Bot record
-				record := tfchaintypes.BotRecord{
+				record := threebottypes.BotRecord{
 					ID:        explorer.state.NextThreeBotID.TfchainBotID(),
 					PublicKey: brtx.Identification.PublicKey,
-					Expiration: tfchaintypes.SiaTimestampAsCompactTimestamp(block.Timestamp) +
-						tfchaintypes.CompactTimestamp(brtx.NrOfMonths)*tfchaintypes.BotMonth,
+					Expiration: threebottypes.SiaTimestampAsCompactTimestamp(block.Timestamp) +
+						threebottypes.CompactTimestamp(brtx.NrOfMonths)*threebottypes.BotMonth,
 				}
 				err = record.AddNetworkAddresses(brtx.Addresses...)
 				if err != nil {
@@ -377,12 +385,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to apply BotRegistrationTransaction: %v", err))
 				}
 
-			case tfchaintypes.TransactionVersionBotRecordUpdate:
+			case threebottypes.TransactionVersionBotRecordUpdate:
 				// increase the 3bot update tx count
 				explorer.stats.ThreeBotUpdateTransactionCount++
 
 				// expose the 3bot record update data from the tx
-				butx, err := tfchaintypes.BotRecordUpdateTransactionFromTransaction(tx)
+				butx, err := threebottypes.BotRecordUpdateTransactionFromTransaction(tx)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v145 tx as a BotRecordUpdateTransaction: %v", err))
 				}
@@ -394,12 +402,12 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 					panic(fmt.Sprintf("failed to apply BotRecordUpdateTransaction: %v", err))
 				}
 
-			case tfchaintypes.TransactionVersionBotNameTransfer:
+			case threebottypes.TransactionVersionBotNameTransfer:
 				// increase the 3bot update tx count (also used for name transfers)
 				explorer.stats.ThreeBotUpdateTransactionCount++
 
 				// expose the 3bot record name transfer data from the tx
-				bnttx, err := tfchaintypes.BotNameTransferTransactionFromTransaction(tx)
+				bnttx, err := threebottypes.BotNameTransferTransactionFromTransaction(tx)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v146 tx as a BotNameTransferTransaction: %v", err))
 				}
@@ -421,7 +429,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.CoinBurnTransactionCount++
 
 				// expose the ERC20 Conversion Tx data from the Tx
-				erc20CTx, err := tfchaintypes.ERC20ConvertTransactionFromTransaction(tx)
+				erc20CTx, err := erc20types.ERC20ConvertTransactionFromTransaction(tx, tx.Version)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Conversion Tx: %v", err))
 				}
@@ -439,12 +447,18 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 
 			case tfchaintypes.TransactionVersionERC20AddressRegistration:
 				// expose the ERC20 Conversion Tx data from the Tx
-				erc20ARTx, err := tfchaintypes.ERC20AddressRegistrationTransactionFromTransaction(tx)
+				erc20ARTx, err := erc20types.ERC20AddressRegistrationTransactionFromTransaction(tx, tx.Version)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret tx as a ERC20 Address Registration Tx: %v", err))
 				}
-				tftAddress := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
-				erc20Address := tfchaintypes.ERC20AddressFromUnlockHash(tftAddress)
+				tftAddress, err := rivinetypes.NewPubKeyUnlockHash(erc20ARTx.PublicKey)
+				if err != nil {
+					panic(fmt.Sprintf("failed to create a rivine addressfrom a ERC20 Address Registration Tx: %v", err))
+				}
+				erc20Address, err := erc20types.ERC20AddressFromUnlockHash(tftAddress)
+				if err != nil {
+					panic(fmt.Sprintf("failed to create an erc20 addressfrom a ERC20 Address Registration Tx: %v", err))
+				}
 				err = explorer.db.AddERC20AddressRegistration(types.AsERC20Address(erc20Address), types.AsUnlockHash(tftAddress))
 				if err != nil {
 					panic(fmt.Sprintf("failed to register ERC20 Address %s: %v", erc20Address.String(), err))
@@ -464,7 +478,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 				explorer.stats.CoinCreatorDefinitionTransactionCount++
 
 				// get the mint condition from the tx's extension data
-				mdtx, err := tfchaintypes.MinterDefinitionTransactionFromTransaction(tx)
+				mdtx, err := minting.MinterDefinitionTransactionFromTransaction(tx, tx.Version, true)
 				if err != nil {
 					panic(fmt.Sprintf("failed to interpret v128 tx as a MinterDefinitionTransaction: %v", err))
 				}
@@ -532,7 +546,7 @@ func (explorer *Explorer) ProcessConsensusChange(css modules.ConsensusChange) {
 	}
 }
 
-func wrapTfchainBotUpdateFunction(bts rivinetypes.Timestamp, fn func(rivinetypes.Timestamp, *tfchaintypes.BotRecord) error) func(*types.BotRecord) error {
+func wrapTfchainBotUpdateFunction(bts rivinetypes.Timestamp, fn func(rivinetypes.Timestamp, *threebottypes.BotRecord) error) func(*types.BotRecord) error {
 	return func(br *types.BotRecord) error {
 		tfbr := br.TfchainRecord()
 		err := fn(bts, &tfbr)
@@ -544,7 +558,7 @@ func wrapTfchainBotUpdateFunction(bts rivinetypes.Timestamp, fn func(rivinetypes
 	}
 }
 
-func wrapTfchainBotUpdateRevertFunction(fn func(*tfchaintypes.BotRecord) error) func(*types.BotRecord) error {
+func wrapTfchainBotUpdateRevertFunction(fn func(*threebottypes.BotRecord) error) func(*types.BotRecord) error {
 	return func(br *types.BotRecord) error {
 		tfbr := br.TfchainRecord()
 		err := fn(&tfbr)

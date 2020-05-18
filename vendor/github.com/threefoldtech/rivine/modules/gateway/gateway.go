@@ -6,6 +6,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -110,15 +111,15 @@ import (
 )
 
 var (
-	errNoPeers     = errors.New("no peers")
-	errUnreachable = errors.New("peer did not respond to ping")
+	errNoPeers = errors.New("no peers")
 )
 
 // Gateway implements the modules.Gateway interface.
 type Gateway struct {
-	listener net.Listener
-	myAddr   modules.NetAddress
-	port     string
+	listener             net.Listener
+	myAddr               modules.NetAddress
+	port                 string
+	concurrentRPCPerPeer uint64
 
 	// handlers are the RPCs that the Gateway can handle.
 	//
@@ -190,8 +191,8 @@ func (g *Gateway) Close() error {
 	return g.saveSync()
 }
 
-// New returns an initialized Gateway.
-func New(addr string, bootstrap bool, persistDir string, bcInfo types.BlockchainInfo, chainCts types.ChainConstants, bootstrapPeers []modules.NetAddress) (*Gateway, error) {
+// newGateway returns an initialized Gateway.
+func newGateway(addr string, bootstrap bool, concurrentRPCPerPeer uint64, persistDir string, bcInfo types.BlockchainInfo, chainCts types.ChainConstants, bootstrapPeers []modules.NetAddress, logger *persist.Logger) (*Gateway, error) {
 	// Create the directory if it doesn't exist.
 	err := os.MkdirAll(persistDir, 0700)
 	if err != nil {
@@ -199,6 +200,9 @@ func New(addr string, bootstrap bool, persistDir string, bcInfo types.Blockchain
 	}
 
 	g := &Gateway{
+		log:                  logger,
+		concurrentRPCPerPeer: concurrentRPCPerPeer,
+
 		handlers: make(map[rpcID]modules.RPCFunc),
 		initRPCs: make(map[string]modules.RPCFunc),
 
@@ -211,16 +215,9 @@ func New(addr string, bootstrap bool, persistDir string, bcInfo types.Blockchain
 		chainCts:       chainCts,
 		genesisBlockID: chainCts.GenesisBlockID(),
 	}
-
 	// Set Unique GatewayID
 	fastrand.Read(g.id[:])
 
-	// Create the logger.
-	g.log, err = persist.NewFileLogger(bcInfo,
-		filepath.Join(g.persistDir, logFile))
-	if err != nil {
-		return nil, err
-	}
 	// Establish the closing of the logger.
 	g.threads.AfterStop(func() {
 		if err := g.log.Close(); err != nil {
@@ -268,18 +265,20 @@ func New(addr string, bootstrap bool, persistDir string, bcInfo types.Blockchain
 		}
 	})
 
-	// Add the bootstrap peers to the node list.
+	// if no-bootstrap flag is not provided.
 	if bootstrap {
-		for _, addr := range bootstrapPeers {
-			if err := addr.TryNameResolution(); err != nil {
-				// Bootstrap nodes can still be in IP:PORT notation so we might still be able to continue
-				g.log.Debugf("Bootstrap node [%v] address resolution failed: %v", addr, err)
-			}
-			err := g.addNode(addr)
-			if err != nil && err != errNodeExists {
-				g.log.Printf("WARN: failed to add the bootstrap node '%v': %v", addr, err)
-			}
-		}
+		// Spawn the boostrap peer manager and provide tools for ensuring clean shudown.
+		bootstrapPeersClosedChan := make(chan struct{})
+		g.threads.OnStop(func() {
+			<-bootstrapPeersClosedChan
+		})
+
+		go func() {
+			// Initially try connecting to bootstrap peers without timeout (when daemon has internet access)
+			g.connectToBootstrapPeers(bootstrapPeers)
+			// Try reconnecting to bootstrap peers with timeout in case daemon has no internet access
+			g.ensureBootstrapPeerConnection(bootstrapPeersClosedChan, bootstrapPeers)
+		}()
 	}
 
 	// Create the listener which will listen for new connections from peers.
@@ -338,9 +337,65 @@ func New(addr string, bootstrap bool, persistDir string, bcInfo types.Blockchain
 
 	// Spawn threads to take care of port forwarding and hostname discovery.
 	go g.threadedForwardPort(g.port)
-	go g.threadedLearnHostname()
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	g.threads.OnStop(func() {
+		cancelFunc()
+	})
+	go g.threadedLearnHostname(ctx)
 
 	return g, nil
+}
+
+// New returns an initialized Gateway with a file;ogger in the persistent directory.
+func New(addr string, bootstrap bool, concurrentRPCPerPeer uint64, persistDir string, bcInfo types.BlockchainInfo, chainCts types.ChainConstants, bootstrapPeers []modules.NetAddress, verboseLogging bool) (*Gateway, error) {
+
+	// Create the logger.
+	err := os.MkdirAll(persistDir, 0700)
+	if err != nil {
+		return nil, err
+	}
+	logger, err := persist.NewFileLogger(bcInfo,
+		filepath.Join(persistDir, logFile), verboseLogging)
+	if err != nil {
+		return nil, err
+	}
+	// Create the gateway
+	return newGateway(addr, bootstrap, concurrentRPCPerPeer, persistDir, bcInfo, chainCts, bootstrapPeers, logger)
+}
+
+func (g *Gateway) ensureBootstrapPeerConnection(closeChan chan struct{}, bootstrapPeers []modules.NetAddress) {
+	defer close(closeChan)
+	for {
+		select {
+		// If gateway stop, close the closeChannel
+		case <-g.threads.StopChan():
+			return
+		// Start connection to bootstrapPeers after 1 minute
+		case <-time.After(1 * time.Minute):
+			g.connectToBootstrapPeers(bootstrapPeers)
+		}
+	}
+}
+
+func (g *Gateway) connectToBootstrapPeers(bootstrapPeers []modules.NetAddress) {
+	for _, addr := range bootstrapPeers {
+		select {
+		case <-g.threads.StopChan():
+			return
+		default:
+			g.log.Debugf("Trying to connect to bootstrap peer: %v", addr)
+			if err := addr.TryNameResolution(); err != nil {
+				// Bootstrap nodes can still be in IP:PORT notation so we might still be able to continue
+				g.log.Debugf("Bootstrap node [%v] address resolution failed: %v", addr, err)
+				continue
+			}
+			err := g.managedConnect(addr)
+			if err != nil && err != errNodeExists {
+				g.log.Printf("WARN: failed to add the bootstrap node '%v': %v", addr, err)
+				continue
+			}
+		}
+	}
 }
 
 // enforce that Gateway satisfies the modules.Gateway interface

@@ -6,13 +6,12 @@ import (
 	"sync"
 	"time"
 
+	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/build"
 	"github.com/threefoldtech/rivine/crypto"
 	"github.com/threefoldtech/rivine/modules"
 	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
 	"github.com/threefoldtech/rivine/types"
-
-	"github.com/rivine/bbolt"
 )
 
 const (
@@ -29,12 +28,13 @@ var (
 		switch build.Release {
 		case "dev":
 			return 50
-		case "standard":
-			return 10
 		case "testing":
 			return 3
 		default:
-			panic("unrecognized build.Release")
+			if build.Release != "standard" {
+				build.Severe("unrecognized build.Release")
+			}
+			return 10
 		}
 	}()
 	// sendBlocksTimeout is the timeout for the SendBlocks RPC.
@@ -42,12 +42,13 @@ var (
 		switch build.Release {
 		case "dev":
 			return 40 * time.Second
-		case "standard":
-			return 5 * time.Minute
 		case "testing":
 			return 5 * time.Second
 		default:
-			panic("unrecognized build.Release")
+			if build.Release != "standard" {
+				build.Severe("unrecognized build.Release")
+			}
+			return 5 * time.Minute
 		}
 	}()
 	// ibdLoopDelay is the time that threadedInitialBlockchainDownload waits
@@ -57,16 +58,16 @@ var (
 		switch build.Release {
 		case "dev":
 			return 1 * time.Second
-		case "standard":
-			return 10 * time.Second
 		case "testing":
 			return 100 * time.Millisecond
 		default:
-			panic("unrecognized build.Release")
+			if build.Release != "standard" {
+				build.Severe("unrecognized build.Release")
+			}
+			return 10 * time.Second
 		}
 	}()
 
-	errEarlyStop         = errors.New("initial blockchain download did not complete by the time shutdown was issued")
 	errSendBlocksStalled = errors.New("SendBlocks RPC timed and never received any blocks")
 )
 
@@ -97,8 +98,8 @@ func blockHistory(tx *bolt.Tx) (blockIDs [32]types.BlockID) {
 	for i := 0; i < 31; i++ {
 		// Include the next block.
 		blockID, err := getPath(tx, height)
-		if build.DEBUG && err != nil {
-			panic(err)
+		if err != nil {
+			build.Severe(err)
 		}
 		blockIDs[i] = blockID
 
@@ -118,8 +119,8 @@ func blockHistory(tx *bolt.Tx) (blockIDs [32]types.BlockID) {
 	}
 	// Include the genesis block as the last element
 	blockID, err := getPath(tx, 0)
-	if build.DEBUG && err != nil {
-		panic(err)
+	if err != nil {
+		build.Severe(err)
 	}
 	blockIDs[31] = blockID
 	return blockIDs
@@ -312,12 +313,12 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 			height := blockHeight(tx)
 			for i := start; i <= height && i < start+MaxCatchUpBlocks; i++ {
 				id, err := getPath(tx, i)
-				if build.DEBUG && err != nil {
-					panic(err)
+				if err != nil {
+					build.Severe(err)
 				}
 				pb, err := getBlockMap(tx, id)
-				if build.DEBUG && err != nil {
-					panic(err)
+				if err != nil {
+					build.Severe(err)
 				}
 				blocks = append(blocks, pb.Block)
 			}
@@ -555,6 +556,8 @@ func (cs *ConsensusSet) threadedInitialBlockchainDownload() error {
 						cs.log.Printf("WARN: disconnecting from peer %v failed: %v", p.NetAddress, err)
 					}
 				}
+
+				cs.log.Printf("WARN: managedReceiveBlocks (via SendBlocks RPC) has failed with an error: %v", err)
 				return nil
 			}()
 			if err != nil {

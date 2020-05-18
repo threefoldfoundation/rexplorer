@@ -7,8 +7,14 @@ package consensus
 // commitDiff functions will be sufficient.
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	gosync "sync"
+	"time"
 
+	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/modules"
 	"github.com/threefoldtech/rivine/persist"
 	"github.com/threefoldtech/rivine/pkg/encoding/siabin"
@@ -16,7 +22,6 @@ import (
 	"github.com/threefoldtech/rivine/types"
 
 	"github.com/NebulousLabs/demotemutex"
-	"github.com/rivine/bbolt"
 )
 
 var (
@@ -26,12 +31,12 @@ var (
 // marshaler marshals objects into byte slices and unmarshals byte
 // slices into objects.
 type marshaler interface {
-	Marshal(interface{}) []byte
+	Marshal(interface{}) ([]byte, error)
 	Unmarshal([]byte, interface{}) error
 }
 type stdMarshaler struct{}
 
-func (stdMarshaler) Marshal(v interface{}) []byte            { return siabin.Marshal(v) }
+func (stdMarshaler) Marshal(v interface{}) ([]byte, error)   { return siabin.Marshal(v) }
 func (stdMarshaler) Unmarshal(b []byte, v interface{}) error { return siabin.Unmarshal(b, v) }
 
 // The ConsensusSet is the object responsible for tracking the current status
@@ -56,6 +61,18 @@ type ConsensusSet struct {
 	// the function of adding a subscriber should not be exposed.
 	subscribers []modules.ConsensusSetSubscriber
 
+	// Stand-Alone transaction validators, linked to a version
+	txVersionMappedValidators map[types.TransactionVersion][]modules.TransactionValidationFunction
+	// Stand-Alone transaction validators, applied to any transaction
+	txValidators []modules.TransactionValidationFunction
+
+	// plugins to the consensus set will receive updates to the consensus set.
+	// At initialization, they receive all changes that they are missing.
+	plugins map[string]modules.ConsensusSetPlugin
+
+	// pluginsWaitGroup makes sure that we wait with closing the db until all plugins are unsubcribed
+	pluginsWaitGroup gosync.WaitGroup
+
 	// dosBlocks are blocks that are invalid, but the invalidity is only
 	// discoverable during an expensive step of validation. These blocks are
 	// recorded to eliminate a DoS vector where an expensive-to-validate block
@@ -69,6 +86,12 @@ type ConsensusSet struct {
 	// the genesis block, meaning the PoW is not very expensive.
 	dosBlocks map[types.BlockID]struct{}
 
+	// knownParentIDs keeps track of block ID's and their associated parent ID's.
+	// This allows us to find a parent block of any block, regardless whether or
+	// not it is in the active fork, without having to load all these blocks from
+	// disk and decode them.
+	knownParentIDs map[types.BlockID]types.BlockID
+
 	// checkingConsistency is a bool indicating whether or not a consistency
 	// check is in progress. The consistency check logic call itself, resulting
 	// in infinite loops. This bool prevents that while still allowing for full
@@ -76,6 +99,9 @@ type ConsensusSet struct {
 	// performed after a full reorg, but now they are performed after every
 	// block.
 	checkingConsistency bool
+
+	// bootstrap is a bool indicating wether we should do an IBD
+	bootstrap bool
 
 	// synced is true if initial blockchain download has finished. It indicates
 	// whether the consensus set is synced with the network.
@@ -96,12 +122,14 @@ type ConsensusSet struct {
 	bcInfo                 types.BlockchainInfo
 	chainCts               types.ChainConstants
 	genesisBlockStakeCount types.Currency
+
+	dbDebugFile *os.File
 }
 
 // New returns a new ConsensusSet, containing at least the genesis block. If
 // there is an existing block database present in the persist directory, it
 // will be loaded.
-func New(gateway modules.Gateway, bootstrap bool, persistDir string, bcInfo types.BlockchainInfo, chainCts types.ChainConstants) (*ConsensusSet, error) {
+func New(gateway modules.Gateway, bootstrap bool, persistDir string, bcInfo types.BlockchainInfo, chainCts types.ChainConstants, verboseLogging bool, dbDebugFile string) (*ConsensusSet, error) {
 	// Check for nil dependencies.
 	if gateway == nil {
 		return nil, errNilGateway
@@ -120,10 +148,17 @@ func New(gateway modules.Gateway, bootstrap bool, persistDir string, bcInfo type
 			DiffsGenerated: true,
 		},
 
+		txVersionMappedValidators: StandardTransactionVersionMappedValidators(),
+		txValidators:              StandardTransactionValidators(),
+
 		dosBlocks: make(map[types.BlockID]struct{}),
 
+		knownParentIDs: make(map[types.BlockID]types.BlockID),
+
+		bootstrap: bootstrap,
+
 		marshaler:       stdMarshaler{},
-		blockRuleHelper: stdBlockRuleHelper{chainCts: chainCts},
+		blockRuleHelper: newStdBlockRuleHelper(chainCts),
 
 		persistDir: persistDir,
 
@@ -156,38 +191,84 @@ func New(gateway modules.Gateway, bootstrap bool, persistDir string, bcInfo type
 	}
 
 	// Initialize the consensus persistence structures.
-	err := cs.initPersist()
+	err := cs.initPersist(verboseLogging)
 	if err != nil {
 		return nil, err
 	}
 
+	// Db is initialized at this point, start collecting stats if requested
+	if dbDebugFile != "" {
+		file, err := os.OpenFile(dbDebugFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if err != nil {
+			return nil, err
+		}
+		cs.dbDebugFile = file
+		// encode data as json
+		enc := json.NewEncoder(file)
+
+		go func() {
+			var previousStats, currentStats bolt.Stats
+
+			if err := cs.tg.Add(); err != nil {
+				// tg already closed
+				return
+			}
+
+			defer cs.tg.Done()
+
+			for {
+				select {
+				case <-cs.tg.StopChan():
+					if err := file.Close(); err != nil {
+						cs.log.Println("[ERROR] Failed to close consensus db debug file: ", err)
+					}
+					return
+				case <-time.NewTicker(time.Second).C:
+					currentStats = cs.db.Stats()
+					if err := enc.Encode(currentStats.Sub(&previousStats)); err != nil {
+						cs.log.Println("[WARN] Failed to collect database stats: ", err)
+					}
+				}
+			}
+		}()
+	}
+
+	return cs, nil
+}
+
+// Start the consensusset
+func (cs *ConsensusSet) Start() {
 	go func() {
 		// Sync with the network. Don't sync if we are testing because
 		// typically we don't have any mock peers to synchronize with in
 		// testing.
-		if bootstrap {
+		if cs.bootstrap {
+			cs.log.Println("Bootstrap enabled, starting IBD")
 			// We are in a virgin goroutine right now, so calling the threaded
 			// function without a goroutine is okay.
-			err = cs.threadedInitialBlockchainDownload()
+			err := cs.threadedInitialBlockchainDownload()
 			if err != nil {
+				cs.log.Printf("[WARN] IBD interrupted with an error: %v", err)
 				return
 			}
+			cs.log.Println("IBD finished")
 		}
 
 		// threadedInitialBlockchainDownload will release the threadgroup 'Add'
 		// it was holding, so another needs to be grabbed to finish off this
 		// goroutine.
-		err = cs.tg.Add()
+		err := cs.tg.Add()
 		if err != nil {
 			return
 		}
 		defer cs.tg.Done()
 
 		// Register RPCs
-		gateway.RegisterRPC("SendBlocks", cs.rpcSendBlocks)
-		gateway.RegisterRPC("RelayHeader", cs.threadedRPCRelayHeader)
-		gateway.RegisterRPC("SendBlk", cs.rpcSendBlk)
-		gateway.RegisterConnectCall("SendBlocks", cs.threadedReceiveBlocks)
+		cs.log.Debug("Registering CS RPC endpoints")
+		cs.gateway.RegisterRPC("SendBlocks", cs.rpcSendBlocks)
+		cs.gateway.RegisterRPC("RelayHeader", cs.threadedRPCRelayHeader)
+		cs.gateway.RegisterRPC("SendBlk", cs.rpcSendBlk)
+		cs.gateway.RegisterConnectCall("SendBlocks", cs.threadedReceiveBlocks)
 		cs.tg.OnStop(func() {
 			cs.gateway.UnregisterRPC("SendBlocks")
 			cs.gateway.UnregisterRPC("RelayHeader")
@@ -197,11 +278,10 @@ func New(gateway modules.Gateway, bootstrap bool, persistDir string, bcInfo type
 
 		// Mark that we are synced with the network.
 		cs.mu.Lock()
+		cs.log.Debug("Marked CS as Synced")
 		cs.synced = true
 		cs.mu.Unlock()
 	}()
-
-	return cs, nil
 }
 
 // BlockAtHeight returns the block at a given height.
@@ -242,22 +322,87 @@ func (cs *ConsensusSet) BlockHeightOfBlock(block types.Block) (height types.Bloc
 func (cs *ConsensusSet) FindParentBlock(b types.Block, depth types.BlockHeight) (block types.Block, exists bool) {
 	var parent *processedBlock
 	var err error
+	var ph types.BlockID
+
+	// subtract one from depth as we start at the parent ID already, not the
+	// current block ID
+	ph, exists = cs.FindParentHash(b.Header().ParentID, depth-1)
+	if !exists {
+		return
+	}
+
 	_ = cs.db.View(func(tx *bolt.Tx) error {
-		pID := b.Header().ParentID
-		// count back to the right block
-		for i := depth; i > 0; i-- {
-			parent, err = getBlockMap(tx, pID)
-			if err != nil {
-				return err
-			}
-			pID = parent.Block.Header().ParentID
+		parent, err = getBlockMap(tx, ph)
+		if err != nil {
+			return err
 		}
+
 		return nil
 	})
+
 	if parent != nil {
 		exists = true
 		block = parent.Block
 	}
+
+	return
+}
+
+// FindParentHash starts at a given hash h, and traverse the chain for the given
+// depth to acquire the hash (block ID) of a block. The caller must ensure that
+// the block with ID `h` is already present in the consensus DB, else this function
+// will fail. Specifically, when this function is used for validation, the parent ID
+// of the block being validated should be used, and depth adjusted accordingly
+func (cs *ConsensusSet) FindParentHash(h types.BlockID, depth types.BlockHeight) (id types.BlockID, exists bool) {
+	var parent *processedBlock
+	var err error
+
+	// Keep track of the current block ID
+	cbID := h
+	// Keep track of the parent ID of the current block
+	// This variable will fix itself in the first loop iteration
+	pID := h
+
+	err = cs.db.View(func(tx *bolt.Tx) error {
+
+		// Count back to the right block, add 1 loop iteration to fix the parent
+		// ID not being present yet.
+		// After the first iteration, current block ID will still be the same,
+		// but parentID will be set to the correctly
+		for i := depth + 1; i > 0; i-- {
+			// We load a new block, therefore the parent ID is now the current ID
+			cbID = pID
+
+			// Update the parent ID, first fetch from the cache
+			pID, exists = cs.knownParentIDs[pID]
+			if !exists {
+				// Not found in cache, load from disk
+				// we previously updated cbID to point to the parent, so we can use it
+				// here instead of the now invalid pID
+				parent, err = getBlockMap(tx, cbID)
+				if err != nil {
+					return err
+				}
+
+				// save parentID for later use
+				pID = parent.Block.Header().ParentID
+				cs.knownParentIDs[cbID] = pID
+
+			}
+
+			// If we get here pID is once again valid
+		}
+
+		return nil
+	})
+
+	if err == nil {
+		exists = true
+		// pID keeps track of the next block ID we need for the loop, so the one
+		// we are interested in is actually in cbID
+		id = cbID
+	}
+
 	return
 }
 
@@ -317,8 +462,12 @@ func (cs *ConsensusSet) ChildTarget(id types.BlockID) (target types.Target, exis
 	return target, exists
 }
 
-// Close safely closes the block database.
+// Close closes the registered plugins and safely closes the database.
 func (cs *ConsensusSet) Close() error {
+	if err := cs.closePlugins(); err != nil {
+		fmt.Println(err)
+		return err
+	}
 	return cs.tg.Stop()
 }
 

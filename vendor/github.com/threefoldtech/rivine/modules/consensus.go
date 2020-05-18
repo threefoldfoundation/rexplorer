@@ -1,11 +1,15 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"math/big"
 
 	"github.com/threefoldtech/rivine/crypto"
+	"github.com/threefoldtech/rivine/persist"
 	"github.com/threefoldtech/rivine/types"
+
+	bolt "github.com/rivine/bbolt"
 )
 
 const (
@@ -69,6 +73,103 @@ type (
 		// There may not be any reverted blocks, but there will always be
 		// applied blocks.
 		ProcessConsensusChange(ConsensusChange)
+	}
+
+	// A ConsensusSetPlugin is an object that receives updates to the consensus set
+	// every time there is a change in consensus. The difference with a ConsensusSetSubscriber
+	// is that it stores its data within the database of the consensus set.
+	ConsensusSetPlugin interface {
+		// Initialize the bucket, could be creating it, migrating it,
+		// or simply checking that all is as expected.
+		// An error should be returned in case something went wrong.
+		// metadata is nil in case the plugin wasn't registered prior to this attempt.
+		// This method will be called while registering the plugin.
+		InitPlugin(metadata *persist.Metadata, bucket *bolt.Bucket, ps PluginViewStorage, cb PluginUnregisterCallback) (persist.Metadata, error)
+
+		// Apply the block to the plugin.
+		// An error should be returned in case something went wrong.
+		ApplyBlock(block ConsensusBlock, bucket *persist.LazyBoltBucket) error
+		// Revert the block from the plugin.
+		// An error should be returned in case something went wrong.
+		RevertBlock(block ConsensusBlock, bucket *persist.LazyBoltBucket) error
+
+		// Apply the block header to the plugin.
+		// An error should be returned in case something went wrong.
+		ApplyBlockHeader(block ConsensusBlockHeader, bucket *persist.LazyBoltBucket) error
+		// Revert the block header from the plugin.
+		// An error should be returned in case something went wrong.
+		RevertBlockHeader(block ConsensusBlockHeader, bucket *persist.LazyBoltBucket) error
+
+		// Apply the transaction to the plugin.
+		// An error should be returned in case something went wrong.
+		ApplyTransaction(txn ConsensusTransaction, bucket *persist.LazyBoltBucket) error
+		// Revert the transaction from the plugin.
+		// An error should be returned in case something went wrong.
+		RevertTransaction(txn ConsensusTransaction, bucket *persist.LazyBoltBucket) error
+
+		// TransactionValidatorFunctions allows the plugin to provide validation rules for all transaction versions it mapped to
+		TransactionValidatorVersionFunctionMapping() map[types.TransactionVersion][]PluginTransactionValidationFunction
+
+		// TransactionValidators allows the plugin to provide validation rules for all transactions versions it wants
+		TransactionValidators() []PluginTransactionValidationFunction
+
+		// Close releases any resources helt by the plugin like the PluginViewStorage
+		Close() error
+	}
+
+	// PluginUnregisterCallback allows plugins to unregister
+	PluginUnregisterCallback func(plugin ConsensusSetPlugin)
+
+	// A PluginStorage
+	PluginViewStorage interface {
+		View(callback func(bucket *bolt.Bucket) error) error
+		Close() error
+	}
+
+	// PluginTransactionValidationFunction is the signature of a validator function that
+	// can be used to provide plugin-driven transaction validation, provided by (and linked to) a plugin.
+	PluginTransactionValidationFunction func(tx ConsensusTransaction, ctx types.TransactionValidationContext, bucket *persist.LazyBoltBucket) error
+
+	// TransactionValidationFunction is the signature of a validator function that
+	// can be used to provide validation rules for transactions.
+	TransactionValidationFunction func(tx ConsensusTransaction, ctx types.TransactionValidationContext) error
+
+	// ConsensusBlock is the block type as exposed by the consensus module,
+	// allowing you to easily find the spend coin and blockstake outputs,
+	// for any of the by-the-block defined inputs
+	ConsensusBlock struct {
+		types.Block
+
+		Height types.BlockHeight
+
+		SpentCoinOutputs       map[types.CoinOutputID]types.CoinOutput
+		SpentBlockStakeOutputs map[types.BlockStakeOutputID]types.BlockStakeOutput
+	}
+
+	// ConsensusBlockHeader is the block header type as exposed by the consensus module.
+	ConsensusBlockHeader struct {
+		ID             types.BlockID
+		ParentID       types.BlockID
+		POBSOutput     types.BlockStakeOutputIndexes
+		MinerPayouts   []types.MinerPayout
+		MinerPayoutIDs []types.CoinOutputID
+
+		Timestamp types.Timestamp
+		Height    types.BlockHeight
+	}
+
+	// ConsensusTransaction is the transaction type as exposed by the consensus module
+	// allowing you to easily find the spend coin and blockstake outputs,
+	// for any of the by-the-transaction defined inputs
+	ConsensusTransaction struct {
+		types.Transaction
+
+		BlockHeight types.BlockHeight
+		BlockTime   types.Timestamp
+		SequenceID  uint16
+
+		SpentCoinOutputs       map[types.CoinOutputID]types.CoinOutput
+		SpentBlockStakeOutputs map[types.BlockStakeOutputID]types.BlockStakeOutput
 	}
 
 	// A ConsensusChange enumerates a set of changes that occurred to the consensus set.
@@ -150,6 +251,10 @@ type (
 	// A ConsensusSet accepts blocks and builds an understanding of network
 	// consensus.
 	ConsensusSet interface {
+		// Start the consensusset
+		// this function starts a new goroutine and then returns immediately
+		Start()
+
 		// AcceptBlock adds a block to consensus. An error will be returned if the
 		// block is invalid, has been seen before, is an orphan, or doesn't
 		// contribute to the heaviest fork known to the consensus set. If the block
@@ -238,6 +343,27 @@ type (
 
 		// GetBlockStakeOutput takes a blockstake output ID and returns the appropriate blockstake output
 		GetBlockStakeOutput(types.BlockStakeOutputID) (types.BlockStakeOutput, error)
+
+		// RegisterPlugin takes in a name and plugin and registers this plugin on the consensus
+		// When the plugin is registered, all unprocessed changes are synchronously sent to the plugin
+		// unless the passed context is cancelled
+		RegisterPlugin(ctx context.Context, name string, plugin ConsensusSetPlugin) error
+
+		// UnregisterPlugin takes in a name and plugin and unregisters this plugin off the consensus
+		UnregisterPlugin(name string, plugin ConsensusSetPlugin)
+
+		// LoadedPlugins returns a list of all loaded plugins, by nane.
+		LoadedPlugins() []string
+
+		// SetTransactionValidators sets the transaction validators used by the ConsensusSet as rules for all transactions,
+		// regardless of the version. Use SetTransactionVersionMappedValidators in case you want rules that only apply to a specific tx version.
+		// If no validators are passed, the validators returned by the `consensus.StandardTransactionValidators` function are used.
+		SetTransactionValidators(validators ...TransactionValidationFunction)
+
+		// SetTransactionVersionMappedValidators sets the transaction validators used by the ConsensusSet as rules for
+		// the transactions of the defined version. If no validators are passed, the validators for the given transaction version,
+		// as returned by the `consensus.StandardTransactionVersionMappedValidators` function, are used.
+		SetTransactionVersionMappedValidators(version types.TransactionVersion, validators ...TransactionValidationFunction)
 	}
 )
 

@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/threefoldtech/rivine/crypto"
@@ -10,14 +11,13 @@ import (
 )
 
 var (
-	errBadMinerPayouts            = errors.New("miner payout sum does not equal block subsidy")
-	errEarlyTimestamp             = errors.New("block timestamp is too early")
-	errExtremeFutureTimestamp     = errors.New("block timestamp too far in future, discarded")
-	errFutureTimestamp            = errors.New("block timestamp too far in future, but saved for later use")
-	errLargeBlock                 = errors.New("block is too large to be accepted")
-	errBlockStakeAgeNotMet        = errors.New("The unspent blockstake (not at index 0 in transaction) is not aged enough")
-	errBlockStakeNotRespent       = errors.New("The block stake used to generate block should be respent")
-	errPOBSBlockIndexDoesNotExist = errors.New("POBS blockheight index points to unexisting block")
+	errBadMinerPayouts        = errors.New("miner payout sum does not equal block subsidy")
+	errEarlyTimestamp         = errors.New("block timestamp is too early")
+	errExtremeFutureTimestamp = errors.New("block timestamp too far in future, discarded")
+	errFutureTimestamp        = errors.New("block timestamp too far in future, but saved for later use")
+	errLargeBlock             = errors.New("block is too large to be accepted")
+	errBlockStakeAgeNotMet    = errors.New("The unspent blockstake (not at index 0 in transaction) is not aged enough")
+	errBlockStakeNotRespent   = errors.New("The block stake used to generate block should be respent")
 )
 
 // blockValidator validates a Block against a set of block validity rules.
@@ -53,15 +53,15 @@ func checkTarget(b types.Block, target types.Target, value types.Currency, heigh
 
 	// Calculate the hash for the given unspent output and timestamp
 
-	pobshash := crypto.HashAll(stakemodifier.Bytes(), b.POBSOutput.BlockHeight, b.POBSOutput.TransactionIndex, b.POBSOutput.OutputIndex, b.Timestamp)
+	pobshash, err := crypto.HashAll(stakemodifier.Bytes(), b.POBSOutput.BlockHeight, b.POBSOutput.TransactionIndex, b.POBSOutput.OutputIndex, b.Timestamp)
+	if err != nil {
+		return false
+	}
 	// Check if it meets the difficulty
 	pobshashvalue := big.NewInt(0).SetBytes(pobshash[:])
 	pobshashvalue.Div(pobshashvalue, value.Big()) //TODO rivine : this div can be mul on the other side of the compare
 
-	if pobshashvalue.Cmp(target.Int()) == -1 {
-		return true
-	}
-	return false
+	return pobshashvalue.Cmp(target.Int()) == -1
 }
 
 // ValidateBlock validates a block against a minimum timestamp, a block target,
@@ -148,7 +148,11 @@ func (bv stdBlockValidator) ValidateBlock(b types.Block, minTimestamp types.Time
 	}
 
 	// Check that the block is below the size limit.
-	if uint64(len(bv.marshaler.Marshal(b))) > bv.cs.chainCts.BlockSizeLimit {
+	bb, err := bv.marshaler.Marshal(b)
+	if err != nil {
+		return fmt.Errorf("failed to marshal block: %v", err)
+	}
+	if uint64(len(bb)) > bv.cs.chainCts.BlockSizeLimit {
 		return errLargeBlock
 	}
 
@@ -186,20 +190,15 @@ func (bv stdBlockValidator) checkMinerPayouts(b types.Block) bool {
 		}
 		if payout.UnlockHash.Cmp(txFeeUnlockHash) == 0 {
 			sumTFP = sumTFP.Add(payout.Value) // payout is for tx fee beneficiary
-			continue
+		} else {
+			sumBC = sumBC.Add(payout.Value) // payout is for bc
 		}
-		sumBC = sumBC.Add(payout.Value) // payout is for bc
 	}
 	// ensure tx fee beneficiary has no payouts, should it not be given
 	totalMinerFees := b.CalculateTotalMinerFees()
 	if bv.cs.chainCts.TransactionFeeCondition.ConditionType() == types.ConditionTypeNil {
 		if !sumTFP.IsZero() {
 			return false // no beneficiary is given, so it should have no payouts
-		}
-	} else {
-		// esure tx fee beneficiary has all miner fees as payouts
-		if !totalMinerFees.Equals(sumTFP) {
-			return false
 		}
 	}
 	// also take into account any custom miner fee payouts in total miner fees sum

@@ -3,6 +3,7 @@ package consensus
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	bolt "github.com/rivine/bbolt"
 	"github.com/threefoldtech/rivine/build"
@@ -13,10 +14,53 @@ import (
 	"github.com/threefoldtech/rivine/types"
 )
 
+func convertLegacyDatabase(filepath string, log *persist.Logger) (*persist.BoltDatabase, error) {
+	return convertLegacyOneZeroFiveDatabase(filepath, log)
+}
+
+// convertLegacyOneZeroFiveDatabase converts a 1.0.5 consensus database,
+// to a database of the current version as defined by dbMetadata.
+// It keeps the database open and returns it for further usage.
+func convertLegacyOneZeroFiveDatabase(filepath string, log *persist.Logger) (db *persist.BoltDatabase, err error) {
+	var legacyDBMetadata = persist.Metadata{
+		Header:  "Consensus Set Database",
+		Version: "1.0.5",
+	}
+	db, err = persist.OpenDatabase(legacyDBMetadata, filepath)
+	if err != nil {
+		if err == persist.ErrBadVersion {
+			db, err = convertLegacyZeroFiveZeroDatabase(filepath, log, legacyDBMetadata)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucket(BucketPlugins)
+		return err
+	})
+	if err == nil {
+		// set the new metadata, and save it,
+		// such that next time we have the new version stored
+		db.Header, db.Version = dbMetadata.Header, dbMetadata.Version
+		err = db.SaveMetadata()
+	}
+	if err != nil {
+		err := db.Close()
+		if build.DEBUG && err != nil {
+			panic(err)
+		}
+	}
+	return
+}
+
 // convertLegacyDatabase converts a 0.5.0 consensus database,
 // to a database of the current version as defined by dbMetadata.
 // It keeps the database open and returns it for further usage.
-func convertLegacyDatabase(filePath string, log *persist.Logger) (db *persist.BoltDatabase, err error) {
+func convertLegacyZeroFiveZeroDatabase(filePath string, log *persist.Logger, desiredMetadata persist.Metadata) (db *persist.BoltDatabase, err error) {
 	var legacyDBMetadata = persist.Metadata{
 		Header:  "Consensus Set Database",
 		Version: "0.5.0",
@@ -55,13 +99,13 @@ func convertLegacyDatabase(filePath string, log *persist.Logger) (db *persist.Bo
 	if err == nil {
 		// set the new metadata, and save it,
 		// such that next time we have the new version stored
-		db.Header, db.Version = dbMetadata.Header, dbMetadata.Version
+		db.Header, db.Version = desiredMetadata.Header, desiredMetadata.Version
 		err = db.SaveMetadata()
 	}
 	if err != nil {
 		err := db.Close()
-		if build.DEBUG && err != nil {
-			panic(err)
+		if err != nil {
+			build.Severe(err)
 		}
 	}
 	return
@@ -115,12 +159,16 @@ func updateLegacyCoinOutputBucket(bucket *bolt.Bucket, log *persist.Logger) erro
 		log.Printf("overwriting legacy coin output (%s, %s) with binary ID 0x%s to format as known since %v...\n",
 			out.UnlockHash.String(), out.Value.String(), hex.EncodeToString(k), dbMetadata.Version)
 		// it's in the legacy format, as expected, we overwrite it using the new format
-		err = bucket.Put(k, siabin.Marshal(types.CoinOutput{
+		coBytes, err := siabin.Marshal(types.CoinOutput{
 			Value: out.Value,
 			Condition: types.UnlockConditionProxy{
 				Condition: types.NewUnlockHashCondition(out.UnlockHash),
 			},
-		}))
+		})
+		if err != nil {
+			return fmt.Errorf("failed to (siabin) marshal coin output: %v", err)
+		}
+		err = bucket.Put(k, coBytes)
 		if err != nil {
 			return err
 		}
@@ -148,12 +196,16 @@ func updateLegacyBlockstakeOutputBucket(bucket *bolt.Bucket, log *persist.Logger
 		log.Printf("overwriting legacy block stake output (%s, %s) with binary ID 0x%s to format as known since %v...\n",
 			out.UnlockHash.String(), out.Value.String(), hex.EncodeToString(k), dbMetadata.Version)
 		// it's in the legacy format, as expected, we overwrite it using the new format
-		err = bucket.Put(k, siabin.Marshal(types.BlockStakeOutput{
+		bsoBytes, err := siabin.Marshal(types.BlockStakeOutput{
 			Value: out.Value,
 			Condition: types.UnlockConditionProxy{
 				Condition: types.NewUnlockHashCondition(out.UnlockHash),
 			},
-		}))
+		})
+		if err != nil {
+			return fmt.Errorf("failed to (siabin) marshal block stake output: %v", err)
+		}
+		err = bucket.Put(k, bsoBytes)
 		if err != nil {
 			return err
 		}
@@ -268,6 +320,9 @@ func (lpb *legacyProcessedBlock) storeAsNewFormat(bucket *bolt.Bucket, key []byt
 			MaturityHeight: od.MaturityHeight,
 		}
 	}
-
-	return bucket.Put(key, siabin.Marshal(block))
+	blockBytes, err := siabin.Marshal(block)
+	if err != nil {
+		return fmt.Errorf("failed to (siabin) marshal block: %v", err)
+	}
+	return bucket.Put(key, blockBytes)
 }
